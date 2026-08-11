@@ -18,19 +18,44 @@ import { setScoringConfig } from './lib/scoringEngine';
 export const AppContent: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
 
-  // App & Org State
+  // App & Org State (Initialized with sessionStorage cache for instant load)
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
-  const [org, setOrg] = useState<Organization | null>(null);
-  const [orgMember, setOrgMember] = useState<OrgMember | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfileExtended | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
+  
+  const [org, setOrg] = useState<Organization | null>(() => {
+    try {
+      const cached = sessionStorage.getItem('bni_cached_org');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [orgMember, setOrgMember] = useState<OrgMember | null>(() => {
+    try {
+      const cached = sessionStorage.getItem('bni_cached_org_member');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [userProfile, setUserProfile] = useState<UserProfileExtended | null>(() => {
+    try {
+      const cached = sessionStorage.getItem('bni_cached_profile');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [isInitializing, setIsInitializing] = useState(() => !org);
 
   // Members & Selected Member
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 1. On Auth Load: Fetch Org & User Profile concurrently without flicker
+  // 1. On Auth Load: Fetch Org & Profile with background revalidation & sessionStorage sync
   useEffect(() => {
     if (!user?.uid) {
       setIsInitializing(false);
@@ -38,8 +63,6 @@ export const AppContent: React.FC = () => {
     }
 
     const initUserData = async () => {
-      setIsInitializing(true);
-
       try {
         // Fetch Org and User Profile concurrently
         const [orgRes, profRes] = await Promise.all([
@@ -50,6 +73,10 @@ export const AppContent: React.FC = () => {
         let fetchedMembers: Member[] = [];
 
         if (orgRes) {
+          // Cache in sessionStorage for instant load next time
+          sessionStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
+          sessionStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
+
           // Fetch settings & members concurrently
           const [settingsRes, dbMembers] = await Promise.all([
             supabaseService.fetchOrgSettings(orgRes.org.id, user.uid),
@@ -77,7 +104,11 @@ export const AppContent: React.FC = () => {
           });
         }
 
-        // Batch state updates together before turning off initialization spinner
+        if (profRes) {
+          sessionStorage.setItem('bni_cached_profile', JSON.stringify(profRes));
+        }
+
+        // Update state with fresh database values
         if (orgRes) {
           setOrg(orgRes.org);
           setOrgMember(orgRes.member);
@@ -96,12 +127,15 @@ export const AppContent: React.FC = () => {
 
   // Handle Org Created / Joined
   const handleOrgJoined = (data: { org: Organization; member: OrgMember }) => {
+    sessionStorage.setItem('bni_cached_org', JSON.stringify(data.org));
+    sessionStorage.setItem('bni_cached_org_member', JSON.stringify(data.member));
     setOrg(data.org);
     setOrgMember(data.member);
   };
 
   // Handle Profile Completed
   const handleProfileCompleted = (profile: UserProfileExtended) => {
+    sessionStorage.setItem('bni_cached_profile', JSON.stringify(profile));
     setUserProfile(profile);
   };
 
@@ -120,13 +154,8 @@ export const AppContent: React.FC = () => {
   const handleImportMembers = async (imported: Member[]) => {
     if (org?.id && user?.uid) {
       setIsSyncing(true);
-      // 1. Immediate optimistic UI render
       setMembers(imported);
-      
-      // 2. Persist batch to Supabase Postgres
       await supabaseService.upsertMembers(imported, org.id, user.uid);
-      
-      // 3. Re-fetch fresh DB records
       const dbMembers = await supabaseService.fetchMembers(org.id);
       if (dbMembers && dbMembers.length > 0) {
         setMembers(dbMembers);
@@ -152,8 +181,8 @@ export const AppContent: React.FC = () => {
     setIsSyncing(false);
   };
 
-  // Loading Screen (Prevents screen flickering during initial resolution)
-  if (authLoading || isInitializing) {
+  // Loading Screen (Only shown if no cached session & initializing)
+  if (authLoading || (isInitializing && !org)) {
     return (
       <div className="min-h-screen bg-[#060a12] flex items-center justify-center">
         <div className="flex flex-col items-center space-y-3">

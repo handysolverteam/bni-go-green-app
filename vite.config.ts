@@ -14,4 +14,17 @@ export default defineConfig({
     port: 3000,
     open: true,
   },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-xlsx': ['xlsx'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-firebase': ['firebase/app', 'firebase/auth'],
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
+  },
 });
