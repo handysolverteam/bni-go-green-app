@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -66,8 +66,8 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         onMouseLeave={() => { if (sidebarMode === 'hover') setIsHovered(false); }}
         className={`hidden lg:flex flex-col ${sidebarWidthClass} glass-panel border-r border-white/10 p-4 fixed top-0 bottom-0 z-40 overflow-y-auto transition-all duration-300 ease-in-out`}
       >
-        {/* Brand Header & View Preference Toggle Icon */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/10">
+        {/* Brand Header */}
+        <div className={`flex ${isCompact ? 'flex-col items-center space-y-3' : 'items-center justify-between'} pb-4 border-b border-white/10`}>
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 flex-shrink-0">
               <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center">
@@ -84,9 +84,10 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             )}
           </div>
 
+          {/* Menu Icon (Shows beside title when expanded, directly BELOW logo when compact/closed) */}
           <button
             onClick={() => setShowModeModal(true)}
-            className="p-1.5 rounded-lg bg-slate-900/80 text-slate-400 hover:text-white border border-white/10 transition-colors"
+            className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-white/10 transition-all shadow-md"
             title="Sidebar View Preferences"
           >
             <SlidersHorizontal className="w-4 h-4" />
