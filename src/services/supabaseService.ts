@@ -13,7 +13,6 @@ export interface OutreachLogRecord {
   sent_at: string;
 }
 
-// Generate unique 6-digit code e.g. "789210"
 function generate6DigitCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -26,7 +25,7 @@ export const supabaseService = {
     city: string,
     userId: string,
     userEmail?: string
-  ): Promise<{ org: Organization; member: OrgMember } | null> {
+  ): Promise<{ res: { org: Organization; member: OrgMember } | null; error?: string }> {
     try {
       const code = generate6DigitCode();
       const { data: orgData, error: orgError } = await supabase
@@ -43,7 +42,7 @@ export const supabaseService = {
 
       if (orgError || !orgData) {
         console.error('Create org error:', orgError);
-        return null;
+        return { res: null, error: orgError?.message || 'Database error creating organization.' };
       }
 
       // Add user as owner in org_members
@@ -60,13 +59,13 @@ export const supabaseService = {
 
       if (memError || !memData) {
         console.error('Create org member error:', memError);
-        return null;
+        return { res: null, error: memError?.message || 'Error assigning org owner role.' };
       }
 
-      return { org: orgData as Organization, member: memData as OrgMember };
-    } catch (e) {
+      return { res: { org: orgData as Organization, member: memData as OrgMember } };
+    } catch (e: any) {
       console.error('Create org exception:', e);
-      return null;
+      return { res: null, error: e.message || 'Network exception creating organization.' };
     }
   },
 
@@ -74,9 +73,8 @@ export const supabaseService = {
     code: string,
     userId: string,
     userEmail?: string
-  ): Promise<{ org: Organization; member: OrgMember } | null> {
+  ): Promise<{ res: { org: Organization; member: OrgMember } | null; error?: string }> {
     try {
-      // Find org by 6-digit code
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .select('*')
@@ -85,10 +83,9 @@ export const supabaseService = {
 
       if (orgError || !orgData) {
         console.error('Join org: invalid code', orgError);
-        return null;
+        return { res: null, error: 'Invalid 6-digit code or table missing.' };
       }
 
-      // Upsert user into org_members as 'member'
       const { data: memData, error: memError } = await supabase
         .from('org_members')
         .upsert([{
@@ -102,13 +99,13 @@ export const supabaseService = {
 
       if (memError || !memData) {
         console.error('Join org member error:', memError);
-        return null;
+        return { res: null, error: memError?.message || 'Error joining org member.' };
       }
 
-      return { org: orgData as Organization, member: memData as OrgMember };
-    } catch (e) {
+      return { res: { org: orgData as Organization, member: memData as OrgMember } };
+    } catch (e: any) {
       console.error('Join org exception:', e);
-      return null;
+      return { res: null, error: e.message || 'Exception joining organization.' };
     }
   },
 

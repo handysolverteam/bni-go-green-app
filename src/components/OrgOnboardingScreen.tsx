@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GlassCard } from './GlassCard';
-import { Building2, KeyRound, Plus, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
+import { Building2, KeyRound, Plus, ArrowRight } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
 import { Organization, OrgMember } from '../types';
@@ -29,7 +29,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const res = await supabaseService.createOrganization(
+      const { res, error } = await supabaseService.createOrganization(
         orgName.trim(),
         chapterName.trim(),
         city.trim(),
@@ -40,7 +40,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
       if (res) {
         onOrgJoined(res);
       } else {
-        setErrorMsg('Failed to create organization. Please try again.');
+        setErrorMsg(error || 'Failed to create organization. Ensure Supabase tables exist.');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Create organization failed.');
@@ -56,7 +56,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const res = await supabaseService.joinOrganization(
+      const { res, error } = await supabaseService.joinOrganization(
         code.trim(),
         user.uid,
         user.email || undefined
@@ -65,7 +65,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
       if (res) {
         onOrgJoined(res);
       } else {
-        setErrorMsg('Invalid 6-digit organization code. Please check and try again.');
+        setErrorMsg(error || 'Invalid 6-digit organization code. Please check and try again.');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to join organization.');
@@ -112,7 +112,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
             }`}
           >
             <KeyRound className="w-4 h-4" />
-            <span>Join with 6-Digit Code</span>
+            <span>Join with Code</span>
           </button>
         </div>
 
