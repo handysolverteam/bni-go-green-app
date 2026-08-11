@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getScoringConfig, setScoringConfig, DEFAULTS } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Award, Heart } from 'lucide-react';
+import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Heart, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabaseService } from '../services/supabaseService';
-import { ScoringConfig, ThresholdTier } from '../types';
+import { ScoringConfig } from '../types';
 
 interface SettingsPageProps {
   orgId?: string;
@@ -18,16 +18,42 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
   const [signatureText, setSignatureText] = useState('Keep the momentum going! 💪');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+
+  // Fetch persisted settings from Supabase on mount
+  useEffect(() => {
+    if (!orgId || !user?.uid) return;
+    const loadDbSettings = async () => {
+      setIsLoadingSettings(true);
+      const res = await supabaseService.fetchOrgSettings(orgId, user.uid);
+      if (res) {
+        if (res.scoringConfig) {
+          setConfigState(res.scoringConfig);
+          setScoringConfig(res.scoringConfig);
+        }
+        if (res.signature) {
+          setSignatureText(res.signature);
+        }
+      }
+      setIsLoadingSettings(false);
+    };
+    loadDbSettings();
+  }, [orgId, user]);
 
   const handleSave = async () => {
     setScoringConfig(config);
-    if (orgId) {
-      await supabaseService.saveOrgSettings(orgId, {
-        green: config.trafficLight.green,
-        amber: config.trafficLight.amber,
-        red: config.trafficLight.red,
-        signature: signatureText,
-      });
+    if (orgId && user?.uid) {
+      await supabaseService.saveOrgSettings(
+        orgId,
+        user.uid,
+        {
+          green: config.trafficLight.green,
+          amber: config.trafficLight.amber,
+          red: config.trafficLight.red,
+          signature: signatureText,
+        },
+        config
+      );
     }
     setSavedSuccess(true);
     if (onSettingsSaved) onSettingsSaved();
@@ -39,13 +65,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
     setConfigState(DEFAULTS);
     setSignatureText('Keep the momentum going! 💪');
     setShowResetConfirm(false);
-    if (orgId) {
-      await supabaseService.saveOrgSettings(orgId, {
-        green: DEFAULTS.trafficLight.green,
-        amber: DEFAULTS.trafficLight.amber,
-        red: DEFAULTS.trafficLight.red,
-        signature: 'Keep the momentum going! 💪',
-      });
+    if (orgId && user?.uid) {
+      await supabaseService.saveOrgSettings(
+        orgId,
+        user.uid,
+        {
+          green: DEFAULTS.trafficLight.green,
+          amber: DEFAULTS.trafficLight.amber,
+          red: DEFAULTS.trafficLight.red,
+          signature: 'Keep the momentum going! 💪',
+        },
+        DEFAULTS
+      );
     }
     setSavedSuccess(true);
     if (onSettingsSaved) onSettingsSaved();
@@ -75,6 +106,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
         </div>
 
         <div className="flex items-center space-x-2">
+          {isLoadingSettings && <Loader2 className="w-4 h-4 text-emerald-400 animate-spin mr-2" />}
+
           <button
             onClick={() => setShowResetConfirm(true)}
             className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center space-x-1.5 border border-white/10 transition-all"
@@ -88,7 +121,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
           >
             {savedSuccess ? <Check className="w-4 h-4 text-slate-950" /> : <Save className="w-4 h-4" />}
-            <span>{savedSuccess ? 'Saved!' : 'Save Settings'}</span>
+            <span>{savedSuccess ? 'Saved to DB!' : 'Save Settings'}</span>
           </button>
         </div>
       </div>

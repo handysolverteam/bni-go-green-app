@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
-import { Member, Organization, OrgMember, UserProfileExtended, UserRole } from '../types';
-import { scoreMember } from '../lib/scoringEngine';
+import { Member, Organization, OrgMember, UserProfileExtended, UserRole, ScoringConfig } from '../types';
+import { scoreMember, DEFAULTS } from '../lib/scoringEngine';
 
 export interface OutreachLogRecord {
   id?: string;
@@ -36,10 +36,11 @@ export const supabaseService = {
           city,
           code,
           created_by: userId,
-          green_threshold: 70,
-          amber_threshold: 50,
-          red_threshold: 30,
+          green_threshold: DEFAULTS.trafficLight.green,
+          amber_threshold: DEFAULTS.trafficLight.amber,
+          red_threshold: DEFAULTS.trafficLight.red,
           custom_signature: 'Keep the momentum going! 💪',
+          custom_scoring: DEFAULTS,
         }])
         .select()
         .single();
@@ -66,18 +67,20 @@ export const supabaseService = {
         return { res: null, error: memError?.message || 'Error assigning org owner role.' };
       }
 
-      // Also seed chapter_settings if table exists
+      // Seed chapter_settings table row by default
       try {
         await supabase.from('chapter_settings').upsert({
           user_id: userId,
-          green_threshold: 70,
-          amber_threshold: 50,
-          red_threshold: 30,
+          org_id: orgData.id,
+          green_threshold: DEFAULTS.trafficLight.green,
+          amber_threshold: DEFAULTS.trafficLight.amber,
+          red_threshold: DEFAULTS.trafficLight.red,
           custom_signature: 'Keep the momentum going! 💪',
+          scoring_config: DEFAULTS,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
       } catch (e) {
-        // chapter_settings table optional
+        // Table optional fallback
       }
 
       return { res: { org: orgData as Organization, member: memData as OrgMember } };
@@ -383,20 +386,81 @@ export const supabaseService = {
     };
   },
 
-  // --- SETTINGS CRUD ---
-  async saveOrgSettings(orgId: string, settings: { green: number; amber: number; red: number; signature: string }): Promise<boolean> {
+  // --- SETTINGS CRUD (Persists Full 7-Category Threshold Config to Supabase DB) ---
+  async fetchOrgSettings(orgId: string, userId: string): Promise<{ scoringConfig: ScoringConfig; signature: string } | null> {
     try {
-      const { error } = await supabase
+      // Check organizations table
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', orgId)
+        .single();
+
+      if (orgData && orgData.custom_scoring) {
+        return {
+          scoringConfig: orgData.custom_scoring as ScoringConfig,
+          signature: orgData.custom_signature || 'Keep the momentum going! 💪',
+        };
+      }
+
+      // Fallback check chapter_settings table
+      const { data: csData } = await supabase
+        .from('chapter_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (csData && csData.scoring_config) {
+        return {
+          scoringConfig: csData.scoring_config as ScoringConfig,
+          signature: csData.custom_signature || 'Keep the momentum going! 💪',
+        };
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async saveOrgSettings(
+    orgId: string,
+    userId: string,
+    settings: { green: number; amber: number; red: number; signature: string },
+    fullScoringConfig: ScoringConfig
+  ): Promise<boolean> {
+    try {
+      // 1. Update organizations table
+      const { error: orgError } = await supabase
         .from('organizations')
         .update({
           green_threshold: settings.green,
           amber_threshold: settings.amber,
           red_threshold: settings.red,
           custom_signature: settings.signature,
+          custom_scoring: fullScoringConfig,
         })
         .eq('id', orgId);
 
-      return !error;
+      // 2. Upsert chapter_settings table
+      try {
+        await supabase
+          .from('chapter_settings')
+          .upsert({
+            user_id: userId,
+            org_id: orgId,
+            green_threshold: settings.green,
+            amber_threshold: settings.amber,
+            red_threshold: settings.red,
+            custom_signature: settings.signature,
+            scoring_config: fullScoringConfig,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
+      } catch (e) {
+        // chapter_settings table optional
+      }
+
+      return !orgError;
     } catch (e) {
       return false;
     }
