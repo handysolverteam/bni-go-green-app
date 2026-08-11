@@ -4,6 +4,7 @@ import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
 import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Heart, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { supabaseService } from '../services/supabaseService';
 import { ScoringConfig } from '../types';
 
@@ -14,6 +15,7 @@ interface SettingsPageProps {
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSaved }) => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [config, setConfigState] = useState<ScoringConfig>(getScoringConfig());
   const [signatureText, setSignatureText] = useState('Keep the momentum going! 💪');
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -56,6 +58,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
       );
     }
     setSavedSuccess(true);
+    showToast('Scoring thresholds & custom signature saved to database!', 'success');
     if (onSettingsSaved) onSettingsSaved();
     setTimeout(() => setSavedSuccess(false), 2000);
   };
@@ -79,6 +82,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
       );
     }
     setSavedSuccess(true);
+    showToast('Scoring thresholds reset to default standards', 'warning');
     if (onSettingsSaved) onSettingsSaved();
     setTimeout(() => setSavedSuccess(false), 2000);
   };

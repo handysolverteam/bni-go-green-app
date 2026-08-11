@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
+import { useToast } from './context/ToastContext';
 import { LoginPage } from './components/LoginPage';
 import { OrgOnboardingScreen } from './components/OrgOnboardingScreen';
 import { ProfileOnboardingScreen } from './components/ProfileOnboardingScreen';
@@ -17,8 +18,9 @@ import { setScoringConfig } from './lib/scoringEngine';
 
 export const AppContent: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
 
-  // App & Org State (Initialized with sessionStorage cache for instant load)
+  // App & Org State
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   
   const [org, setOrg] = useState<Organization | null>(() => {
@@ -73,11 +75,9 @@ export const AppContent: React.FC = () => {
         let fetchedMembers: Member[] = [];
 
         if (orgRes) {
-          // Cache in sessionStorage for instant load next time
           sessionStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
           sessionStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
 
-          // Fetch settings & members concurrently
           const [settingsRes, dbMembers] = await Promise.all([
             supabaseService.fetchOrgSettings(orgRes.org.id, user.uid),
             supabaseService.fetchMembers(orgRes.org.id),
@@ -97,7 +97,6 @@ export const AppContent: React.FC = () => {
 
           fetchedMembers = dbMembers;
 
-          // Subscribe to realtime members
           supabaseService.subscribeToMembers(orgRes.org.id, async () => {
             const fresh = await supabaseService.fetchMembers(orgRes.org.id);
             setMembers(fresh);
@@ -108,7 +107,6 @@ export const AppContent: React.FC = () => {
           sessionStorage.setItem('bni_cached_profile', JSON.stringify(profRes));
         }
 
-        // Update state with fresh database values
         if (orgRes) {
           setOrg(orgRes.org);
           setOrgMember(orgRes.member);
@@ -131,12 +129,14 @@ export const AppContent: React.FC = () => {
     sessionStorage.setItem('bni_cached_org_member', JSON.stringify(data.member));
     setOrg(data.org);
     setOrgMember(data.member);
+    showToast(`Joined ${data.org.name}! Org Code: ${data.org.code}`, 'success');
   };
 
   // Handle Profile Completed
   const handleProfileCompleted = (profile: UserProfileExtended) => {
     sessionStorage.setItem('bni_cached_profile', JSON.stringify(profile));
     setUserProfile(profile);
+    showToast('Profile completed successfully!', 'success');
   };
 
   // Member CRUD Handlers
@@ -147,6 +147,9 @@ export const AppContent: React.FC = () => {
     if (saved) {
       const dbMembers = await supabaseService.fetchMembers(org.id);
       setMembers(dbMembers);
+      showToast(`Member "${memberToSave.Name}" saved!`, 'success');
+    } else {
+      showToast('Failed to save member to database', 'error');
     }
     setIsSyncing(false);
   };
@@ -155,11 +158,13 @@ export const AppContent: React.FC = () => {
     if (org?.id && user?.uid) {
       setIsSyncing(true);
       setMembers(imported);
+      showToast(`Importing ${imported.length} members to chapter database...`, 'info');
       await supabaseService.upsertMembers(imported, org.id, user.uid);
       const dbMembers = await supabaseService.fetchMembers(org.id);
       if (dbMembers && dbMembers.length > 0) {
         setMembers(dbMembers);
       }
+      showToast(`Successfully imported ${imported.length} members!`, 'success');
       setIsSyncing(false);
     }
     setActiveTab('dashboard');
@@ -170,6 +175,7 @@ export const AppContent: React.FC = () => {
     setIsSyncing(true);
     setMembers(prev => prev.filter(m => m.id !== memberId));
     await supabaseService.deleteMember(memberId, org.id);
+    showToast('Member removed from chapter DB', 'error');
     setIsSyncing(false);
   };
 
@@ -178,10 +184,11 @@ export const AppContent: React.FC = () => {
     setIsSyncing(true);
     setMembers([]);
     await supabaseService.purgeAllMembers(org.id);
+    showToast('All chapter member data purged from database', 'warning');
     setIsSyncing(false);
   };
 
-  // Loading Screen (Only shown if no cached session & initializing)
+  // Loading Screen
   if (authLoading || (isInitializing && !org)) {
     return (
       <div className="min-h-screen bg-[#060a12] flex items-center justify-center">
