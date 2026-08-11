@@ -1,4 +1,5 @@
 export type UserRole = 'owner' | 'admin' | 'member';
+export type SidebarMode = 'full' | 'icons' | 'hover';
 
 export interface Organization {
   id: string;
@@ -11,6 +12,7 @@ export interface Organization {
   amber_threshold: number;
   red_threshold: number;
   custom_signature: string;
+  custom_scoring?: Partial<ScoringConfig>;
   created_at?: string;
 }
 
@@ -28,7 +30,7 @@ export interface UserProfileExtended {
   user_id: string;
   full_name: string;
   phone?: string;
-  chapter_role?: string;
+  avatar_url?: string;
   business_category?: string;
   bio?: string;
   is_profile_completed?: boolean;

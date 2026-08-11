@@ -2,70 +2,90 @@ import React, { useState } from 'react';
 import { getScoringConfig, setScoringConfig, DEFAULTS } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Settings, Save, RotateCcw, Database, ShieldCheck, Check, Trash2 } from 'lucide-react';
+import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Award, Heart } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabaseService } from '../services/supabaseService';
+import { ScoringConfig, ThresholdTier } from '../types';
 
-export const SettingsPage: React.FC = () => {
+interface SettingsPageProps {
+  orgId?: string;
+  onSettingsSaved?: () => void;
+}
+
+export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSaved }) => {
   const { user } = useAuth();
-  const [config, setConfigState] = useState(getScoringConfig());
+  const [config, setConfigState] = useState<ScoringConfig>(getScoringConfig());
+  const [signatureText, setSignatureText] = useState('Keep the momentum going! 💪');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
-  const [isPurging, setIsPurging] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setScoringConfig(config);
+    if (orgId) {
+      await supabaseService.saveOrgSettings(orgId, {
+        green: config.trafficLight.green,
+        amber: config.trafficLight.amber,
+        red: config.trafficLight.red,
+        signature: signatureText,
+      });
+    }
     setSavedSuccess(true);
+    if (onSettingsSaved) onSettingsSaved();
     setTimeout(() => setSavedSuccess(false), 2000);
   };
 
-  const handleResetConfirm = () => {
+  const handleResetConfirm = async () => {
     setScoringConfig(DEFAULTS);
     setConfigState(DEFAULTS);
+    setSignatureText('Keep the momentum going! 💪');
     setShowResetConfirm(false);
+    if (orgId) {
+      await supabaseService.saveOrgSettings(orgId, {
+        green: DEFAULTS.trafficLight.green,
+        amber: DEFAULTS.trafficLight.amber,
+        red: DEFAULTS.trafficLight.red,
+        signature: 'Keep the momentum going! 💪',
+      });
+    }
     setSavedSuccess(true);
+    if (onSettingsSaved) onSettingsSaved();
     setTimeout(() => setSavedSuccess(false), 2000);
   };
 
-  const handlePurgeConfirm = async () => {
-    if (!user?.uid) return;
-    setIsPurging(true);
-    try {
-      await supabaseService.purgeAllMembers(user.uid);
-      localStorage.removeItem('bni_members');
-      setShowPurgeConfirm(false);
-      window.location.reload();
-    } catch (e) {
-      console.error('Purge error:', e);
-    } finally {
-      setIsPurging(false);
-    }
+  const updateTier = (category: keyof ScoringConfig, index: number, field: 't' | 'pts', value: number) => {
+    if (category === 'trafficLight') return;
+    const currentTiers = [...config[category].thresholds];
+    currentTiers[index] = { ...currentTiers[index], [field]: value };
+    setConfigState({
+      ...config,
+      [category]: { thresholds: currentTiers }
+    });
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 max-w-4xl mx-auto pb-12">
+      {/* Header Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-white flex items-center gap-2">
             <Settings className="w-6 h-6 text-emerald-400" />
-            <span>Scoring & System Settings</span>
+            <span>Scoring & Message Settings</span>
           </h2>
-          <p className="text-xs text-slate-400">Customize PALMS 100-Point Scoring thresholds and manage Supabase database sync.</p>
+          <p className="text-xs text-slate-400">Configure PALMS 100-Point scoring threshold tiers and WhatsApp outreach signatures.</p>
         </div>
 
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setShowResetConfirm(true)}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center space-x-1 border border-white/10 transition-all"
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center space-x-1.5 border border-white/10 transition-all"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Defaults</span>
+            <span>Reset to Defaults</span>
           </button>
 
           <button
             onClick={handleSave}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
+            className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
           >
             {savedSuccess ? <Check className="w-4 h-4 text-slate-950" /> : <Save className="w-4 h-4" />}
             <span>{savedSuccess ? 'Saved!' : 'Save Settings'}</span>
@@ -73,84 +93,253 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Traffic Light Threshold Boundaries */}
+      {/* 1. WhatsApp Signature Card */}
+      <GlassCard className="p-6 space-y-3">
+        <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-emerald-400" />
+          <span>WhatsApp Message Signature</span>
+        </h3>
+        <input
+          type="text"
+          value={signatureText}
+          onChange={(e) => setSignatureText(e.target.value)}
+          placeholder="Keep the momentum going! 💪"
+          className="w-full px-4 py-2.5 rounded-xl glass-input text-xs font-semibold text-white"
+        />
+        <p className="text-[11px] text-slate-400">Appended to outbound WhatsApp performance nudge messages</p>
+      </GlassCard>
+
+      {/* 2. Traffic Light Thresholds */}
       <GlassCard className="p-6 space-y-4">
         <h3 className="text-base font-bold text-white flex items-center gap-2">
           <ShieldCheck className="w-5 h-5 text-emerald-400" />
-          <span>Traffic Light Score Thresholds (0 – 100 Points)</span>
+          <span>Traffic Light Thresholds</span>
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
-            <label className="text-xs font-bold text-emerald-400">🟢 Green Minimum Score</label>
+            <label className="text-xs font-bold text-emerald-400">🟢 Green $\ge$</label>
             <input
               type="number"
               value={config.trafficLight.green}
-              onChange={(e) => setConfigState({
-                ...config,
-                trafficLight: { ...config.trafficLight, green: Number(e.target.value) }
-              })}
-              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-bold text-white"
+              onChange={(e) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, green: Number(e.target.value) } })}
+              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-black text-white"
             />
-            <p className="text-[11px] text-slate-400">Scores $\ge$ {config.trafficLight.green} pts are Green</p>
           </div>
 
           <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-            <label className="text-xs font-bold text-amber-400">🟡 Amber Minimum Score</label>
+            <label className="text-xs font-bold text-amber-400">🟡 Amber $\ge$</label>
             <input
               type="number"
               value={config.trafficLight.amber}
-              onChange={(e) => setConfigState({
-                ...config,
-                trafficLight: { ...config.trafficLight, amber: Number(e.target.value) }
-              })}
-              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-bold text-white"
+              onChange={(e) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, amber: Number(e.target.value) } })}
+              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-black text-white"
             />
-            <p className="text-[11px] text-slate-400">Scores {config.trafficLight.amber} – {config.trafficLight.green - 1} pts are Amber</p>
           </div>
 
           <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-2">
-            <label className="text-xs font-bold text-rose-400">🔴 Red Minimum Score</label>
+            <label className="text-xs font-bold text-rose-400">🔴 Red $\ge$</label>
             <input
               type="number"
               value={config.trafficLight.red}
-              onChange={(e) => setConfigState({
-                ...config,
-                trafficLight: { ...config.trafficLight, red: Number(e.target.value) }
-              })}
-              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-bold text-white"
+              onChange={(e) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, red: Number(e.target.value) } })}
+              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-black text-white"
             />
-            <p className="text-[11px] text-slate-400">Scores {config.trafficLight.red} – {config.trafficLight.amber - 1} pts are Red</p>
           </div>
         </div>
       </GlassCard>
 
-      {/* Supabase Cloud Status & Database Purge Card */}
-      <GlassCard glow className="p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">Supabase Cloud Database</h3>
-              <p className="text-xs text-slate-400">Project ID: oleckbfrkpmoikpkjcpa &bull; Realtime Sync Active</p>
-            </div>
+      {/* 3. Category Threshold Tiers Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Attendance Rate */}
+        <GlassCard className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-white text-sm">Attendance Rate</h4>
+            <span className="text-xs font-extrabold text-emerald-400">Max 10 pts</span>
           </div>
+          <div className="space-y-2">
+            {config.attendance.thresholds.map((tier, idx) => (
+              <div key={idx} className="flex items-center space-x-2 text-xs">
+                <span className="text-slate-400 w-24">Min rate:</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={tier.t}
+                  onChange={(e) => updateTier('attendance', idx, 't', Number(e.target.value))}
+                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                />
+                <span className="text-slate-500">&rarr;</span>
+                <input
+                  type="number"
+                  value={tier.pts}
+                  onChange={(e) => updateTier('attendance', idx, 'pts', Number(e.target.value))}
+                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                />
+                <span className="text-slate-400">pts</span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
 
-          <button
-            onClick={() => setShowPurgeConfirm(true)}
-            className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs border border-rose-500/30 flex items-center space-x-1.5 transition-all"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span>Purge All Chapter Data</span>
-          </button>
-        </div>
+        {/* CEU per week */}
+        <GlassCard className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-white text-sm">CEU per week</h4>
+            <span className="text-xs font-extrabold text-emerald-400">Max 10 pts</span>
+          </div>
+          <div className="space-y-2">
+            {config.ceu.thresholds.map((tier, idx) => (
+              <div key={idx} className="flex items-center space-x-2 text-xs">
+                <span className="text-slate-400 w-24">Min CEU/wk:</span>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={tier.t}
+                  onChange={(e) => updateTier('ceu', idx, 't', Number(e.target.value))}
+                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                />
+                <span className="text-slate-500">&rarr;</span>
+                <input
+                  type="number"
+                  value={tier.pts}
+                  onChange={(e) => updateTier('ceu', idx, 'pts', Number(e.target.value))}
+                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                />
+                <span className="text-slate-400">pts</span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
 
-        <div className="p-3 rounded-xl bg-slate-950/60 border border-white/5 font-mono text-xs text-slate-300 space-y-1">
-          <div><span className="text-slate-500">API URL:</span> https://oleckbfrkpmoikpkjcpa.supabase.co/rest/v1/</div>
-          <div><span className="text-slate-500">Authenticated User:</span> {user?.email || 'Guest User'}</div>
-        </div>
+        {/* 1-2-1s per week */}
+        <GlassCard className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-white text-sm">1-2-1s per week</h4>
+            <span className="text-xs font-extrabold text-emerald-400">Max 20 pts</span>
+          </div>
+          <div className="space-y-2">
+            {config.oneToOnes.thresholds.map((tier, idx) => (
+              <div key={idx} className="flex items-center space-x-2 text-xs">
+                <span className="text-slate-400 w-24">Min 1-2-1/wk:</span>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={tier.t}
+                  onChange={(e) => updateTier('oneToOnes', idx, 't', Number(e.target.value))}
+                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                />
+                <span className="text-slate-500">&rarr;</span>
+                <input
+                  type="number"
+                  value={tier.pts}
+                  onChange={(e) => updateTier('oneToOnes', idx, 'pts', Number(e.target.value))}
+                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                />
+                <span className="text-slate-400">pts</span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Referrals per week */}
+        <GlassCard className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-white text-sm">Referrals per week</h4>
+            <span className="text-xs font-extrabold text-emerald-400">Max 25 pts</span>
+          </div>
+          <div className="space-y-2">
+            {config.referrals.thresholds.map((tier, idx) => (
+              <div key={idx} className="flex items-center space-x-2 text-xs">
+                <span className="text-slate-400 w-24">Min refs/wk:</span>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={tier.t}
+                  onChange={(e) => updateTier('referrals', idx, 't', Number(e.target.value))}
+                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                />
+                <span className="text-slate-500">&rarr;</span>
+                <input
+                  type="number"
+                  value={tier.pts}
+                  onChange={(e) => updateTier('referrals', idx, 'pts', Number(e.target.value))}
+                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                />
+                <span className="text-slate-400">pts</span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* TYFCB */}
+        <GlassCard className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-white text-sm">TYFCB Closed Business</h4>
+            <span className="text-xs font-extrabold text-emerald-400">Max 5 pts</span>
+          </div>
+          <div className="space-y-2">
+            {config.tyfcb.thresholds.map((tier, idx) => (
+              <div key={idx} className="flex items-center space-x-2 text-xs">
+                <span className="text-slate-400 w-24">Min Rs:</span>
+                <input
+                  type="number"
+                  value={tier.t}
+                  onChange={(e) => updateTier('tyfcb', idx, 't', Number(e.target.value))}
+                  className="w-28 px-2 py-1 rounded glass-input font-bold"
+                />
+                <span className="text-slate-500">&rarr;</span>
+                <input
+                  type="number"
+                  value={tier.pts}
+                  onChange={(e) => updateTier('tyfcb', idx, 'pts', Number(e.target.value))}
+                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                />
+                <span className="text-slate-400">pts</span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Visitors */}
+        <GlassCard className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-white text-sm">Visitors Brought</h4>
+            <span className="text-xs font-extrabold text-emerald-400">Max 25 pts</span>
+          </div>
+          <div className="space-y-2">
+            {config.visitors.thresholds.map((tier, idx) => (
+              <div key={idx} className="flex items-center space-x-2 text-xs">
+                <span className="text-slate-400 w-24">Min visitors:</span>
+                <input
+                  type="number"
+                  value={tier.t}
+                  onChange={(e) => updateTier('visitors', idx, 't', Number(e.target.value))}
+                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                />
+                <span className="text-slate-500">&rarr;</span>
+                <input
+                  type="number"
+                  value={tier.pts}
+                  onChange={(e) => updateTier('visitors', idx, 'pts', Number(e.target.value))}
+                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                />
+                <span className="text-slate-400">pts</span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      </div>
+
+      {/* Footer Credit Box */}
+      <GlassCard className="p-6 text-center space-y-2 border-white/10">
+        <p className="text-xs text-slate-300 font-medium flex items-center justify-center gap-1.5">
+          <span>Made with</span>
+          <Heart className="w-3.5 h-3.5 text-rose-500 fill-current animate-pulse" />
+          <span>by <strong className="text-white font-bold">Handysolver</strong> (Rahul Singh Matharu | BNI Influencers)</span>
+        </p>
+        <p className="text-[11px] text-slate-400 font-mono">
+          +91 9910662331 &bull; connect@handysolver.com
+        </p>
       </GlassCard>
 
       {/* Confirmation Modal for Reset */}
@@ -159,15 +348,6 @@ export const SettingsPage: React.FC = () => {
         type="reset"
         onConfirm={handleResetConfirm}
         onClose={() => setShowResetConfirm(false)}
-      />
-
-      {/* Confirmation Modal for Purge */}
-      <ConfirmationModal
-        isOpen={showPurgeConfirm}
-        type="purge"
-        onConfirm={handlePurgeConfirm}
-        onClose={() => setShowPurgeConfirm(false)}
-        isLoading={isPurging}
       />
     </div>
   );

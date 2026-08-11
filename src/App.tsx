@@ -198,7 +198,9 @@ export const AppContent: React.FC = () => {
       )}
 
       {activeTab === 'settings' && (
-        <SettingsPage />
+        <SettingsPage
+          orgId={org.id}
+        />
       )}
 
       {/* Member Detail Modal */}

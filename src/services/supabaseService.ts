@@ -186,7 +186,7 @@ export const supabaseService = {
           user_id: profile.user_id,
           full_name: profile.full_name,
           phone: profile.phone || '',
-          chapter_role: profile.chapter_role || '',
+          avatar_url: profile.avatar_url || '',
           business_category: profile.business_category || '',
           bio: profile.bio || '',
           is_profile_completed: true,

@@ -1,9 +1,17 @@
 import React, { useState } from 'react';
 import { GlassCard } from './GlassCard';
-import { UserCheck, ShieldCheck, ArrowRight } from 'lucide-react';
+import { UserCheck, ArrowRight, Camera } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
 import { UserProfileExtended } from '../types';
+
+const PRESET_AVATARS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
+  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
+];
 
 interface ProfileOnboardingScreenProps {
   onProfileCompleted: (profile: UserProfileExtended) => void;
@@ -13,7 +21,7 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
   const { user } = useAuth();
   const [fullName, setFullName] = useState(user?.displayName || '');
   const [phone, setPhone] = useState('');
-  const [chapterRole, setChapterRole] = useState('Member');
+  const [avatarUrl, setAvatarUrl] = useState(user?.photoURL || PRESET_AVATARS[0]);
   const [category, setCategory] = useState('');
   const [bio, setBio] = useState('');
 
@@ -31,7 +39,7 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
       user_id: user.uid,
       full_name: fullName.trim(),
       phone: phone.trim(),
-      chapter_role: chapterRole,
+      avatar_url: avatarUrl,
       business_category: category.trim(),
       bio: bio.trim(),
       is_profile_completed: true,
@@ -62,8 +70,8 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
               <UserCheck className="w-7 h-7 text-emerald-400" />
             </div>
           </div>
-          <h1 className="text-2xl font-black text-white">Complete Your Member Profile</h1>
-          <p className="text-xs text-slate-400">Tell your chapter team about yourself to finish setup.</p>
+          <h1 className="text-2xl font-black text-white">Complete Your Profile</h1>
+          <p className="text-xs text-slate-400">Set up your avatar and profile details to get started.</p>
         </div>
 
         <GlassCard glow className="p-6 space-y-4 border-white/10 shadow-2xl">
@@ -72,6 +80,31 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
               {errorMsg}
             </div>
           )}
+
+          {/* Avatar Selector */}
+          <div className="flex flex-col items-center space-y-2 pb-2">
+            <div className="relative">
+              <img
+                src={avatarUrl}
+                alt="Avatar"
+                className="w-20 h-20 rounded-full object-cover ring-4 ring-emerald-500/40 shadow-xl"
+              />
+            </div>
+            <div className="flex items-center space-x-2 pt-1">
+              {PRESET_AVATARS.map((url, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setAvatarUrl(url)}
+                  className={`w-7 h-7 rounded-full overflow-hidden border-2 transition-all ${
+                    avatarUrl === url ? 'border-emerald-400 scale-110' : 'border-transparent opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  <img src={url} alt="Preset" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
@@ -86,40 +119,23 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">WhatsApp Contact Phone</label>
-              <input
-                type="text"
-                placeholder="e.g. +91 9876543210"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">Chapter Role</label>
-                <select
-                  value={chapterRole}
-                  onChange={(e) => setChapterRole(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl glass-input text-xs font-semibold bg-slate-900 text-white"
-                >
-                  <option value="President">President</option>
-                  <option value="Vice President">Vice President</option>
-                  <option value="Secretary Treasurer">Secretary Treasurer</option>
-                  <option value="Membership Committee">Membership Committee</option>
-                  <option value="Visitor Host">Visitor Host</option>
-                  <option value="Education Coordinator">Education Coordinator</option>
-                  <option value="Member">Member</option>
-                </select>
+                <label className="text-xs font-bold text-slate-300">WhatsApp Phone</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 9876543210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold"
+                />
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-300">Business Category</label>
                 <input
                   type="text"
-                  placeholder="e.g. IT & Software"
+                  placeholder="e.g. Real Estate"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold"
