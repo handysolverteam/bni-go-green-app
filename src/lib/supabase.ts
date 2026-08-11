@@ -7,14 +7,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
   },
 });
 
 export async function signInWithGoogleSupabase() {
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://bni-go-green.vercel.app';
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: `${currentOrigin}/`,
     },
   });
   if (error) throw error;
