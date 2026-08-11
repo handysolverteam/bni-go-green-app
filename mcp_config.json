@@ -1,8 +1,12 @@
 {
   "mcpServers": {
-    "supabase-bni-go-green": {
+    "supabase": {
       "serverUrl": "https://mcp.supabase.com/mcp?project_ref=oleckbfrkpmoikpkjcpa",
       "url": "https://mcp.supabase.com/mcp?project_ref=oleckbfrkpmoikpkjcpa"
     }
+  },
+  "supabase": {
+    "serverUrl": "https://mcp.supabase.com/mcp?project_ref=oleckbfrkpmoikpkjcpa",
+    "url": "https://mcp.supabase.com/mcp?project_ref=oleckbfrkpmoikpkjcpa"
   }
 }
