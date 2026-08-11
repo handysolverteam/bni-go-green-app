@@ -36,6 +36,10 @@ export const supabaseService = {
           city,
           code,
           created_by: userId,
+          green_threshold: 70,
+          amber_threshold: 50,
+          red_threshold: 30,
+          custom_signature: 'Keep the momentum going! 💪',
         }])
         .select()
         .single();
@@ -60,6 +64,20 @@ export const supabaseService = {
       if (memError || !memData) {
         console.error('Create org member error:', memError);
         return { res: null, error: memError?.message || 'Error assigning org owner role.' };
+      }
+
+      // Also seed chapter_settings if table exists
+      try {
+        await supabase.from('chapter_settings').upsert({
+          user_id: userId,
+          green_threshold: 70,
+          amber_threshold: 50,
+          red_threshold: 30,
+          custom_signature: 'Keep the momentum going! 💪',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+      } catch (e) {
+        // chapter_settings table optional
       }
 
       return { res: { org: orgData as Organization, member: memData as OrgMember } };

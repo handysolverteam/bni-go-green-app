@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, Copy, Check, SlidersHorizontal } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
 
@@ -28,19 +28,21 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   const { user, logout } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('full');
+  
+  // Persist sidebarMode in localStorage
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(() => {
+    return (localStorage.getItem('bni_sidebar_mode') as SidebarMode) || 'full';
+  });
+
   const [showModeModal, setShowModeModal] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
   const isAdminOrOwner = orgMember?.role === 'owner' || orgMember?.role === 'admin';
 
-  const handleCopyCode = () => {
-    if (org?.code) {
-      navigator.clipboard.writeText(org.code);
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    }
+  const updateSidebarMode = (mode: SidebarMode) => {
+    setSidebarMode(mode);
+    localStorage.setItem('bni_sidebar_mode', mode);
+    setShowModeModal(false);
   };
 
   const navItems = [
@@ -90,23 +92,6 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             <SlidersHorizontal className="w-4 h-4" />
           </button>
         </div>
-
-        {/* 6-Digit Org Code Widget */}
-        {org?.code && !isCompact && (
-          <div className="my-3 p-2.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 flex items-center justify-between text-xs">
-            <div>
-              <div className="text-[9px] font-extrabold text-slate-400 uppercase">Org Code</div>
-              <div className="font-black text-emerald-400 tracking-wider text-sm">{org.code}</div>
-            </div>
-            <button
-              onClick={handleCopyCode}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
-              title="Copy 6-digit invite code"
-            >
-              {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        )}
 
         {/* Navigation Items */}
         <nav className="flex-1 space-y-1.5 py-3">
@@ -201,21 +186,12 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setShowModeModal(true)}
-              className="p-2 rounded-xl bg-slate-900/60 text-slate-300 border border-white/10"
-              title="Display Options"
-            >
-              <SlidersHorizontal className="w-4.5 h-4.5" />
-            </button>
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl bg-slate-900/60 text-slate-300 border border-white/10"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 rounded-xl bg-slate-900/60 text-slate-300 border border-white/10"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
 
         {/* Mobile Menu Drawer */}
@@ -267,7 +243,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         {children}
       </main>
 
-      {/* Sidebar View Preferences Modal (Without raw pixel values) */}
+      {/* Sidebar View Preferences Modal (Persisted in localStorage) */}
       {showModeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
           <div className="glass-panel w-full max-w-sm p-6 rounded-2xl space-y-5 border-emerald-500/30">
@@ -283,7 +259,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
             <div className="space-y-2">
               <button
-                onClick={() => { setSidebarMode('full'); setShowModeModal(false); }}
+                onClick={() => updateSidebarMode('full')}
                 className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'full' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
@@ -293,7 +269,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
               </button>
 
               <button
-                onClick={() => { setSidebarMode('icons'); setShowModeModal(false); }}
+                onClick={() => updateSidebarMode('icons')}
                 className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'icons' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
@@ -303,7 +279,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
               </button>
 
               <button
-                onClick={() => { setSidebarMode('hover'); setShowModeModal(false); }}
+                onClick={() => updateSidebarMode('hover')}
                 className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'hover' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
