@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "supabase-bni-go-green": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp?project_ref=oleckbfrkpmoikpkjcpa",
+      "enabled": true,
+      "oauth": {}
+    }
+  }
+}
