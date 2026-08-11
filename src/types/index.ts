@@ -1,3 +1,40 @@
+export type UserRole = 'owner' | 'admin' | 'member';
+
+export interface Organization {
+  id: string;
+  name: string;
+  chapter_name?: string;
+  city?: string;
+  code: string;
+  created_by: string;
+  green_threshold: number;
+  amber_threshold: number;
+  red_threshold: number;
+  custom_signature: string;
+  created_at?: string;
+}
+
+export interface OrgMember {
+  id: string;
+  org_id: string;
+  user_id: string;
+  user_email?: string;
+  role: UserRole;
+  created_at?: string;
+  profile?: UserProfileExtended;
+}
+
+export interface UserProfileExtended {
+  user_id: string;
+  full_name: string;
+  phone?: string;
+  chapter_role?: string;
+  business_category?: string;
+  bio?: string;
+  is_profile_completed?: boolean;
+  updated_at?: string;
+}
+
 export interface ThresholdTier {
   t: number;
   pts: number;
@@ -56,20 +93,20 @@ export interface TrafficLightStatus {
 
 export interface Member {
   id?: string;
+  org_id?: string;
   Name: string;
   Phone?: string;
   Email?: string;
-  P?: number; // Present
-  A?: number; // Absent
-  S?: number; // Substitute
-  M?: number; // Medical / Leave
-  RGT?: number; // Referrals Given Total
-  RGR?: number; // Referrals Received Total
-  V?: number; // Visitors
-  TYFCB?: number; // Thank You For Closed Business
-  CEU?: number; // Chapter Education Units
-  OneToOnes?: number; // 1-2-1 Meetings
-  Sponsors?: number; // Members Sponsored
+  P?: number;
+  A?: number;
+  S?: number;
+  M?: number;
+  RGT?: number;
+  V?: number;
+  TYFCB?: number;
+  CEU?: number;
+  OneToOnes?: number;
+  Sponsors?: number;
   AttendanceRate?: number;
   reportFromDate?: string;
   reportToDate?: string;

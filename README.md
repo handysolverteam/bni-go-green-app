@@ -5,66 +5,79 @@
 ![Vite](https://img.shields.io/badge/Vite-Web_Framework-646CFF?style=for-the-badge&logo=vite)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript)
 
-BNI Go Green is a web application designed for BNI Chapter Directors to track weekly member **PALMS** (Present, Absent, Substitute, Medical, Referrals, Visitors, TYFCB) statistics, compute 100-point Traffic Light scores, and send personalized WhatsApp nudges directly to members.
+BNI Go Green is a multi-tenant, role-based web application designed for BNI Chapter Directors, Owners, Admins, and Members to track weekly **PALMS** (Present, Absent, Substitute, Medical, Referrals, Visitors, TYFCB) statistics, compute 100-point Traffic Light scores, and manage organization team permissions.
 
 ---
 
 ## 🌟 Key Features
 
-* **🔐 Multi-Provider Authentication**:
-  * Seamless Google Single Sign-On (Google OAuth 2.0 via Firebase & Supabase Auth).
-  * 256-bit SSL encrypted director portal.
+* **🖥️ Responsive 240px Sidebar & Mobile Drawer**:
+  * Desktop ($\ge 1024\text{px}$): Fixed 240px Liquid Glass sidebar.
+  * Mobile ($< 1024\text{px}$): Sticky top header with animated menu drawer.
 
-* **📊 100-Point Traffic Light Scoring Engine**:
-  * **🟢 Green**: $\ge 70$ points (Top Performers)
-  * **🟡 Amber**: $50 - 69$ points (Moderate)
-  * **🔴 Red**: $30 - 49$ points (Needs Improvement)
-  * **⚪ Grey**: $< 30$ points (Critical Attention)
-  * Calculates points across 7 official categories: Attendance, CEUs, 1-2-1s, Referrals Given, TYFCB Closed Business, Visitors Brought, and Members Sponsored.
+* **🏢 6-Digit Code Organization System**:
+  * **Create Organization**: Generate unique 6-digit invite code (e.g. `789210`). Creator auto-assigned `owner` role.
+  * **Join Organization**: Enter 6-digit code to join chapter as `member`.
+  * **Role-Based Access Control (RBAC)**: `owner`, `admin`, `member` hierarchy.
 
-* **📈 Automated Level-Up Recommendations**:
-  * Smart algorithm identifies exact numerical targets needed to elevate a member from Red $\rightarrow$ Amber or Amber $\rightarrow$ Green.
+* **👤 User Profile Onboarding**:
+  * Automatic post-login check: prompts user once to fill Full Name, WhatsApp, Chapter Role, Category & Bio.
 
-* **📥 1-Click Excel / CSV Import Engine**:
-  * Built-in SheetJS parser for weekly BNI PALMS Excel reports (`.xlsx`, `.csv`).
-  * Automatic column mapping, instant validation preview, and sample template generator.
-
-* **💬 WhatsApp Outbound Outreach Manager**:
-  * Pre-formatted performance nudge templates.
-  * Direct 1-click **WhatsApp Web URL launcher** (`https://web.whatsapp.com/send?phone=...&text=...`).
-  * Batch outreach queue with status tracking (Pending ⏳, Sent ✅, Failed ❌, Skipped ⏭️).
-
-* **⚡ Supabase Real-Time Database**:
-  * Live sync across all sessions without dummy or hardcoded mock data.
-  * Instant Postgres change subscriptions (`postgres_changes`).
-
-* **⚠️ Universal Confirmation Modals**:
-  * Safeguards for destructive operations (Logout, Member Delete, Data Purge, Reset Defaults).
-
-* **📱 Mobile-First Responsive Design**:
-  * Liquid Glass design system.
-  * Mobile navigation drawer and touch-optimized card layout.
+* **📊 Dynamic 100-Point Traffic Light Scoring Engine**:
+  * **🟢 Green**: $\ge 70$ pts
+  * **🟡 Amber**: $50 - 69$ pts
+  * **🔴 Red**: $30 - 49$ pts
+  * **⚪ Grey**: $< 30$ pts
 
 ---
 
-## 🛠️ Technology Stack
+## 🗄️ Supabase Complete Database Schema
 
-* **Frontend**: React 19, Vite, TypeScript, TailwindCSS.
-* **Database & Realtime**: Supabase Postgres & Realtime Engine (`oleckbfrkpmoikpkjcpa`).
-* **Auth**: Firebase Auth & Supabase OAuth (Google Provider).
-* **Excel Parsing**: SheetJS (`xlsx`).
-* **Icons & UI**: Lucide React icons, Glassmorphism CSS.
-
----
-
-## 🗄️ Supabase Database Schema
-
-Run this SQL script in your **Supabase Dashboard $\rightarrow$ SQL Editor**:
+Run this SQL in your **Supabase Dashboard $\rightarrow$ SQL Editor**:
 
 ```sql
--- 1. Members Table
+-- 1. Organizations Table
+CREATE TABLE IF NOT EXISTS public.organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    chapter_name TEXT,
+    city TEXT,
+    code VARCHAR(6) UNIQUE NOT NULL,
+    created_by TEXT NOT NULL,
+    green_threshold INT DEFAULT 70,
+    amber_threshold INT DEFAULT 50,
+    red_threshold INT DEFAULT 30,
+    custom_signature TEXT DEFAULT 'Keep the momentum going! 💪',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 2. Organization Members & RBAC Table
+CREATE TABLE IF NOT EXISTS public.org_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    user_email TEXT,
+    role TEXT NOT NULL DEFAULT 'member',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_org_user UNIQUE (org_id, user_id)
+);
+
+-- 3. User Profiles Table
+CREATE TABLE IF NOT EXISTS public.profiles (
+    user_id TEXT PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    phone TEXT,
+    chapter_role TEXT,
+    business_category TEXT,
+    bio TEXT,
+    is_profile_completed BOOLEAN DEFAULT true,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 4. Members Table (Scoped by Org)
 CREATE TABLE IF NOT EXISTS public.members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL,
     name TEXT NOT NULL,
     phone TEXT,
@@ -84,24 +97,14 @@ CREATE TABLE IF NOT EXISTS public.members (
     join_date TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    CONSTRAINT unique_user_member_name UNIQUE (user_id, name)
+    CONSTRAINT unique_org_member_name UNIQUE (org_id, name)
 );
 
--- 2. Chapter Settings Table
-CREATE TABLE IF NOT EXISTS public.chapter_settings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id TEXT NOT NULL UNIQUE,
-    green_threshold INT DEFAULT 70,
-    amber_threshold INT DEFAULT 50,
-    red_threshold INT DEFAULT 30,
-    custom_signature TEXT DEFAULT 'Keep the momentum going! 💪',
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 3. Outreach Logs Table
+-- 5. Outreach Logs Table
 CREATE TABLE IF NOT EXISTS public.outreach_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL,
+    org_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
     member_name TEXT NOT NULL,
     phone TEXT,
     status TEXT NOT NULL,
@@ -109,56 +112,37 @@ CREATE TABLE IF NOT EXISTS public.outreach_logs (
     sent_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Row Level Security
+-- Security Policies
+ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.org_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.chapter_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.outreach_logs ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "Public full access organizations" ON public.organizations FOR ALL USING (true);
+CREATE POLICY "Public full access org_members" ON public.org_members FOR ALL USING (true);
+CREATE POLICY "Public full access profiles" ON public.profiles FOR ALL USING (true);
 CREATE POLICY "Public full access members" ON public.members FOR ALL USING (true);
-CREATE POLICY "Public full access settings" ON public.chapter_settings FOR ALL USING (true);
-CREATE POLICY "Public full access logs" ON public.outreach_logs FOR ALL USING (true);
+CREATE POLICY "Public full access outreach_logs" ON public.outreach_logs FOR ALL USING (true);
 ```
 
 ---
 
 ## 🚀 Quick Start (Local Development)
 
-1. **Clone Repository**:
-   ```bash
-   git clone git@github.com:handysolverteam/bni-go-green-app.git
-   cd bni-go-green-app
-   ```
-
-2. **Install Dependencies**:
+1. **Install Dependencies**:
    ```bash
    npm install
    ```
 
-3. **Configure Environment Variables** (`.env`):
-   ```env
-   VITE_FIREBASE_API_KEY=AIzaSyAO0wKilYOs8dbxwW1DmgqdRWLLCRk3_cQ
-   VITE_FIREBASE_AUTH_DOMAIN=handydash-75858.firebaseapp.com
-   VITE_FIREBASE_DATABASE_URL=https://handydash-75858-b95d2.asia-southeast1.firebasedatabase.app
-   VITE_FIREBASE_PROJECT_ID=handydash-75858-b95d2
-   VITE_GOOGLE_WEB_CLIENT_ID=18967278229-rq5dr7gs5l34mqdg1435g1iuttuvhj5q.apps.googleusercontent.com
-
-   VITE_SUPABASE_URL=https://oleckbfrkpmoikpkjcpa.supabase.co
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-4. **Run Development Server**:
+2. **Run Development Server**:
    ```bash
    npm run dev
    ```
-   Open `http://localhost:3000` in your browser.
 
-5. **Build Production Bundle**:
+3. **Build Production Bundle**:
    ```bash
    npm run build
    ```
 
----
-
-## 📄 License & Credits
-
-Developed by **HandySolver Team** for BNI Chapter Leaders worldwide.
+Developed by **HandySolver Team**.

@@ -1,10 +1,11 @@
 import { supabase } from '../lib/supabase';
-import { Member, ScoringConfig } from '../types';
-import { scoreMember, DEFAULTS } from '../lib/scoringEngine';
+import { Member, Organization, OrgMember, UserProfileExtended, UserRole } from '../types';
+import { scoreMember } from '../lib/scoringEngine';
 
 export interface OutreachLogRecord {
   id?: string;
   user_id?: string;
+  org_id?: string;
   member_name: string;
   phone: string;
   status: 'sent' | 'pending' | 'failed' | 'skipped';
@@ -12,95 +13,234 @@ export interface OutreachLogRecord {
   sent_at: string;
 }
 
-export interface ChapterSettings {
-  green_threshold: number;
-  amber_threshold: number;
-  red_threshold: number;
-  custom_signature: string;
+// Generate unique 6-digit code e.g. "789210"
+function generate6DigitCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export const supabaseService = {
-  // --- MEMBERS CRUD ---
-  async fetchMembers(userId: string): Promise<Member[]> {
+  // --- ORGANIZATION MANAGEMENT ---
+  async createOrganization(
+    name: string,
+    chapterName: string,
+    city: string,
+    userId: string,
+    userEmail?: string
+  ): Promise<{ org: Organization; member: OrgMember } | null> {
+    try {
+      const code = generate6DigitCode();
+      const { data: orgData, error: orgError } = await supabase
+        .from('organizations')
+        .insert([{
+          name,
+          chapter_name: chapterName,
+          city,
+          code,
+          created_by: userId,
+        }])
+        .select()
+        .single();
+
+      if (orgError || !orgData) {
+        console.error('Create org error:', orgError);
+        return null;
+      }
+
+      // Add user as owner in org_members
+      const { data: memData, error: memError } = await supabase
+        .from('org_members')
+        .insert([{
+          org_id: orgData.id,
+          user_id: userId,
+          user_email: userEmail || '',
+          role: 'owner',
+        }])
+        .select()
+        .single();
+
+      if (memError || !memData) {
+        console.error('Create org member error:', memError);
+        return null;
+      }
+
+      return { org: orgData as Organization, member: memData as OrgMember };
+    } catch (e) {
+      console.error('Create org exception:', e);
+      return null;
+    }
+  },
+
+  async joinOrganization(
+    code: string,
+    userId: string,
+    userEmail?: string
+  ): Promise<{ org: Organization; member: OrgMember } | null> {
+    try {
+      // Find org by 6-digit code
+      const { data: orgData, error: orgError } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('code', code.trim())
+        .single();
+
+      if (orgError || !orgData) {
+        console.error('Join org: invalid code', orgError);
+        return null;
+      }
+
+      // Upsert user into org_members as 'member'
+      const { data: memData, error: memError } = await supabase
+        .from('org_members')
+        .upsert([{
+          org_id: orgData.id,
+          user_id: userId,
+          user_email: userEmail || '',
+          role: 'member',
+        }], { onConflict: 'org_id, user_id' })
+        .select()
+        .single();
+
+      if (memError || !memData) {
+        console.error('Join org member error:', memError);
+        return null;
+      }
+
+      return { org: orgData as Organization, member: memData as OrgMember };
+    } catch (e) {
+      console.error('Join org exception:', e);
+      return null;
+    }
+  },
+
+  async fetchUserOrganization(userId: string): Promise<{ org: Organization; member: OrgMember } | null> {
+    try {
+      const { data: memData, error: memError } = await supabase
+        .from('org_members')
+        .select('*, org:organizations(*)')
+        .eq('user_id', userId)
+        .single();
+
+      if (memError || !memData || !memData.org) return null;
+
+      return {
+        org: memData.org as Organization,
+        member: {
+          id: memData.id,
+          org_id: memData.org_id,
+          user_id: memData.user_id,
+          user_email: memData.user_email,
+          role: memData.role as UserRole,
+        },
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async fetchOrgMembers(orgId: string): Promise<OrgMember[]> {
     try {
       const { data, error } = await supabase
-        .from('members')
+        .from('org_members')
         .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .eq('org_id', orgId);
 
-      if (error) {
-        console.warn('Supabase fetch error:', error.message);
-        return [];
-      }
-
-      if (data && data.length > 0) {
-        return data.map((row: any) => scoreMember({
-          id: row.id,
-          Name: row.name,
-          Phone: row.phone || '',
-          Email: row.email || '',
-          P: row.present || 0,
-          A: row.absent || 0,
-          S: row.substitute || 0,
-          M: row.medical || 0,
-          RGT: row.referrals_given || 0,
-          V: row.visitors || 0,
-          TYFCB: Number(row.tyfcb) || 0,
-          CEU: Number(row.ceu) || 0,
-          OneToOnes: Number(row.one_to_ones) || 0,
-          Sponsors: row.sponsors || 0,
-          JoinDate: row.join_date || '',
-        }));
-      }
-      return [];
+      if (error || !data) return [];
+      return data as OrgMember[];
     } catch (e) {
-      console.error('Supabase fetch exception:', e);
       return [];
     }
   },
 
-  async upsertMembers(members: Member[], userId: string): Promise<boolean> {
+  async updateOrgMemberRole(orgId: string, targetUserId: string, newRole: UserRole): Promise<boolean> {
     try {
-      const rows = members.map(m => ({
-        user_id: userId,
-        name: m.Name,
-        phone: m.Phone || '',
-        email: m.Email || '',
-        present: m.P || 0,
-        absent: m.A || 0,
-        substitute: m.S || 0,
-        medical: m.M || 0,
-        referrals_given: m.RGT || 0,
-        visitors: m.V || 0,
-        tyfcb: m.TYFCB || 0,
-        ceu: m.CEU || 0,
-        one_to_ones: m.OneToOnes || 0,
-        sponsors: m.Sponsors || 0,
-        score: m.score || 0,
-        traffic_light: m.trafficLight?.label || 'Grey',
-        updated_at: new Date().toISOString(),
-      }));
-
       const { error } = await supabase
-        .from('members')
-        .upsert(rows, { onConflict: 'user_id, name' });
+        .from('org_members')
+        .update({ role: newRole })
+        .eq('org_id', orgId)
+        .eq('user_id', targetUserId);
 
-      if (error) {
-        console.warn('Supabase upsert error:', error.message);
-        return false;
-      }
-      return true;
+      return !error;
     } catch (e) {
-      console.error('Supabase upsert exception:', e);
       return false;
     }
   },
 
-  async saveSingleMember(member: Member, userId: string): Promise<Member | null> {
+  // --- USER PROFILES ---
+  async fetchUserProfile(userId: string): Promise<UserProfileExtended | null> {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !data) return null;
+      return data as UserProfileExtended;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async saveUserProfile(profile: UserProfileExtended): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: profile.user_id,
+          full_name: profile.full_name,
+          phone: profile.phone || '',
+          chapter_role: profile.chapter_role || '',
+          business_category: profile.business_category || '',
+          bio: profile.bio || '',
+          is_profile_completed: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      return !error;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  // --- MEMBERS CRUD (Scoped by Org) ---
+  async fetchMembers(orgId: string): Promise<Member[]> {
+    try {
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return [];
+
+      return data.map((row: any) => scoreMember({
+        id: row.id,
+        org_id: row.org_id,
+        Name: row.name,
+        Phone: row.phone || '',
+        Email: row.email || '',
+        P: row.present || 0,
+        A: row.absent || 0,
+        S: row.substitute || 0,
+        M: row.medical || 0,
+        RGT: row.referrals_given || 0,
+        V: row.visitors || 0,
+        TYFCB: Number(row.tyfcb) || 0,
+        CEU: Number(row.ceu) || 0,
+        OneToOnes: Number(row.one_to_ones) || 0,
+        Sponsors: row.sponsors || 0,
+        JoinDate: row.join_date || '',
+      }));
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async saveSingleMember(member: Member, orgId: string, userId: string): Promise<Member | null> {
     try {
       const row = {
         ...(member.id ? { id: member.id } : {}),
+        org_id: orgId,
         user_id: userId,
         name: member.Name,
         phone: member.Phone || '',
@@ -126,13 +266,11 @@ export const supabaseService = {
         .select()
         .single();
 
-      if (error || !data) {
-        console.warn('Save member DB error:', error?.message);
-        return member;
-      }
+      if (error || !data) return member;
 
       return scoreMember({
         id: data.id,
+        org_id: data.org_id,
         Name: data.name,
         Phone: data.phone || '',
         Email: data.email || '',
@@ -152,50 +290,73 @@ export const supabaseService = {
     }
   },
 
-  async deleteMember(memberId: string, userId: string): Promise<boolean> {
+  async upsertMembers(members: Member[], orgId: string, userId: string): Promise<boolean> {
+    try {
+      const rows = members.map(m => ({
+        org_id: orgId,
+        user_id: userId,
+        name: m.Name,
+        phone: m.Phone || '',
+        email: m.Email || '',
+        present: m.P || 0,
+        absent: m.A || 0,
+        substitute: m.S || 0,
+        medical: m.M || 0,
+        referrals_given: m.RGT || 0,
+        visitors: m.V || 0,
+        tyfcb: m.TYFCB || 0,
+        ceu: m.CEU || 0,
+        one_to_ones: m.OneToOnes || 0,
+        sponsors: m.Sponsors || 0,
+        score: m.score || 0,
+        traffic_light: m.trafficLight?.label || 'Grey',
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase
+        .from('members')
+        .upsert(rows, { onConflict: 'org_id, name' });
+
+      return !error;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async deleteMember(memberId: string, orgId: string): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('members')
         .delete()
         .eq('id', memberId)
-        .eq('user_id', userId);
+        .eq('org_id', orgId);
 
-      if (error) {
-        console.warn('Supabase delete error:', error.message);
-        return false;
-      }
-      return true;
+      return !error;
     } catch (e) {
-      console.error('Supabase delete exception:', e);
       return false;
     }
   },
 
-  async purgeAllMembers(userId: string): Promise<boolean> {
+  async purgeAllMembers(orgId: string): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('members')
         .delete()
-        .eq('user_id', userId);
+        .eq('org_id', orgId);
 
-      if (error) {
-        console.warn('Supabase purge error:', error.message);
-        return false;
-      }
-      return true;
+      return !error;
     } catch (e) {
-      console.error('Supabase purge exception:', e);
       return false;
     }
   },
 
   // --- REALTIME SUBSCRIPTION ---
-  subscribeToMembers(userId: string, onUpdate: () => void) {
+  subscribeToMembers(orgId: string, onUpdate: () => void) {
     const channel = supabase
-      .channel(`members-realtime-${userId}`)
+      .channel(`members-realtime-${orgId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'members', filter: `user_id=eq.${userId}` },
+        { event: '*', schema: 'public', table: 'members', filter: `org_id=eq.${orgId}` },
         () => {
           onUpdate();
         }
@@ -208,38 +369,17 @@ export const supabaseService = {
   },
 
   // --- SETTINGS CRUD ---
-  async fetchSettings(userId: string): Promise<ChapterSettings | null> {
-    try {
-      const { data, error } = await supabase
-        .from('chapter_settings')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
-      if (error || !data) return null;
-      return {
-        green_threshold: data.green_threshold || 70,
-        amber_threshold: data.amber_threshold || 50,
-        red_threshold: data.red_threshold || 30,
-        custom_signature: data.custom_signature || 'Keep the momentum going! 💪',
-      };
-    } catch (e) {
-      return null;
-    }
-  },
-
-  async saveSettings(settings: ChapterSettings, userId: string): Promise<boolean> {
+  async saveOrgSettings(orgId: string, settings: { green: number; amber: number; red: number; signature: string }): Promise<boolean> {
     try {
       const { error } = await supabase
-        .from('chapter_settings')
-        .upsert({
-          user_id: userId,
-          green_threshold: settings.green_threshold,
-          amber_threshold: settings.amber_threshold,
-          red_threshold: settings.red_threshold,
-          custom_signature: settings.custom_signature,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        .from('organizations')
+        .update({
+          green_threshold: settings.green,
+          amber_threshold: settings.amber,
+          red_threshold: settings.red,
+          custom_signature: settings.signature,
+        })
+        .eq('id', orgId);
 
       return !error;
     } catch (e) {
@@ -251,25 +391,9 @@ export const supabaseService = {
   async saveOutreachLog(log: OutreachLogRecord): Promise<boolean> {
     try {
       const { error } = await supabase.from('outreach_logs').insert([log]);
-      if (error) console.warn('Save log error:', error.message);
       return !error;
     } catch (e) {
       return false;
-    }
-  },
-
-  async fetchOutreachLogs(userId: string): Promise<OutreachLogRecord[]> {
-    try {
-      const { data, error } = await supabase
-        .from('outreach_logs')
-        .select('*')
-        .eq('user_id', userId)
-        .order('sent_at', { ascending: false });
-
-      if (error || !data) return [];
-      return data as OutreachLogRecord[];
-    } catch (e) {
-      return [];
     }
   }
 };
