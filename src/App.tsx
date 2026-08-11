@@ -18,29 +18,14 @@ export const AppContent: React.FC = () => {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 1. Initial Load & Realtime Sync with Supabase
+  // 1. Fetch & Realtime Sync with Supabase DB
   useEffect(() => {
     if (!user?.uid) return;
 
     const loadData = async () => {
       setIsSyncing(true);
       const dbMembers = await supabaseService.fetchMembers(user.uid);
-      if (dbMembers.length > 0) {
-        setMembers(dbMembers);
-      } else {
-        // Local storage fallback if DB is empty
-        const saved = localStorage.getItem(`bni_members_${user.uid}`);
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            const scored = parsed.map((m: Member) => scoreMember(m));
-            setMembers(scored);
-            await supabaseService.upsertMembers(scored, user.uid);
-          } catch (e) {
-            console.error('Failed to parse local storage:', e);
-          }
-        }
-      }
+      setMembers(dbMembers);
       setIsSyncing(false);
     };
 
@@ -56,18 +41,31 @@ export const AppContent: React.FC = () => {
     };
   }, [user]);
 
-  // Save to local storage cache on member updates
-  useEffect(() => {
-    if (user?.uid && members.length > 0) {
-      localStorage.setItem(`bni_members_${user.uid}`, JSON.stringify(members));
+  // Save/Update Single Member
+  const handleSaveMember = async (memberToSave: Member) => {
+    if (!user?.uid) return;
+    const saved = await supabaseService.saveSingleMember(memberToSave, user.uid);
+    if (saved) {
+      setMembers(prev => {
+        const idx = prev.findIndex(m => (m.id && m.id === saved.id) || m.Name.toLowerCase() === saved.Name.toLowerCase());
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = saved;
+          return next;
+        }
+        return [saved, ...prev];
+      });
     }
-  }, [members, user]);
+  };
 
   // Handle Excel Import
   const handleImportMembers = async (imported: Member[]) => {
-    setMembers(imported);
     if (user?.uid) {
       await supabaseService.upsertMembers(imported, user.uid);
+      const updated = await supabaseService.fetchMembers(user.uid);
+      setMembers(updated.length > 0 ? updated : imported);
+    } else {
+      setMembers(imported);
     }
     setActiveTab('dashboard');
   };
@@ -85,7 +83,6 @@ export const AppContent: React.FC = () => {
     setMembers([]);
     if (user?.uid) {
       await supabaseService.purgeAllMembers(user.uid);
-      localStorage.removeItem(`bni_members_${user.uid}`);
     }
   };
 
@@ -94,7 +91,7 @@ export const AppContent: React.FC = () => {
       <div className="min-h-screen bg-[#060a12] flex items-center justify-center">
         <div className="flex flex-col items-center space-y-3">
           <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
-          <p className="text-xs font-semibold text-slate-400">Authenticating Director Session...</p>
+          <p className="text-xs font-semibold text-slate-400">Authenticating Session...</p>
         </div>
       </div>
     );
@@ -121,6 +118,7 @@ export const AppContent: React.FC = () => {
             onSelectMember={(m) => setSelectedMember(m)}
             onOpenImport={() => setActiveTab('import')}
             onOpenNudges={() => setActiveTab('nudges')}
+            onSaveMember={handleSaveMember}
             onDeleteMember={handleDeleteMember}
             onPurgeAll={handlePurgeAll}
             isSyncing={isSyncing}

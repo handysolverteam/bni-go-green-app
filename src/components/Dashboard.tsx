@@ -2,13 +2,15 @@ import React, { useState, useMemo } from 'react';
 import { Member } from '../types';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Search, Filter, MessageSquare, Award, ArrowUpDown, ChevronRight, Download, Users, TrendingUp, Trash2, Database, ShieldAlert } from 'lucide-react';
+import { AddMemberModal } from './AddMemberModal';
+import { Search, Filter, MessageSquare, Award, ArrowUpDown, ChevronRight, Download, Users, TrendingUp, Trash2, Edit, UserPlus } from 'lucide-react';
 
 interface DashboardProps {
   members: Member[];
   onSelectMember: (member: Member) => void;
   onOpenImport: () => void;
   onOpenNudges: () => void;
+  onSaveMember: (member: Member) => Promise<void>;
   onDeleteMember: (memberId: string) => Promise<void>;
   onPurgeAll: () => Promise<void>;
   isSyncing?: boolean;
@@ -19,6 +21,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onSelectMember,
   onOpenImport,
   onOpenNudges,
+  onSaveMember,
   onDeleteMember,
   onPurgeAll,
   isSyncing = false,
@@ -28,8 +31,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [sortField, setSortField] = useState<'score' | 'name' | 'attendance'>('score');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Confirmation modal states
+  // Modal states
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
+  const [memberToEdit, setMemberToEdit] = useState<Member | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
@@ -118,7 +123,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Overview Cards Grid */}
+      {/* Top Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between">
           <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
@@ -169,10 +174,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </GlassCard>
       </div>
 
-      {/* Main Table & Controls */}
+      {/* Main Controls & Header */}
       <GlassCard className="p-4 sm:p-6 space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Search Bar */}
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -184,8 +188,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
             />
           </div>
 
-          {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => { setMemberToEdit(null); setIsAddModalOpen(true); }}
+              className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 font-bold text-xs flex items-center space-x-1.5 transition-all"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Member</span>
+            </button>
+
             <button
               onClick={onOpenNudges}
               className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
@@ -234,16 +245,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
           ))}
         </div>
 
-        {/* Member View (Desktop Table + Mobile Cards) */}
+        {/* Member Table & Cards */}
         {filteredMembers.length === 0 ? (
           <div className="text-center py-12 space-y-3">
             <Users className="w-10 h-10 text-slate-600 mx-auto" />
             <h3 className="text-sm font-bold text-slate-300">No members found</h3>
             <p className="text-xs text-slate-500 max-w-xs mx-auto">
               {members.length === 0
-                ? 'Import a BNI PALMS Excel report to compute 100-point scores.'
+                ? 'Add a member manually or import a BNI PALMS Excel report.'
                 : 'No members match the selected search or stage filter.'}
             </p>
+            {members.length === 0 && (
+              <button
+                onClick={() => { setMemberToEdit(null); setIsAddModalOpen(true); }}
+                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20"
+              >
+                Add Member Manually Now
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -297,17 +316,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </td>
 
                       <td className="px-4 py-3">{getStatusBadge(member.trafficLight?.label)}</td>
-
-                      <td className="px-4 py-3 font-semibold">
-                        {((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%
-                      </td>
-
+                      <td className="px-4 py-3 font-semibold">{((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%</td>
                       <td className="px-4 py-3 font-semibold">{member.OneToOnes || 0}</td>
                       <td className="px-4 py-3 font-semibold">{member.RGT || 0}</td>
                       <td className="px-4 py-3 font-semibold">₹{(member.TYFCB || 0).toLocaleString('en-IN')}</td>
 
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end space-x-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMemberToEdit(member);
+                              setIsAddModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                            title="Edit member details"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -318,6 +345,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
+
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -354,9 +382,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <div className="text-sm font-black text-white">{member.score} <span className="text-[10px] text-slate-500">/ 100</span></div>
-                      {getStatusBadge(member.trafficLight?.label)}
+                    <div className="flex items-center space-x-2">
+                      <div className="text-right">
+                        <div className="text-sm font-black text-white">{member.score} <span className="text-[10px] text-slate-500">/ 100</span></div>
+                        {getStatusBadge(member.trafficLight?.label)}
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMemberToEdit(member);
+                          setIsAddModalOpen(true);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 bg-slate-800 border border-white/5"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
@@ -381,7 +422,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
       </GlassCard>
 
-      {/* Confirmation Modal for Single Member Delete */}
+      {/* Add / Edit Member Modal */}
+      <AddMemberModal
+        isOpen={isAddModalOpen}
+        memberToEdit={memberToEdit}
+        onSave={onSaveMember}
+        onClose={() => { setIsAddModalOpen(false); setMemberToEdit(null); }}
+      />
+
+      {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={!!memberToDelete}
         type="delete"
@@ -392,7 +441,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         isLoading={isActionLoading}
       />
 
-      {/* Confirmation Modal for Purging All Data */}
+      {/* Purge All Modal */}
       <ConfirmationModal
         isOpen={showPurgeConfirm}
         type="purge"

@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Member, ScoringConfig } from '../types';
-import { scoreMember } from '../lib/scoringEngine';
+import { scoreMember, DEFAULTS } from '../lib/scoringEngine';
 
 export interface OutreachLogRecord {
   id?: string;
@@ -10,6 +10,13 @@ export interface OutreachLogRecord {
   status: 'sent' | 'pending' | 'failed' | 'skipped';
   message: string;
   sent_at: string;
+}
+
+export interface ChapterSettings {
+  green_threshold: number;
+  amber_threshold: number;
+  red_threshold: number;
+  custom_signature: string;
 }
 
 export const supabaseService = {
@@ -23,7 +30,7 @@ export const supabaseService = {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.warn('Supabase fetch error (falling back to local):', error.message);
+        console.warn('Supabase fetch error:', error.message);
         return [];
       }
 
@@ -90,6 +97,61 @@ export const supabaseService = {
     }
   },
 
+  async saveSingleMember(member: Member, userId: string): Promise<Member | null> {
+    try {
+      const row = {
+        ...(member.id ? { id: member.id } : {}),
+        user_id: userId,
+        name: member.Name,
+        phone: member.Phone || '',
+        email: member.Email || '',
+        present: member.P || 0,
+        absent: member.A || 0,
+        substitute: member.S || 0,
+        medical: member.M || 0,
+        referrals_given: member.RGT || 0,
+        visitors: member.V || 0,
+        tyfcb: member.TYFCB || 0,
+        ceu: member.CEU || 0,
+        one_to_ones: member.OneToOnes || 0,
+        sponsors: member.Sponsors || 0,
+        score: member.score || 0,
+        traffic_light: member.trafficLight?.label || 'Grey',
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from('members')
+        .upsert(row)
+        .select()
+        .single();
+
+      if (error || !data) {
+        console.warn('Save member DB error:', error?.message);
+        return member;
+      }
+
+      return scoreMember({
+        id: data.id,
+        Name: data.name,
+        Phone: data.phone || '',
+        Email: data.email || '',
+        P: data.present || 0,
+        A: data.absent || 0,
+        S: data.substitute || 0,
+        M: data.medical || 0,
+        RGT: data.referrals_given || 0,
+        V: data.visitors || 0,
+        TYFCB: Number(data.tyfcb) || 0,
+        CEU: Number(data.ceu) || 0,
+        OneToOnes: Number(data.one_to_ones) || 0,
+        Sponsors: data.sponsors || 0,
+      });
+    } catch (e) {
+      return member;
+    }
+  },
+
   async deleteMember(memberId: string, userId: string): Promise<boolean> {
     try {
       const { error } = await supabase
@@ -143,6 +205,46 @@ export const supabaseService = {
     return () => {
       supabase.removeChannel(channel);
     };
+  },
+
+  // --- SETTINGS CRUD ---
+  async fetchSettings(userId: string): Promise<ChapterSettings | null> {
+    try {
+      const { data, error } = await supabase
+        .from('chapter_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !data) return null;
+      return {
+        green_threshold: data.green_threshold || 70,
+        amber_threshold: data.amber_threshold || 50,
+        red_threshold: data.red_threshold || 30,
+        custom_signature: data.custom_signature || 'Keep the momentum going! 💪',
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async saveSettings(settings: ChapterSettings, userId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('chapter_settings')
+        .upsert({
+          user_id: userId,
+          green_threshold: settings.green_threshold,
+          amber_threshold: settings.amber_threshold,
+          red_threshold: settings.red_threshold,
+          custom_signature: settings.custom_signature,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      return !error;
+    } catch (e) {
+      return false;
+    }
   },
 
   // --- OUTREACH LOGS ---
