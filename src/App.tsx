@@ -199,7 +199,11 @@ export const AppContent: React.FC = () => {
       )}
 
       {activeTab === 'nudges' && (
-        <NudgeSender members={members} />
+        <NudgeSender
+          members={members}
+          customSignature={org.custom_signature}
+          orgId={org.id}
+        />
       )}
 
       {activeTab === 'org' && (
