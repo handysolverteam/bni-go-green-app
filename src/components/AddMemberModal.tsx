@@ -4,6 +4,8 @@ import { scoreMember } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
 import { UserPlus, UserCheck, X, Save, Calculator } from 'lucide-react';
 
+import { useToast } from '../context/ToastContext';
+
 interface AddMemberModalProps {
   isOpen: boolean;
   memberToEdit?: Member | null;
@@ -17,6 +19,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { showToast } = useToast();
   const [formData, setFormData] = useState<Partial<Member>>({
     Name: '',
     Phone: '',
@@ -63,13 +66,23 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.Name?.trim()) return;
+    
+    if (!formData.Name?.trim()) {
+      showToast('Please enter Member Full Name', 'error');
+      return;
+    }
+
+    if (!formData.Phone?.trim()) {
+      showToast('WhatsApp Phone number is compulsory for member outreach', 'error');
+      return;
+    }
 
     setIsLoading(true);
     try {
       const finalMember = scoreMember({
         ...formData,
         Name: formData.Name.trim(),
+        Phone: formData.Phone.trim(),
         id: memberToEdit?.id || undefined,
       } as Member);
 
@@ -77,38 +90,42 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       onClose();
     } catch (err) {
       console.error('Save member error:', err);
+      showToast('Failed to save member', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
-      <GlassCard className="w-full max-w-xl p-6 space-y-6 relative border-emerald-500/30 my-8">
-        <button
-          onClick={onClose}
-          disabled={isLoading}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden">
+      <GlassCard className="w-full max-w-xl max-h-[90vh] flex flex-col relative border-emerald-500/30 shadow-2xl overflow-hidden rounded-3xl">
         {/* Modal Header */}
-        <div className="flex items-center space-x-3 pb-4 border-b border-white/10">
-          <div className="p-3 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            {memberToEdit ? <UserCheck className="w-6 h-6" /> : <UserPlus className="w-6 h-6" />}
+        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-white/10 shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              {memberToEdit ? <UserCheck className="w-6 h-6" /> : <UserPlus className="w-6 h-6" />}
+            </div>
+            <div>
+              <h2 className="text-lg sm:text-xl font-black text-white">
+                {memberToEdit ? `Edit ${memberToEdit.Name}` : 'Add New Member'}
+              </h2>
+              <p className="text-xs text-slate-400">
+                Enter metrics to calculate score & sync to Supabase database.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-black text-white">
-              {memberToEdit ? `Edit ${memberToEdit.Name}` : 'Add New Member'}
-            </h2>
-            <p className="text-xs text-slate-400">
-              Enter metrics to calculate score & sync to Supabase database.
-            </p>
-          </div>
+
+          <button
+            onClick={onClose}
+            disabled={isLoading}
+            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors z-20 shrink-0"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
           {/* Live Score Preview Bar */}
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 flex items-center justify-between">
             <div className="flex items-center space-x-2 text-xs font-bold text-slate-300">
@@ -143,12 +160,14 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">WhatsApp Phone</label>
+              <label className="text-xs font-bold text-slate-300">WhatsApp Phone *</label>
               <input
-                type="text"
+                type="tel"
+                inputMode="numeric"
+                required
                 placeholder="e.g. 9876543210"
                 value={formData.Phone || ''}
-                onChange={(e) => setFormData({ ...formData, Phone: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, Phone: e.target.value.replace(/[^0-9]/g, '') })}
                 className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold"
               />
             </div>

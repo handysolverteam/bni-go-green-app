@@ -3,6 +3,7 @@ import { GlassCard } from './GlassCard';
 import { UserCheck, ArrowRight, Camera, Link, Upload } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { UserProfileExtended } from '../types';
 
 interface ProfileOnboardingScreenProps {
@@ -21,6 +22,15 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (user?.displayName) {
+      setFullName(prev => prev || user.displayName || '');
+    }
+    if (user?.photoURL) {
+      setAvatarUrl(user.photoURL);
+    }
+  }, [user]);
+
   // File upload simulation -> convert to base64 data URL
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -35,9 +45,21 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
     }
   };
 
+  const { showToast } = useToast();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.uid || !fullName.trim()) return;
+    if (!user?.uid) return;
+
+    if (!fullName.trim()) {
+      showToast('Please enter your Full Name', 'error');
+      return;
+    }
+
+    if (!phone.trim()) {
+      showToast('WhatsApp Phone number is compulsory', 'error');
+      return;
+    }
 
     setIsLoading(true);
     setErrorMsg(null);
@@ -145,12 +167,14 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">WhatsApp Phone</label>
+                <label className="text-xs font-bold text-slate-300">WhatsApp Phone *</label>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="numeric"
+                  required
                   placeholder="e.g. 9876543210"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
                   className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold"
                 />
               </div>

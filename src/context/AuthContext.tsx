@@ -41,12 +41,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const googleAvatar =
               session.user.user_metadata?.avatar_url ||
               session.user.user_metadata?.picture ||
+              session.user.user_metadata?.photo_url ||
+              session.user.user_metadata?.avatar ||
               null;
 
             setUser({
               uid: session.user.id,
               email: session.user.email || null,
-              displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Director',
+              displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Director',
               photoURL: googleAvatar,
               provider: 'supabase',
             });
@@ -63,12 +65,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const googleAvatar =
           session.user.user_metadata?.avatar_url ||
           session.user.user_metadata?.picture ||
+          session.user.user_metadata?.photo_url ||
+          session.user.user_metadata?.avatar ||
           null;
 
         setUser({
           uid: session.user.id,
           email: session.user.email || null,
-          displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Director',
+          displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Director',
           photoURL: googleAvatar,
           provider: 'supabase',
         });

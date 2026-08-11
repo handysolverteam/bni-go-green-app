@@ -80,7 +80,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
           {/* 6-Digit Code Badge */}
           <div className="flex items-center space-x-2 bg-slate-900/90 border border-emerald-500/30 px-4 py-2 rounded-2xl">
             <div>
-              <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">6-Digit Invite Code</div>
+              <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Invite Code</div>
               <div className="text-lg font-black text-emerald-400 tracking-widest">{org.code}</div>
             </div>
             <button
@@ -126,7 +126,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
               ) : members.length === 0 ? (
                 <tr>
                   <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
-                    No team members found in this organization. Share your 6-digit invite code to invite members!
+                    No team members found in this organization. Share your invite code to invite members!
                   </td>
                 </tr>
               ) : (

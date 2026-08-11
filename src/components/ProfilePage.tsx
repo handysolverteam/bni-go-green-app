@@ -29,9 +29,28 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         if (event.target?.result) {
-          setAvatarUrl(event.target.result as string);
+          const newAvatar = event.target.result as string;
+          setAvatarUrl(newAvatar);
+
+          if (profile?.user_id) {
+            const updated: UserProfileExtended = {
+              ...profile,
+              full_name: fullName.trim() || profile.full_name || 'Member',
+              phone: phone.trim() || profile.phone || '',
+              avatar_url: newAvatar,
+              business_category: category.trim() || profile.business_category || '',
+              bio: bio.trim() || profile.bio || '',
+              is_profile_completed: true,
+            };
+            const ok = await supabaseService.saveUserProfile(updated);
+            if (ok) {
+              onProfileUpdated(updated);
+              showToast('New profile photo uploaded & saved to database!', 'success');
+              return;
+            }
+          }
           showToast('New profile photo loaded!', 'success');
         }
       };
@@ -50,7 +69,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.user_id || !fullName.trim()) return;
+    if (!profile?.user_id) return;
+
+    if (!fullName.trim()) {
+      showToast('Please enter your Full Name', 'error');
+      return;
+    }
+
+    if (!phone.trim()) {
+      showToast('WhatsApp Phone number is compulsory', 'error');
+      return;
+    }
 
     setIsLoading(true);
     const updated: UserProfileExtended = {
@@ -115,7 +144,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
               <button
                 onClick={handleCopyCode}
                 className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
-                title="Copy 6-digit invite code"
+                title="Copy Invite code"
               >
                 {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
               </button>
@@ -173,11 +202,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">WhatsApp Phone</label>
+              <label className="text-xs font-bold text-slate-300">WhatsApp Phone *</label>
               <input
-                type="text"
+                type="tel"
+                inputMode="numeric"
+                required
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
                 className="w-full px-3.5 py-2 rounded-xl glass-input text-xs font-semibold"
               />
             </div>

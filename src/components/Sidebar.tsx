@@ -47,9 +47,8 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
   const navItems = [
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: memberCount > 0 ? memberCount : null },
-    { id: 'nudges' as NavigationTab, label: 'Outreach Nudges', icon: MessageSquare },
+    { id: 'nudges' as NavigationTab, label: 'Outreach Messages', icon: MessageSquare },
     { id: 'org' as NavigationTab, label: 'Organization', icon: Building2 },
-    { id: 'profile' as NavigationTab, label: 'My Profile', icon: User },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
   ];
 
@@ -126,35 +125,29 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Bottom Prominent Import Button (Admin / Owner Only) */}
-        {isAdminOrOwner && (
-          <div className="my-2">
-            <button
-              onClick={() => setActiveTab('import')}
-              title={isCompact ? 'Import' : undefined}
-              className={`w-full flex items-center ${isCompact ? 'justify-center px-2' : 'justify-center space-x-2 px-3'} py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-extrabold border border-emerald-500/30 text-xs shadow-md transition-all hover:scale-[1.02]`}
-            >
-              <Upload className="w-4 h-4 flex-shrink-0" />
-              {!isCompact && <span>Import Data</span>}
-            </button>
-          </div>
-        )}
-
-        {/* Profile Footer & Logout */}
+        {/* Profile Footer & Logout (Click Avatar to open Profile) */}
         <div className="pt-3 border-t border-white/10 space-y-2">
           {user && (
-            <div className={`flex items-center ${isCompact ? 'justify-center p-1.5' : 'space-x-2.5 p-2'} rounded-xl bg-slate-900/60 border border-white/5`}>
+            <div
+              onClick={() => setActiveTab('profile')}
+              title={isCompact ? 'View & Edit Profile' : undefined}
+              className={`flex items-center ${isCompact ? 'justify-center p-1.5' : 'space-x-2.5 p-2'} rounded-xl bg-slate-900/60 border ${
+                activeTab === 'profile' ? 'border-emerald-500/80 bg-emerald-500/10' : 'border-white/5 hover:border-emerald-500/30 hover:bg-slate-800/80'
+              } cursor-pointer transition-all group`}
+            >
               <img
                 src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
                 alt="User Avatar"
-                className="w-7 h-7 rounded-full object-cover ring-2 ring-emerald-500/40"
+                className="w-7 h-7 rounded-full object-cover ring-2 ring-emerald-500/40 group-hover:scale-105 transition-transform shrink-0"
               />
               {!isCompact && (
                 <div className="overflow-hidden flex-1 text-left">
-                  <div className="text-xs font-bold text-white truncate">{userProfile?.full_name || user.displayName}</div>
+                  <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors truncate">
+                    {userProfile?.full_name || user.displayName}
+                  </div>
                   <div className="text-[10px] text-slate-400 capitalize font-semibold flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                    <span>{orgMember?.role || 'Member'}</span>
+                    <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                    <span>{orgMember?.role || 'Member'} &bull; Edit Profile</span>
                   </div>
                 </div>
               )}
@@ -218,14 +211,27 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
               );
             })}
 
-            {isAdminOrOwner && (
-              <button
-                onClick={() => { setActiveTab('import'); setMobileMenuOpen(false); }}
-                className="w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 font-extrabold border border-emerald-500/30 text-xs"
+            {/* Mobile Profile Card */}
+            {user && (
+              <div
+                onClick={() => { setActiveTab('profile'); setMobileMenuOpen(false); }}
+                className={`flex items-center space-x-3 p-3 rounded-xl bg-slate-900/80 border ${
+                  activeTab === 'profile' ? 'border-emerald-500/80 bg-emerald-500/10' : 'border-white/10'
+                } cursor-pointer transition-all`}
               >
-                <Upload className="w-4 h-4" />
-                <span>Import Data</span>
-              </button>
+                <img
+                  src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                  alt="User Avatar"
+                  className="w-9 h-9 rounded-full object-cover ring-2 ring-emerald-500/40 shrink-0"
+                />
+                <div className="overflow-hidden flex-1 text-left">
+                  <div className="text-xs font-bold text-white truncate">{userProfile?.full_name || user.displayName}</div>
+                  <div className="text-[10px] text-slate-400 capitalize font-semibold flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                    <span>{orgMember?.role || 'Member'} &bull; View Profile</span>
+                  </div>
+                </div>
+              </div>
             )}
 
             <button

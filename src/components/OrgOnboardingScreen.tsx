@@ -26,7 +26,12 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.uid || !orgName.trim()) return;
+    if (!user?.uid) return;
+
+    if (!orgName.trim()) {
+      showToast('Please enter Chapter Organization Name', 'error');
+      return;
+    }
 
     setIsLoading(true);
     setErrorMsg(null);
@@ -58,7 +63,12 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.uid || !code.trim()) return;
+    if (!user?.uid) return;
+
+    if (!code.trim() || code.trim().length < 6) {
+      showToast('Please enter a valid 6-digit chapter code', 'error');
+      return;
+    }
 
     setIsLoading(true);
     setErrorMsg(null);

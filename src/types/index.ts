@@ -97,6 +97,8 @@ export interface Member {
   id?: string;
   org_id?: string;
   Name: string;
+  Chapter?: string;
+  Region?: string;
   Phone?: string;
   Email?: string;
   P?: number;
@@ -110,6 +112,17 @@ export interface Member {
   OneToOnes?: number;
   Sponsors?: number;
   AttendanceRate?: number;
+  CEURate?: number;
+  OneToOneRate?: number;
+  ReferralsGivenRate?: number;
+  AttendanceScore?: number;
+  CEUScore?: number;
+  OneToOneScore?: number;
+  ReferralsGivenScore?: number;
+  TYFCBScore?: number;
+  VisitorScore?: number;
+  SponsorScore?: number;
+  workbookTotalScore?: number;
   reportFromDate?: string;
   reportToDate?: string;
   JoinDate?: string;
@@ -122,6 +135,24 @@ export interface Member {
   isProrated?: boolean;
   observedWeeks?: number;
   updatedAt?: string;
+  batch_name?: string;
+  raw_data?: Record<string, any>;
+}
+
+export interface ImportLog {
+  id?: string;
+  org_id: string;
+  user_id: string;
+  file_name: string;
+  batch_name?: string;
+  total_records: number;
+  green_count?: number;
+  amber_count?: number;
+  red_count?: number;
+  grey_count?: number;
+  avg_score?: number;
+  file_data?: string;
+  created_at?: string;
 }
 
 export interface LevelUpPlan {

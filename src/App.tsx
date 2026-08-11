@@ -12,7 +12,7 @@ import { OrganizationTab } from './components/OrganizationTab';
 import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
-import { Member, Organization, OrgMember, UserProfileExtended } from './types';
+import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig } from './lib/scoringEngine';
 
@@ -50,11 +50,13 @@ export const AppContent: React.FC = () => {
     }
   });
 
-  const [isInitializing, setIsInitializing] = useState(() => !org);
+  const [isInitializing, setIsInitializing] = useState(true);
 
-  // Members & Selected Member
+  // Members, Import Logs & Selected Member
   const [members, setMembers] = useState<Member[]>([]);
+  const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [selectedNudgeReport, setSelectedNudgeReport] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
   // 1. On Auth Load: Fetch Org & Profile with background revalidation & sessionStorage sync
@@ -73,14 +75,16 @@ export const AppContent: React.FC = () => {
         ]);
 
         let fetchedMembers: Member[] = [];
+        let fetchedLogs: ImportLog[] = [];
 
         if (orgRes) {
           sessionStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
           sessionStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
 
-          const [settingsRes, dbMembers] = await Promise.all([
+          const [settingsRes, dbMembers, dbLogs] = await Promise.all([
             supabaseService.fetchOrgSettings(orgRes.org.id, user.uid),
             supabaseService.fetchMembers(orgRes.org.id),
+            supabaseService.fetchImportLogs(orgRes.org.id),
           ]);
 
           if (settingsRes && settingsRes.scoringConfig) {
@@ -96,6 +100,7 @@ export const AppContent: React.FC = () => {
           }
 
           fetchedMembers = dbMembers;
+          fetchedLogs = dbLogs;
 
           supabaseService.subscribeToMembers(orgRes.org.id, async () => {
             const fresh = await supabaseService.fetchMembers(orgRes.org.id);
@@ -105,14 +110,25 @@ export const AppContent: React.FC = () => {
 
         if (profRes) {
           sessionStorage.setItem('bni_cached_profile', JSON.stringify(profRes));
+        } else {
+          sessionStorage.removeItem('bni_cached_profile');
         }
 
         if (orgRes) {
+          sessionStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
+          sessionStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
           setOrg(orgRes.org);
           setOrgMember(orgRes.member);
+        } else {
+          sessionStorage.removeItem('bni_cached_org');
+          sessionStorage.removeItem('bni_cached_org_member');
+          setOrg(null);
+          setOrgMember(null);
         }
+
         setUserProfile(profRes);
         setMembers(fetchedMembers);
+        setImportLogs(fetchedLogs);
       } catch (err) {
         console.error('Initialization error:', err);
       } finally {
@@ -139,7 +155,7 @@ export const AppContent: React.FC = () => {
     showToast('Profile completed successfully!', 'success');
   };
 
-  // Member CRUD Handlers
+  // Member & Batch CRUD Handlers
   const handleSaveMember = async (memberToSave: Member) => {
     if (!org?.id || !user?.uid) return;
     setIsSyncing(true);
@@ -154,20 +170,51 @@ export const AppContent: React.FC = () => {
     setIsSyncing(false);
   };
 
-  const handleImportMembers = async (imported: Member[]) => {
+  const handleImportMembers = async (batchName: string, imported: Member[], fileName: string, fileData?: string) => {
+    setActiveTab('dashboard'); // Auto-close import modal immediately!
     if (org?.id && user?.uid) {
+      // 1. INSTANT OPTIMISTIC STATE UPDATE (0ms LATENCY!)
+      const taggedMembers = imported.map((m, idx) => ({
+        ...m,
+        id: m.id || `temp_${Date.now()}_${idx}`,
+        batch_name: batchName,
+        org_id: org.id,
+      }));
+
+      setMembers(prev => {
+        const otherMembers = prev.filter(m => m.batch_name !== batchName);
+        return [...otherMembers, ...taggedMembers];
+      });
+
+      const newLog: ImportLog = {
+        id: `log_${Date.now()}`,
+        org_id: org.id,
+        user_id: user.uid,
+        file_name: fileName,
+        batch_name: batchName,
+        total_records: imported.length,
+        green_count: imported.filter(m => m.trafficLight?.label === 'Green').length,
+        amber_count: imported.filter(m => m.trafficLight?.label === 'Amber').length,
+        red_count: imported.filter(m => m.trafficLight?.label === 'Red').length,
+        grey_count: imported.filter(m => m.trafficLight?.label === 'Grey').length,
+        avg_score: imported.length > 0 ? Math.round(imported.reduce((acc, m) => acc + (m.score || 0), 0) / imported.length) : 0,
+        file_data: fileData || '',
+        created_at: new Date().toISOString(),
+      };
+
+      setImportLogs(prev => [newLog, ...prev.filter(l => l.batch_name !== batchName)]);
+      showToast(`Successfully imported report "${batchName}" with ${imported.length} members!`, 'success');
+
+      // 2. Non-blocking background Supabase DB sync
       setIsSyncing(true);
-      setMembers(imported);
-      showToast(`Importing ${imported.length} members to chapter database...`, 'info');
-      await supabaseService.upsertMembers(imported, org.id, user.uid);
-      const dbMembers = await supabaseService.fetchMembers(org.id);
-      if (dbMembers && dbMembers.length > 0) {
-        setMembers(dbMembers);
+      try {
+        await supabaseService.upsertMembers(imported, org.id, user.uid, fileName, batchName, fileData);
+      } catch (err) {
+        console.error('Background import sync error:', err);
+      } finally {
+        setIsSyncing(false);
       }
-      showToast(`Successfully imported ${imported.length} members!`, 'success');
-      setIsSyncing(false);
     }
-    setActiveTab('dashboard');
   };
 
   const handleDeleteMember = async (memberId: string) => {
@@ -175,7 +222,21 @@ export const AppContent: React.FC = () => {
     setIsSyncing(true);
     setMembers(prev => prev.filter(m => m.id !== memberId));
     await supabaseService.deleteMember(memberId, org.id);
-    showToast('Member removed from chapter DB', 'error');
+    showToast('Member successfully removed from database', 'info');
+    setIsSyncing(false);
+  };
+
+  const handleDeleteBatch = async (batchName: string, logId?: string) => {
+    if (!org?.id) return;
+    setIsSyncing(true);
+    await supabaseService.deleteImportBatch(org.id, batchName, logId);
+    const [dbMembers, dbLogs] = await Promise.all([
+      supabaseService.fetchMembers(org.id),
+      supabaseService.fetchImportLogs(org.id),
+    ]);
+    setMembers(dbMembers);
+    setImportLogs(dbLogs);
+    showToast(`Batch "${batchName}" and its members removed from database!`, 'warning');
     setIsSyncing(false);
   };
 
@@ -183,6 +244,7 @@ export const AppContent: React.FC = () => {
     if (!org?.id) return;
     setIsSyncing(true);
     setMembers([]);
+    setImportLogs([]);
     await supabaseService.purgeAllMembers(org.id);
     showToast('All chapter member data purged from database', 'warning');
     setIsSyncing(false);
@@ -219,7 +281,10 @@ export const AppContent: React.FC = () => {
   return (
     <SidebarLayout
       activeTab={activeTab}
-      setActiveTab={setActiveTab}
+      setActiveTab={(tab) => {
+        if (tab !== 'nudges') setSelectedNudgeReport(null);
+        setActiveTab(tab);
+      }}
       memberCount={members.length}
       org={org}
       orgMember={orgMember}
@@ -228,11 +293,16 @@ export const AppContent: React.FC = () => {
       {activeTab === 'dashboard' && (
         <Dashboard
           members={members}
+          importLogs={importLogs}
           onSelectMember={(m) => setSelectedMember(m)}
           onOpenImport={() => setActiveTab('import')}
-          onOpenNudges={() => setActiveTab('nudges')}
+          onOpenNudges={(reportName) => {
+            setSelectedNudgeReport(reportName || null);
+            setActiveTab('nudges');
+          }}
           onSaveMember={handleSaveMember}
           onDeleteMember={handleDeleteMember}
+          onDeleteBatch={handleDeleteBatch}
           onPurgeAll={handlePurgeAll}
           isSyncing={isSyncing}
         />
@@ -250,6 +320,8 @@ export const AppContent: React.FC = () => {
       {activeTab === 'nudges' && (
         <NudgeSender
           members={members}
+          importLogs={importLogs}
+          initialReportName={selectedNudgeReport}
           customSignature={org.custom_signature}
           orgId={org.id}
         />

@@ -1,60 +1,128 @@
 import React, { useState, useMemo } from 'react';
-import { Member } from '../types';
+import { Member, ImportLog } from '../types';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
 import { AddMemberModal } from './AddMemberModal';
-import { Search, Filter, MessageSquare, Award, ArrowUpDown, ChevronRight, Download, Users, TrendingUp, Trash2, Edit, UserPlus } from 'lucide-react';
+import {
+  Search, Filter, MessageSquare, Award, ArrowUpDown, Download, Users, TrendingUp,
+  Trash2, Edit, UserPlus, Calendar, Layers, X, Eye, FileSpreadsheet, ArrowLeft, Loader2, FileDown
+} from 'lucide-react';
+import { generateSampleExcelBuffer } from '../lib/excelParser';
+import { useToast } from '../context/ToastContext';
 
 interface DashboardProps {
   members: Member[];
+  importLogs?: ImportLog[];
   onSelectMember: (member: Member) => void;
   onOpenImport: () => void;
-  onOpenNudges: () => void;
+  onOpenNudges: (reportName?: string) => void;
   onSaveMember: (member: Member) => Promise<void>;
   onDeleteMember: (memberId: string) => Promise<void>;
+  onDeleteBatch?: (batchName: string, logId?: string) => Promise<void>;
   onPurgeAll: () => Promise<void>;
   isSyncing?: boolean;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
   members,
+  importLogs = [],
   onSelectMember,
   onOpenImport,
   onOpenNudges,
   onSaveMember,
   onDeleteMember,
+  onDeleteBatch,
   onPurgeAll,
   isSyncing = false,
 }) => {
+  const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Green' | 'Amber' | 'Red' | 'Grey'>('All');
   const [sortField, setSortField] = useState<'score' | 'name' | 'attendance'>('score');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Currently selected Report / Batch view (null = Reports Cards list view)
+  const [activeReportName, setActiveReportName] = useState<string | null>(null);
+
   // Modal states
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
+  const [batchToDelete, setBatchToDelete] = useState<{ name: string; logId?: string } | null>(null);
   const [memberToEdit, setMemberToEdit] = useState<Member | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
-  // Stats calculation
-  const stats = useMemo(() => {
-    const total = members.length;
-    const green = members.filter(m => m.trafficLight?.label === 'Green').length;
-    const amber = members.filter(m => m.trafficLight?.label === 'Amber').length;
-    const red = members.filter(m => m.trafficLight?.label === 'Red').length;
-    const grey = members.filter(m => m.trafficLight?.label === 'Grey').length;
-    const avgScore = total > 0 ? Math.round(members.reduce((acc, m) => acc + (m.score || 0), 0) / total) : 0;
-    return { total, green, amber, red, grey, avgScore };
-  }, [members]);
+  // Extract unique report batches from importLogs and members
+  const availableReports = useMemo(() => {
+    const reportMap = new Map<string, ImportLog>();
 
-  // Filtered & Sorted Members
+    // 1. Map logs
+    importLogs.forEach(l => {
+      if (l.batch_name) {
+        reportMap.set(l.batch_name, l);
+      }
+    });
+
+    // 2. Synthesize logs for any members with batch_name not in import_logs
+    members.forEach(m => {
+      if (m.batch_name && !reportMap.has(m.batch_name)) {
+        const batchMembers = members.filter(bm => bm.batch_name === m.batch_name);
+        const greenCount = batchMembers.filter(bm => bm.trafficLight?.label === 'Green').length;
+        const amberCount = batchMembers.filter(bm => bm.trafficLight?.label === 'Amber').length;
+        const redCount = batchMembers.filter(bm => bm.trafficLight?.label === 'Red').length;
+        const greyCount = batchMembers.filter(bm => bm.trafficLight?.label === 'Grey').length;
+        const avgScore = batchMembers.length > 0 ? Math.round(batchMembers.reduce((acc, bm) => acc + (bm.score || 0), 0) / batchMembers.length) : 0;
+
+        reportMap.set(m.batch_name, {
+          id: `synth_${m.batch_name}`,
+          org_id: m.org_id || '',
+          user_id: (m as any).user_id || '',
+          file_name: `${m.batch_name}.xlsx`,
+          batch_name: m.batch_name,
+          total_records: batchMembers.length,
+          green_count: greenCount,
+          amber_count: amberCount,
+          red_count: redCount,
+          grey_count: greyCount,
+          avg_score: avgScore,
+          created_at: (m as any).created_at || new Date().toISOString(),
+        });
+      }
+    });
+
+    return Array.from(reportMap.values());
+  }, [members, importLogs]);
+
+  // Active report details log object
+  const currentReportLog = useMemo(() => {
+    if (!activeReportName) return null;
+    return availableReports.find(r => r.batch_name === activeReportName) || null;
+  }, [availableReports, activeReportName]);
+
+  // Members scoped by active Report view
+  const reportMembers = useMemo(() => {
+    if (!activeReportName) return members;
+    return members.filter(m => (m.batch_name || '') === activeReportName);
+  }, [members, activeReportName]);
+
+  // Overall Dashboard Stats across all reports or active report
+  const stats = useMemo(() => {
+    const target = activeReportName ? reportMembers : members;
+    const total = target.length;
+    const green = target.filter(m => m.trafficLight?.label === 'Green').length;
+    const amber = target.filter(m => m.trafficLight?.label === 'Amber').length;
+    const red = target.filter(m => m.trafficLight?.label === 'Red').length;
+    const grey = target.filter(m => m.trafficLight?.label === 'Grey').length;
+    const avgScore = total > 0 ? Math.round(target.reduce((acc, m) => acc + (m.score || 0), 0) / total) : 0;
+    return { total, green, amber, red, grey, avgScore };
+  }, [members, reportMembers, activeReportName]);
+
+  // Filtered & Sorted Members for Active Report Table View
   const filteredMembers = useMemo(() => {
-    return members
+    return reportMembers
       .filter(m => {
         const matchesSearch = m.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              (m.Phone && m.Phone.includes(searchTerm));
+                              (m.Phone && m.Phone.includes(searchTerm)) ||
+                              (m.Chapter && m.Chapter.toLowerCase().includes(searchTerm.toLowerCase()));
         const matchesStatus = statusFilter === 'All' || m.trafficLight?.label === statusFilter;
         return matchesSearch && matchesStatus;
       })
@@ -72,7 +140,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         }
         return sortOrder === 'asc' ? valA - valB : valB - valA;
       });
-  }, [members, searchTerm, statusFilter, sortField, sortOrder]);
+  }, [reportMembers, searchTerm, statusFilter, sortField, sortOrder]);
 
   const toggleSort = (field: 'score' | 'name' | 'attendance') => {
     if (sortField === field) {
@@ -96,41 +164,136 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handlePurgeConfirm = async () => {
+  const handleDeleteBatchConfirm = async () => {
+    if (!batchToDelete || !onDeleteBatch) return;
     setIsActionLoading(true);
     try {
-      await onPurgeAll();
-      setShowPurgeConfirm(false);
+      await onDeleteBatch(batchToDelete.name, batchToDelete.logId);
+      if (activeReportName === batchToDelete.name) {
+        setActiveReportName(null);
+      }
+      setBatchToDelete(null);
     } catch (e) {
-      console.error('Purge error:', e);
+      console.error('Delete report error:', e);
     } finally {
       setIsActionLoading(false);
     }
   };
 
+  // Download Excel Report file
+  const handleDownloadReportFile = (log: ImportLog) => {
+    if (log.file_data) {
+      try {
+        const binary = atob(log.file_data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = log.file_name || `${log.batch_name || 'Report'}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(`Downloaded original Excel file for "${log.batch_name}"`, 'success');
+        return;
+      } catch (err) {
+        console.warn('Could not decode base64 file_data, generating report fallback:', err);
+      }
+    }
+
+    // Fallback: Generate sample Excel file
+    const buffer = generateSampleExcelBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${log.batch_name || 'Report'}_Data.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Downloaded Excel report for "${log.batch_name}"`, 'info');
+  };
+
+  // Status badge with whitespace-nowrap and shrink-0 so it NEVER breaks into 2 lines
   const getStatusBadge = (label?: string) => {
     switch (label) {
       case 'Green':
-        return <span className="px-2.5 py-0.5 text-xs font-black rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">🟢 Green</span>;
+        return <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2.5 py-0.5 text-xs font-black rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">🟢 Green</span>;
       case 'Amber':
-        return <span className="px-2.5 py-0.5 text-xs font-black rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40">🟡 Amber</span>;
+        return <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2.5 py-0.5 text-xs font-black rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40">🟡 Amber</span>;
       case 'Red':
-        return <span className="px-2.5 py-0.5 text-xs font-black rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40">🔴 Red</span>;
+        return <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2.5 py-0.5 text-xs font-black rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40">🔴 Red</span>;
       default:
-        return <span className="px-2.5 py-0.5 text-xs font-black rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/40">⚪ Grey</span>;
+        return <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2.5 py-0.5 text-xs font-black rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/40">⚪ Grey</span>;
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Stats Cards */}
+    <div className="space-y-6 pb-12">
+      {/* --- DASHBOARD HEADER --- */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-white flex items-center gap-2">
+            <span>{activeReportName ? `Report: ${activeReportName}` : 'Chapter Reports Dashboard'}</span>
+            {isSyncing && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+            )}
+          </h1>
+          <p className="text-xs text-slate-400">
+            {activeReportName
+              ? `Displaying all ${reportMembers.length} member metrics & traffic scores for this report`
+              : `Overview of ${availableReports.length} imported Excel reports (${members.length} total members)`}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {activeReportName ? (
+            <button
+              onClick={() => setActiveReportName(null)}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+            >
+              <ArrowLeft className="w-4 h-4 text-emerald-400" />
+              <span>Back to Reports</span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenImport}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Import New Report</span>
+            </button>
+          )}
+
+          {/* <button
+            onClick={() => { setMemberToEdit(null); setIsAddModalOpen(true); }}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+          >
+            <UserPlus className="w-4 h-4 text-emerald-400" />
+            <span>Add Member</span>
+          </button>
+
+          <button
+            onClick={onOpenNudges}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+          >
+            <MessageSquare className="w-4 h-4 text-teal-400" />
+            <span>Send Nudges</span>
+          </button> */}
+        </div>
+      </div>
+
+      {/* --- TOP SUMMARY CARDS --- */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between">
           <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
-            <span>Members</span>
-            <Users className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{activeReportName ? 'Report Members' : 'Total Reports'}</span>
+            {activeReportName ? <Users className="w-3.5 h-3.5 text-emerald-400" /> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />}
           </div>
-          <div className="text-xl sm:text-2xl font-black text-white mt-1">{stats.total}</div>
+          <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            {activeReportName ? stats.total : availableReports.length}
+          </div>
         </GlassCard>
 
         <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-emerald-500/20">
@@ -152,12 +315,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-rose-500/20">
           <div className="text-[11px] font-bold text-rose-400 flex items-center justify-between">
             <span>🔴 Red (30-49)</span>
-            <TrendingUp className="w-3.5 h-3.5 text-rose-400" />
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
           </div>
           <div className="text-xl sm:text-2xl font-black text-rose-400 mt-1">{stats.red}</div>
         </GlassCard>
 
-        <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-slate-600/20">
+        <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between">
           <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
             <span>⚪ Grey (&lt;30)</span>
             <Users className="w-3.5 h-3.5 text-slate-400" />
@@ -165,290 +328,391 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="text-xl sm:text-2xl font-black text-slate-400 mt-1">{stats.grey}</div>
         </GlassCard>
 
-        <GlassCard glow className="p-3.5 sm:p-4 flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-teal-400 flex items-center justify-between">
-            <span>Avg Score</span>
-            <Award className="w-3.5 h-3.5 text-teal-400" />
+        <GlassCard glow className="p-3.5 sm:p-4 flex flex-col justify-between border-emerald-500/40">
+          <div className="text-[11px] font-bold text-emerald-400 flex items-center justify-between">
+            <span>Avg Traffic Score</span>
+            <Award className="w-3.5 h-3.5 text-emerald-400" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-teal-300 mt-1">{stats.avgScore} <span className="text-[10px] font-normal text-slate-400">/ 100</span></div>
+          <div className="text-xl sm:text-2xl font-black text-white mt-1">{stats.avgScore} <span className="text-xs text-slate-400 font-normal">/ 100</span></div>
         </GlassCard>
       </div>
 
-      {/* Main Controls & Header */}
-      <GlassCard className="p-4 sm:p-6 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search member by name or phone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-xs sm:text-sm"
-            />
-          </div>
+      {/* --- VIEW 1: MAIN REPORTS CARDS LIST (DEFAULT DASHBOARD VIEW) --- */}
+      {!activeReportName && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-black text-white flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+              <span>Uploaded Chapter Reports ({availableReports.length})</span>
+            </h2>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => { setMemberToEdit(null); setIsAddModalOpen(true); }}
-              className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 font-bold text-xs flex items-center space-x-1.5 transition-all"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Member</span>
-            </button>
-
-            <button
-              onClick={onOpenNudges}
-              className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>Outreach Nudges</span>
-            </button>
-
-            <button
+            {/* <button
               onClick={onOpenImport}
-              className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center space-x-1.5 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all"
             >
-              <Download className="w-4 h-4" />
-              <span>Import PALMS</span>
-            </button>
-
-            {members.length > 0 && (
-              <button
-                onClick={() => setShowPurgeConfirm(true)}
-                className="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all"
-                title="Purge All Members"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>+ Import New Report</span>
+            </button> */}
           </div>
-        </div>
 
-        {/* Filter Pills */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-white/10">
-          <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5" /> Stage:
-          </span>
-          {(['All', 'Green', 'Amber', 'Red', 'Grey'] as const).map(status => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all ${
-                statusFilter === status
-                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-white/5'
-              }`}
-            >
-              {status === 'All' ? 'All' : status}
-            </button>
-          ))}
-        </div>
+          {isSyncing && availableReports.length === 0 ? (
+            <GlassCard className="p-12 text-center space-y-3">
+              <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
+              <p className="text-xs font-bold text-slate-300">Loading chapter reports & database records...</p>
+            </GlassCard>
+          ) : availableReports.length === 0 ? (
+            <GlassCard className="p-10 text-center space-y-4 border-dashed border-emerald-500/30">
+              <FileSpreadsheet className="w-12 h-12 text-emerald-400 mx-auto animate-bounce" />
+              <div className="space-y-1">
+                <h3 className="text-lg font-black text-white">No Excel Reports Uploaded Yet</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Upload your BNI Traffic Light Excel file to automatically calculate PALMS scores, generate level-up nudges, and track member performance.
+                </p>
+              </div>
+              <button
+                onClick={onOpenImport}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all inline-flex items-center space-x-2"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Upload First Excel Report</span>
+              </button>
+            </GlassCard>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {availableReports.map((report) => (
+                <GlassCard
+                  key={report.id || report.batch_name}
+                  className="p-5 space-y-4 border-white/10 hover:border-emerald-500/50 hover:bg-slate-900/80 transition-all group flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <h3 className="text-base font-black text-white group-hover:text-emerald-400 transition-colors line-clamp-1">
+                          {report.batch_name}
+                        </h3>
+                        <p className="text-[11px] text-slate-400 flex items-center gap-1.5 font-medium">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{report.created_at ? new Date(report.created_at).toLocaleString('en-IN') : 'Uploaded Recently'}</span>
+                        </p>
+                      </div>
 
-        {/* Member Table & Cards */}
-        {filteredMembers.length === 0 ? (
-          <div className="text-center py-12 space-y-3">
-            <Users className="w-10 h-10 text-slate-600 mx-auto" />
-            <h3 className="text-sm font-bold text-slate-300">No members found</h3>
-            <p className="text-xs text-slate-500 max-w-xs mx-auto">
-              {members.length === 0
-                ? 'Add a member manually or import an Excel report.'
-                : 'No members match the selected search or stage filter.'}
-            </p>
-            {members.length === 0 && (
+                      {onDeleteBatch && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setBatchToDelete({ name: report.batch_name || '', logId: report.id }); }}
+                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors shrink-0"
+                          title="Delete this report and its member data"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Report Summary Metric Cards */}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="p-2.5 rounded-xl bg-slate-900/90 border border-white/5 space-y-0.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Total Members</span>
+                        <div className="text-lg font-black text-white">{report.total_records || 0}</div>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/20 space-y-0.5">
+                        <span className="text-[10px] font-bold text-emerald-400 uppercase">Avg PALMS Score</span>
+                        <div className="text-lg font-black text-emerald-400">{report.avg_score || 0} <span className="text-[10px] font-normal text-slate-400">/ 100</span></div>
+                      </div>
+                    </div>
+
+                    {/* Traffic Light Distribution Badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="px-2 py-0.5 text-[11px] font-extrabold rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        🟢 {report.green_count || 0}
+                      </span>
+                      <span className="px-2 py-0.5 text-[11px] font-extrabold rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        🟡 {report.amber_count || 0}
+                      </span>
+                      <span className="px-2 py-0.5 text-[11px] font-extrabold rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                        🔴 {report.red_count || 0}
+                      </span>
+                      {(report.grey_count || 0) > 0 && (
+                        <span className="px-2 py-0.5 text-[11px] font-extrabold rounded-md bg-slate-800 text-slate-400 border border-white/10">
+                          ⚪ {report.grey_count}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Action Buttons */}
+                  <div className="pt-3 border-t border-white/10 flex items-center space-x-2">
+                    {/* <button
+                      onClick={() => handleDownloadReportFile(report)}
+                      className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/20 transition-all shrink-0"
+                      title="Download Original Uploaded Excel File"
+                    >
+                      <FileDown className="w-4 h-4" />
+                    </button> */}
+
+                    <button
+                      onClick={() => setActiveReportName(report.batch_name || null)}
+                      className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-500/20 hover:scale-[1.02] transition-all"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Open Report & Members ({report.total_records || 0})</span>
+                    </button>
+                  </div>
+                </GlassCard>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* --- VIEW 2: REPORT DETAILS & MEMBER TABLE (WHEN REPORT CARD IS CLICKED) --- */}
+      {activeReportName && (
+        <div className="space-y-5 animate-fadeIn">
+          {/* Active Report Header Bar */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              {/* <button
+                onClick={() => setActiveReportName(null)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-white/10"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button> */}
+              <div>
+                <h3 className="text-base font-black text-white">{activeReportName}</h3>
+                <p className="text-xs text-slate-400">
+                  {reportMembers.length} members loaded from this Excel report file
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {currentReportLog && (
+                <button
+                  onClick={() => handleDownloadReportFile(currentReportLog)}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center space-x-1.5 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>Download Excel</span>
+                </button>
+              )}
+
               <button
                 onClick={() => { setMemberToEdit(null); setIsAddModalOpen(true); }}
-                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20"
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
               >
-                Add Member Manually Now
+                <UserPlus className="w-4 h-4 text-emerald-400" />
+                <span>Add Member</span>
               </button>
-            )}
+
+              <button
+                onClick={() => onOpenNudges(activeReportName || undefined)}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+              >
+                <MessageSquare className="w-4 h-4 text-teal-400" />
+                <span>Send Messages</span>
+              </button>
+
+              {/* <button
+                onClick={() => setActiveReportName(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs border border-white/10 hover:bg-slate-700"
+              >
+                Close Report
+              </button> */}
+            </div>
           </div>
-        ) : (
-          <>
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto rounded-xl border border-white/10">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-900/80 uppercase text-slate-400 border-b border-white/10 font-black">
-                  <tr>
-                    <th className="px-4 py-3.5 cursor-pointer hover:text-white" onClick={() => toggleSort('name')}>
+
+          {/* Search, Filter & Member Controls */}
+          <GlassCard className="p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              {/* Search Input */}
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search member name, phone, chapter..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl glass-input text-xs font-semibold"
+                />
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center space-x-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+                {(['All', 'Green', 'Amber', 'Red', 'Grey'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all ${
+                      statusFilter === status
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md'
+                        : 'bg-slate-900/60 hover:bg-slate-800 text-slate-400 border border-white/10'
+                    }`}
+                  >
+                    {status === 'All' ? 'All Members' : status}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </GlassCard>
+
+          {/* Member Data Table */}
+          <GlassCard className="overflow-hidden border-white/10 p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900/90 text-slate-400 font-bold border-b border-white/10 text-[11px] uppercase tracking-wider">
+                    <th className="py-3.5 px-4 cursor-pointer hover:text-white" onClick={() => toggleSort('name')}>
                       <div className="flex items-center space-x-1">
                         <span>Member Name</span>
-                        <ArrowUpDown className="w-3 h-3" />
+                        <ArrowUpDown className="w-3 h-3 text-slate-500" />
                       </div>
                     </th>
-                    <th className="px-4 py-3.5 cursor-pointer hover:text-white" onClick={() => toggleSort('score')}>
+                    <th className="py-3.5 px-4">Chapter</th>
+                    <th className="py-3.5 px-4">WhatsApp Phone</th>
+                    <th className="py-3.5 px-4 cursor-pointer hover:text-white" onClick={() => toggleSort('score')}>
                       <div className="flex items-center space-x-1">
-                        <span>Score</span>
-                        <ArrowUpDown className="w-3 h-3" />
+                        <span>Traffic Score</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-500" />
                       </div>
                     </th>
-                    <th className="px-4 py-3.5">Status</th>
-                    <th className="px-4 py-3.5">Attendance</th>
-                    <th className="px-4 py-3.5">1-2-1s</th>
-                    <th className="px-4 py-3.5">Referrals</th>
-                    <th className="px-4 py-3.5">TYFCB</th>
-                    <th className="px-4 py-3.5 text-right">Actions</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 cursor-pointer hover:text-white" onClick={() => toggleSort('attendance')}>
+                      <div className="flex items-center space-x-1">
+                        <span>Attendance</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                      </div>
+                    </th>
+                    <th className="py-3.5 px-4">1-2-1s</th>
+                    <th className="py-3.5 px-4">Referrals</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5 bg-slate-950/40">
-                  {filteredMembers.map((member, idx) => (
-                    <tr
-                      key={member.id || idx}
-                      onClick={() => onSelectMember(member)}
-                      className="hover:bg-slate-800/40 transition-colors cursor-pointer group"
-                    >
-                      <td className="px-4 py-3 font-bold text-white flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center font-black text-emerald-400">
-                          {member.Name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="text-white group-hover:text-emerald-400 transition-colors">{member.Name}</div>
-                          {member.Phone && <div className="text-[10px] font-normal text-slate-400">{member.Phone}</div>}
-                        </div>
-                      </td>
 
-                      <td className="px-4 py-3">
-                        <div className="flex items-baseline space-x-1">
-                          <span className="text-base font-black text-white">{member.score}</span>
-                          <span className="text-[10px] text-slate-500">/ 100</span>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3">{getStatusBadge(member.trafficLight?.label)}</td>
-                      <td className="px-4 py-3 font-semibold">{((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%</td>
-                      <td className="px-4 py-3 font-semibold">{member.OneToOnes || 0}</td>
-                      <td className="px-4 py-3 font-semibold">{member.RGT || 0}</td>
-                      <td className="px-4 py-3 font-semibold">₹{(member.TYFCB || 0).toLocaleString('en-IN')}</td>
-
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMemberToEdit(member);
-                              setIsAddModalOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                            title="Edit member details"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMemberToDelete(member);
-                            }}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                            title="Delete member"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectMember(member);
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
+                <tbody className="divide-y divide-white/5 font-semibold">
+                  {isSyncing ? (
+                    <tr>
+                      <td colSpan={9} className="py-16 text-center space-y-3">
+                        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
+                        <p className="text-xs font-bold text-slate-300">Loading members for "{activeReportName}"...</p>
                       </td>
                     </tr>
-                  ))}
+                  ) : filteredMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-slate-400 space-y-2">
+                        <Users className="w-8 h-8 text-slate-600 mx-auto" />
+                        <p className="text-xs font-bold text-slate-300">No members found matching filter criteria</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredMembers.map((member) => {
+                      const attRate = ((member.breakdown?.attendance?.value || 0) * 100).toFixed(0);
+
+                      return (
+                        <tr
+                          key={member.id || member.Name}
+                          className="hover:bg-slate-900/60 transition-colors group cursor-pointer"
+                          onClick={() => onSelectMember(member)}
+                        >
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-white group-hover:text-emerald-400 transition-colors">
+                              {member.Name}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-300 font-medium">
+                            {member.Chapter || 'Influencers'}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-300 font-mono text-[11px]">
+                            {member.Phone || '—'}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="font-black text-sm text-white">
+                              {member.score || 0} <span className="text-[10px] text-slate-400 font-normal">/ 100</span>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {getStatusBadge(member.trafficLight?.label)}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-200">
+                            {attRate}%
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-200">
+                            {member.breakdown?.oneToOnes?.value ? Number(member.breakdown.oneToOnes.value).toFixed(1) : 0}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-200">
+                            {member.breakdown?.referrals?.value ? Number(member.breakdown.referrals.value).toFixed(1) : 0}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end space-x-1">
+                              <button
+                                onClick={() => { setMemberToEdit(member); setIsAddModalOpen(true); }}
+                                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                                title="Edit Member"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                onClick={() => setMemberToDelete(member)}
+                                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                title="Delete Member"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
-
-            {/* Mobile Cards View */}
-            <div className="md:hidden space-y-3">
-              {filteredMembers.map((member, idx) => (
-                <div
-                  key={member.id || idx}
-                  onClick={() => onSelectMember(member)}
-                  className="p-4 rounded-xl bg-slate-900/60 border border-white/10 space-y-3 active:scale-[0.99] transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center font-black text-emerald-400 text-xs">
-                        {member.Name.charAt(0)}
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-white text-xs">{member.Name}</h4>
-                        <p className="text-[10px] text-slate-400">{member.Phone || 'No phone'}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <div className="text-right">
-                        <div className="text-sm font-black text-white">{member.score} <span className="text-[10px] text-slate-500">/ 100</span></div>
-                        {getStatusBadge(member.trafficLight?.label)}
-                      </div>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMemberToEdit(member);
-                          setIsAddModalOpen(true);
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 bg-slate-800 border border-white/5"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5 text-[11px] text-slate-300">
-                    <div>
-                      <span className="text-[9px] text-slate-500 block">Attendance</span>
-                      <span className="font-bold">{((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-500 block">1-2-1s</span>
-                      <span className="font-bold">{member.OneToOnes || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-500 block">Referrals</span>
-                      <span className="font-bold">{member.RGT || 0}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </GlassCard>
+          </GlassCard>
+        </div>
+      )}
 
       {/* Add / Edit Member Modal */}
-      <AddMemberModal
-        isOpen={isAddModalOpen}
-        memberToEdit={memberToEdit}
-        onSave={onSaveMember}
-        onClose={() => { setIsAddModalOpen(false); setMemberToEdit(null); }}
-      />
+      {isAddModalOpen && (
+        <AddMemberModal
+          isOpen={isAddModalOpen}
+          memberToEdit={memberToEdit}
+          onSave={onSaveMember}
+          onClose={() => { setIsAddModalOpen(false); setMemberToEdit(null); }}
+        />
+      )}
 
-      {/* Delete Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={!!memberToDelete}
-        type="delete"
-        title={`Delete ${memberToDelete?.Name}`}
-        message={`Are you sure you want to delete ${memberToDelete?.Name} from your chapter roster?`}
-        onConfirm={handleDeleteConfirm}
-        onClose={() => setMemberToDelete(null)}
-        isLoading={isActionLoading}
-      />
+      {/* Single Member Delete Confirmation Modal */}
+      {memberToDelete && (
+        <ConfirmationModal
+          isOpen={!!memberToDelete}
+          type="delete"
+          title={`Delete Member "${memberToDelete.Name}"?`}
+          message={`Are you sure you want to remove ${memberToDelete.Name} from your chapter database?`}
+          onConfirm={handleDeleteConfirm}
+          onClose={() => setMemberToDelete(null)}
+          isLoading={isActionLoading}
+        />
+      )}
 
-      {/* Purge All Modal */}
-      <ConfirmationModal
-        isOpen={showPurgeConfirm}
-        type="purge"
-        onConfirm={handlePurgeConfirm}
-        onClose={() => setShowPurgeConfirm(false)}
-        isLoading={isActionLoading}
-      />
+      {/* Batch Delete Confirmation Modal */}
+      {batchToDelete && (
+        <ConfirmationModal
+          isOpen={!!batchToDelete}
+          type="purge"
+          title={`Delete Report "${batchToDelete.name}"?`}
+          message={`This will permanently remove all members belonging to report "${batchToDelete.name}" from your chapter database.`}
+          onConfirm={handleDeleteBatchConfirm}
+          onClose={() => setBatchToDelete(null)}
+          isLoading={isActionLoading}
+        />
+      )}
     </div>
   );
 };

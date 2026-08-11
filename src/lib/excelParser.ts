@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Member } from '../types';
-import { scoreMember } from './scoringEngine';
+import { scoreMember, parseDateValue } from './scoringEngine';
 
 export interface ParseResult {
   members: Member[];
@@ -11,9 +11,34 @@ export interface ParseResult {
 function cleanNumber(val: any): number {
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (!val) return 0;
-  const str = String(val).replace(/[^0-9.-]/g, '');
-  const num = parseFloat(str);
+  const str = String(val).trim();
+  if (str === '-' || str === '–' || str === '—') return 0;
+  const cleaned = str.replace(/[^0-9.-]/g, '');
+  const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
+}
+
+function normalizeHeader(val: any): string {
+  return String(val || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function dateToISO(val: any): string {
+  const parsed = parseDateValue(val);
+  if (!parsed || Number.isNaN(parsed.getTime())) return '';
+  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, '0')}-${String(parsed.getUTCDate()).padStart(2, '0')}`;
+}
+
+const IGNORED_NAMES = new Set([
+  'visitors', 'bni', 'total', 'average', 'summary', 'traffic lights of',
+  'member traffic lights', 'chapter', 'name', 'total score'
+]);
+
+function isIgnoredName(name: string): boolean {
+  const normalized = name.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!normalized) return true;
+  if (IGNORED_NAMES.has(normalized)) return true;
+  if (normalized.startsWith('member traffic lights of')) return true;
+  return false;
 }
 
 export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
@@ -22,7 +47,10 @@ export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
 
   try {
     const workbook = XLSX.read(fileData, { type: 'array', cellDates: true });
-    const sheetName = workbook.SheetNames[0];
+    const sheetName = workbook.SheetNames.includes('Influencers')
+      ? 'Influencers'
+      : workbook.SheetNames[0];
+
     if (!sheetName) {
       return { members: [], errors: ['No sheets found in Excel file'] };
     }
@@ -34,127 +62,249 @@ export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
       return { members: [], errors: ['Sheet is empty or missing data'] };
     }
 
-    // Auto-detect header row (scans rows 0 to 15)
-    let headerIndex = -1;
+    // 1. Extract metadata (Report Dates, Chapter/Region headers) from top 15 rows
+    let reportFromDate = '';
+    let reportToDate = '';
+
     for (let i = 0; i < Math.min(15, rows.length); i++) {
-      const rowText = rows[i].map(c => String(c).toLowerCase()).join(' ');
-      if (
-        rowText.includes('name') ||
-        rowText.includes('member') ||
-        rowText.includes('attendance rate') ||
-        rowText.includes('121 rate') ||
-        rowText.includes('referrals given rate') ||
-        rowText.includes('tyfcb')
-      ) {
+      const row = rows[i] || [];
+      for (let j = 0; j < row.length; j++) {
+        const cellStr = String(row[j] || '').toLowerCase();
+        if (cellStr.includes('from') && row[j + 1]) {
+          const iso = dateToISO(row[j + 1]);
+          if (iso) reportFromDate = iso;
+        }
+        if (cellStr.includes('to') && row[j + 1]) {
+          const iso = dateToISO(row[j + 1]);
+          if (iso) reportToDate = iso;
+        }
+      }
+    }
+
+    // 2. Auto-detect column headers row (scans rows 0 to 30)
+    let headerIndex = -1;
+    for (let i = 0; i < Math.min(30, rows.length); i++) {
+      const row = rows[i] || [];
+      if (row.length < 3) continue; // Skip single-cell title rows
+
+      const nonBlankCells = row.filter(c => String(c).trim() !== '').length;
+      if (nonBlankCells < 3) continue; // Must have at least 3 distinct column cells
+
+      const normalizedRow = row.map(normalizeHeader);
+      
+      const hasName = normalizedRow.some(h => h === 'name' || h === 'membername' || h === 'firstname' || h === 'fullname' || h === 'member' || h.includes('name'));
+      const hasScoreOrRate = normalizedRow.some(h => h.includes('score') || h.includes('rate') || h.includes('tyfcb') || h.includes('attendance') || h.includes('121') || h.includes('ceu') || h.includes('referral') || h.includes('visitor') || h.includes('sponsor'));
+
+      if (hasName && hasScoreOrRate) {
         headerIndex = i;
         break;
       }
     }
 
-    if (headerIndex === -1) headerIndex = 0;
+    if (headerIndex === -1) {
+      for (let i = 0; i < Math.min(30, rows.length); i++) {
+        const row = rows[i] || [];
+        const nonBlank = row.filter(c => String(c).trim() !== '').length;
+        if (nonBlank < 3) continue;
 
-    const headers = rows[headerIndex].map(h => String(h).trim());
-
-    // Flexible column finder
-    const findCol = (keys: string[]) => {
-      return headers.findIndex(h => {
-        const hLower = h.toLowerCase();
-        return keys.some(k => hLower === k || hLower.includes(k));
-      });
-    };
-
-    const nameIdx = findCol(['name', 'member name', 'member', 'full name']);
-    const phoneIdx = findCol(['mobile', 'phone', 'whatsapp', 'contact', 'tel']);
-    const emailIdx = findCol(['email', 'mail']);
-    
-    // Traffic Light Report columns
-    const attRateIdx = findCol(['attendance rate', 'attendance']);
-    const ceuRateIdx = findCol(['ceu rate', 'ceu']);
-    const otoRateIdx = findCol(['121 rate', '1-2-1', '121', 'one to one']);
-    const refRateIdx = findCol(['referrals given rate', 'referral given rate', 'referrals given', 'rgt']);
-    const tyfcbIdx = findCol(['tyfcb', 'thank you for closed business']);
-    const visitorIdx = findCol(['visitors', 'visitor']);
-    const sponsorIdx = findCol(['sponsors', 'sponsor']);
-
-    // Standard PALMS columns fallback
-    const pIdx = findCol(['p', 'present']);
-    const aIdx = findCol(['a', 'absent']);
-    const sIdx = findCol(['s', 'substitute']);
-    const mIdx = findCol(['m', 'medical']);
-
-    if (nameIdx === -1) {
-      errors.push('Could not detect "Name" column header in Excel sheet.');
+        const rowText = row.map(c => String(c).toLowerCase()).join(' ');
+        if (rowText.includes('name') && (rowText.includes('score') || rowText.includes('rate') || rowText.includes('attendance'))) {
+          headerIndex = i;
+          break;
+        }
+      }
     }
 
+    if (headerIndex === -1) headerIndex = 0;
+
+    const rawHeaders = (rows[headerIndex] || []).map(h => String(h).trim());
+    const headers = rawHeaders.map(normalizeHeader);
+
+    // Helper to find column index by exact or partial alias
+    const getColIndex = (aliases: string[]) => {
+      const normAliases = aliases.map(normalizeHeader);
+      const exactIdx = headers.findIndex(h => normAliases.includes(h));
+      if (exactIdx !== -1) return exactIdx;
+      return headers.findIndex(h => normAliases.some(a => h.includes(a)));
+    };
+
+    // Column Indices for EXACT BNI Traffic Light Reports
+    const chapterIdx = getColIndex(['chapter', 'chapter name']);
+    const fnIdx = getColIndex(['first name', 'firstname']);
+    const lnIdx = getColIndex(['last name', 'lastname']);
+    
+    // Explicitly exclude 'chapter' when finding 'name'
+    let nameIdx = getColIndex(['name', 'member name', 'full name', 'member']);
+    if (nameIdx !== -1 && (headers[nameIdx] === 'chapter' || headers[nameIdx] === 'chaptername')) {
+      nameIdx = headers.findIndex((h, idx) => {
+        if (idx === fnIdx || idx === lnIdx || h === 'chapter' || h === 'chaptername' || h === 'region') return false;
+        return h.includes('name') || h.includes('member');
+      });
+    }
+
+    const totalScoreIdx = getColIndex(['total score', 'totalscore']);
+    const regionIdx = getColIndex(['region', 'region name']);
+    const phoneIdx = getColIndex(['mobile', 'phone', 'whatsapp', 'contact', 'tel']);
+    const emailIdx = getColIndex(['email', 'mail']);
+
+    // Exact BNI Rates and Scores
+    const attRateIdx = getColIndex(['attendance rate', 'attendancerate']);
+    const attScoreIdx = getColIndex(['attendance score', 'attendancescore']);
+    
+    const ceuRateIdx = getColIndex(['ceu rate', 'ceurate']);
+    const ceuScoreIdx = getColIndex(['ceu score', 'ceuscore']);
+
+    const otoRateIdx = getColIndex(['121 rate', '121rate', '1-2-1 rate', 'one to one rate']);
+    const otoScoreIdx = getColIndex(['121 score', '121score', '1-2-1 score', 'one to one score']);
+
+    const refRateIdx = getColIndex(['referrals given rate', 'referralsgivenrate', 'referral given rate']);
+    const refScoreIdx = getColIndex(['referrals given score', 'referralsgivenscore', 'referral given score']);
+
+    const tyfcbIdx = getColIndex(['tyfcb', 'thank you for closed business']);
+    const tyfcbScoreIdx = getColIndex(['tyfcb score', 'tyfcbscore']);
+
+    const visitorIdx = getColIndex(['visitors', 'visitor']);
+    const visitorScoreIdx = getColIndex(['visitor score', 'visitorscore']);
+
+    const sponsorIdx = getColIndex(['sponsors', 'sponsor']);
+    const sponsorScoreIdx = getColIndex(['sponsor score', 'sponsorscore']);
+
+    // Standard PALMS raw counts fallback
+    const pIdx = getColIndex(['p', 'present']);
+    const aIdx = getColIndex(['a', 'absent']);
+    const sIdx = getColIndex(['s', 'substitute']);
+    const mIdx = getColIndex(['m', 'medical']);
+
+    if (fnIdx === -1 && lnIdx === -1 && nameIdx === -1) {
+      errors.push('Could not detect "Name" or "First Name / Last Name" column header in Excel sheet.');
+    }
+
+    // Process Data Rows
     for (let i = headerIndex + 1; i < rows.length; i++) {
       const row = rows[i];
-      if (!row || row.length === 0) continue;
+      if (!row || !row.some(c => String(c).trim() !== '')) continue;
 
-      const nameVal = String(row[nameIdx] || '').trim();
-      if (
-        !nameVal ||
-        nameVal.toLowerCase().includes('total') ||
-        nameVal.toLowerCase().includes('average') ||
-        nameVal.toLowerCase().includes('summary') ||
-        nameVal.toLowerCase().includes('traffic lights of')
-      ) {
-        continue;
+      let memberName = '';
+      if (fnIdx !== -1 || lnIdx !== -1) {
+        const fn = String(fnIdx !== -1 ? row[fnIdx] : '').trim();
+        const ln = String(lnIdx !== -1 ? row[lnIdx] : '').trim();
+        memberName = `${fn} ${ln}`.trim();
+      }
+      
+      if (!memberName && nameIdx !== -1) {
+        memberName = String(row[nameIdx] || '').trim();
       }
 
-      // Convert rates or PALMS metrics
-      const attRate = attRateIdx !== -1 ? cleanNumber(row[attRateIdx]) : 0;
-      const ceuVal = ceuRateIdx !== -1 ? cleanNumber(row[ceuRateIdx]) : 0;
-      const otoVal = otoRateIdx !== -1 ? cleanNumber(row[otoRateIdx]) : 0;
-      const refVal = refRateIdx !== -1 ? cleanNumber(row[refRateIdx]) : 0;
+      if (!memberName || isIgnoredName(memberName)) continue;
+
+      const chapterVal = chapterIdx !== -1 ? String(row[chapterIdx] || '').trim() : '';
+      const regionVal = regionIdx !== -1 ? String(row[regionIdx] || '').trim() : '';
+      const phoneVal = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+      const emailVal = emailIdx !== -1 ? String(row[emailIdx] || '').trim() : '';
+      const totalScoreVal = totalScoreIdx !== -1 ? cleanNumber(row[totalScoreIdx]) : undefined;
+
+      // Extract Rates
+      const attendanceRateVal = attRateIdx !== -1 ? cleanNumber(row[attRateIdx]) : undefined;
+      const ceuRateVal = ceuRateIdx !== -1 ? cleanNumber(row[ceuRateIdx]) : undefined;
+      const oneToOneRateVal = otoRateIdx !== -1 ? cleanNumber(row[otoRateIdx]) : undefined;
+      const refRateVal = refRateIdx !== -1 ? cleanNumber(row[refRateIdx]) : undefined;
+
+      // Extract Component Scores from Excel if provided
+      const attScore = attScoreIdx !== -1 ? cleanNumber(row[attScoreIdx]) : undefined;
+      const ceuScore = ceuScoreIdx !== -1 ? cleanNumber(row[ceuScoreIdx]) : undefined;
+      const otoScore = otoScoreIdx !== -1 ? cleanNumber(row[otoScoreIdx]) : undefined;
+      const refScore = refScoreIdx !== -1 ? cleanNumber(row[refScoreIdx]) : undefined;
+      const tyfcbScore = tyfcbScoreIdx !== -1 ? cleanNumber(row[tyfcbScoreIdx]) : undefined;
+      const visitorScore = visitorScoreIdx !== -1 ? cleanNumber(row[visitorScoreIdx]) : undefined;
+      const sponsorScore = sponsorScoreIdx !== -1 ? cleanNumber(row[sponsorScoreIdx]) : undefined;
+
+      // Extract Metrics
       const tyfcbVal = tyfcbIdx !== -1 ? cleanNumber(row[tyfcbIdx]) : 0;
       const visitorVal = visitorIdx !== -1 ? cleanNumber(row[visitorIdx]) : 0;
       const sponsorVal = sponsorIdx !== -1 ? cleanNumber(row[sponsorIdx]) : 0;
 
-      // Estimate P/A if Attendance Rate is given
-      const presentCount = pIdx !== -1 ? cleanNumber(row[pIdx]) : (attRate >= 0.9 ? 12 : attRate >= 0.8 ? 10 : 8);
+      const pVal = pIdx !== -1 ? cleanNumber(row[pIdx]) : 0;
+      const aVal = aIdx !== -1 ? cleanNumber(row[aIdx]) : 0;
+      const sVal = sIdx !== -1 ? cleanNumber(row[sIdx]) : 0;
+      const mVal = mIdx !== -1 ? cleanNumber(row[mIdx]) : 0;
+
+      // Build JSON representation of ALL raw columns from the Excel row
+      const rawObj: Record<string, any> = {};
+      rawHeaders.forEach((h, idx) => {
+        if (h && row[idx] !== undefined) {
+          rawObj[h] = row[idx];
+        }
+      });
 
       const rawMember: Member = {
-        Name: nameVal,
-        Phone: phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '',
-        Email: emailIdx !== -1 ? String(row[emailIdx] || '').trim() : '',
-        P: presentCount,
-        A: aIdx !== -1 ? cleanNumber(row[aIdx]) : (12 - presentCount),
-        S: sIdx !== -1 ? cleanNumber(row[sIdx]) : 0,
-        M: mIdx !== -1 ? cleanNumber(row[mIdx]) : 0,
-        RGT: refVal,
+        Name: memberName,
+        Chapter: chapterVal || 'Influencers',
+        Region: regionVal,
+        Phone: phoneVal,
+        Email: emailVal,
+        P: pVal,
+        A: aVal,
+        S: sVal,
+        M: mVal,
+        RGT: refRateVal ?? 0,
         V: visitorVal,
         TYFCB: tyfcbVal,
-        CEU: ceuVal,
-        OneToOnes: otoVal,
+        CEU: ceuRateVal ?? 0,
+        OneToOnes: oneToOneRateVal ?? 0,
         Sponsors: sponsorVal,
+        AttendanceRate: attendanceRateVal,
+        CEURate: ceuRateVal,
+        OneToOneRate: oneToOneRateVal,
+        ReferralsGivenRate: refRateVal,
+        AttendanceScore: attScore,
+        CEUScore: ceuScore,
+        OneToOneScore: otoScore,
+        ReferralsGivenScore: refScore,
+        TYFCBScore: tyfcbScore,
+        VisitorScore: visitorScore,
+        SponsorScore: sponsorScore,
+        workbookTotalScore: totalScoreVal,
+        reportFromDate,
+        reportToDate,
+        raw_data: rawObj,
       };
 
       const scored = scoreMember(rawMember);
+      
+      // If workbook total score is provided and higher, ensure total score is preserved
+      if (totalScoreVal !== undefined && totalScoreVal > 0) {
+        scored.workbookTotalScore = totalScoreVal;
+      }
+
       members.push(scored);
     }
 
-    return { members, errors };
+    return {
+      members,
+      errors,
+      reportDates: { from: reportFromDate, to: reportToDate }
+    };
   } catch (err: any) {
     return { members: [], errors: [`Excel Parse Error: ${err.message || err}`] };
   }
 }
 
-// Generates 10 realistic sample members using EXACT headers from BNI Traffic Light Reports
+// Generates realistic sample Excel buffer matching the EXACT 17 BNI Traffic Light columns
 export function generateSampleExcelBuffer(): ArrayBuffer {
-  const sampleData = [
+  const sampleRows = [
     {
-      "Chapter": "Champions",
-      "Name": "Amit Patel",
+      "Chapter": "Influencers",
+      "Name": "Neraj K Anand",
       "Total Score": 100,
       "Attendance Rate": 1.0,
       "Attendance Score": 10,
-      "CEU Rate": 9.5,
+      "CEU Rate": 9.6154,
       "CEU Score": 10,
-      "121 Rate": 3.5,
+      "121 Rate": 3.5385,
       "121 Score": 20,
-      "Referrals Given Rate": 2.4,
+      "Referrals Given Rate": 2.3846,
       "Referrals Given Score": 25,
-      "TYFCB": 2950000,
+      "TYFCB": 2959575,
       "TYFCB Score": 5,
       "Visitors": 8,
       "Visitor Score": 25,
@@ -162,18 +312,18 @@ export function generateSampleExcelBuffer(): ArrayBuffer {
       "Sponsor Score": 5
     },
     {
-      "Chapter": "Champions",
-      "Name": "Priya Sharma",
+      "Chapter": "Influencers",
+      "Name": "Monica Singh",
       "Total Score": 99,
       "Attendance Rate": 1.0,
       "Attendance Score": 10,
-      "CEU Rate": 0.85,
+      "CEU Rate": 0.8462,
       "CEU Score": 10,
-      "121 Rate": 1.5,
+      "121 Rate": 1.5385,
       "121 Score": 20,
-      "Referrals Given Rate": 1.95,
+      "Referrals Given Rate": 1.9615,
       "Referrals Given Score": 25,
-      "TYFCB": 915000,
+      "TYFCB": 915425,
       "TYFCB Score": 4,
       "Visitors": 20,
       "Visitor Score": 25,
@@ -181,18 +331,18 @@ export function generateSampleExcelBuffer(): ArrayBuffer {
       "Sponsor Score": 5
     },
     {
-      "Chapter": "Champions",
-      "Name": "Rohan Mehta",
+      "Chapter": "Influencers",
+      "Name": "Richa Mongia",
       "Total Score": 95,
       "Attendance Rate": 1.0,
       "Attendance Score": 10,
       "CEU Rate": 1.5,
       "CEU Score": 10,
-      "121 Rate": 1.3,
+      "121 Rate": 1.3077,
       "121 Score": 20,
-      "Referrals Given Rate": 2.1,
+      "Referrals Given Rate": 2.1154,
       "Referrals Given Score": 25,
-      "TYFCB": 5220000,
+      "TYFCB": 5228040,
       "TYFCB Score": 5,
       "Visitors": 5,
       "Visitor Score": 25,
@@ -200,18 +350,18 @@ export function generateSampleExcelBuffer(): ArrayBuffer {
       "Sponsor Score": 0
     },
     {
-      "Chapter": "Champions",
-      "Name": "Neha Gupta",
+      "Chapter": "Influencers",
+      "Name": "Ranjan Sapra",
       "Total Score": 95,
       "Attendance Rate": 1.0,
       "Attendance Score": 10,
-      "CEU Rate": 0.35,
+      "CEU Rate": 0.3462,
       "CEU Score": 5,
-      "121 Rate": 2.2,
+      "121 Rate": 2.1923,
       "121 Score": 20,
-      "Referrals Given Rate": 1.65,
+      "Referrals Given Rate": 1.6538,
       "Referrals Given Score": 25,
-      "TYFCB": 5038000,
+      "TYFCB": 5038222,
       "TYFCB Score": 5,
       "Visitors": 15,
       "Visitor Score": 25,
@@ -219,122 +369,39 @@ export function generateSampleExcelBuffer(): ArrayBuffer {
       "Sponsor Score": 5
     },
     {
-      "Chapter": "Champions",
-      "Name": "Vikram Singh",
-      "Total Score": 91,
+      "Chapter": "Influencers",
+      "Name": "Nitin Sharma- Chef",
+      "Total Score": 95,
       "Attendance Rate": 1.0,
       "Attendance Score": 10,
-      "CEU Rate": 0.85,
-      "CEU Score": 10,
-      "121 Rate": 1.7,
-      "121 Score": 20,
-      "Referrals Given Rate": 2.0,
-      "Referrals Given Score": 25,
-      "TYFCB": 70425,
-      "TYFCB Score": 1,
-      "Visitors": 10,
-      "Visitor Score": 25,
-      "Sponsors": 0,
-      "Sponsor Score": 0
-    },
-    {
-      "Chapter": "Champions",
-      "Name": "Ananya Verma",
-      "Total Score": 90,
-      "Attendance Rate": 1.0,
-      "Attendance Score": 10,
-      "CEU Rate": 1.35,
-      "CEU Score": 10,
-      "121 Rate": 1.5,
-      "121 Score": 20,
-      "Referrals Given Rate": 1.2,
-      "Referrals Given Score": 20,
-      "TYFCB": 3069000,
-      "TYFCB Score": 5,
-      "Visitors": 7,
-      "Visitor Score": 25,
-      "Sponsors": 0,
-      "Sponsor Score": 0
-    },
-    {
-      "Chapter": "Champions",
-      "Name": "Deepak Kumar",
-      "Total Score": 75,
-      "Attendance Rate": 0.96,
-      "Attendance Score": 10,
-      "CEU Rate": 0.2,
+      "CEU Rate": 0.2692,
       "CEU Score": 5,
-      "121 Rate": 1.25,
+      "121 Rate": 1.2692,
       "121 Score": 20,
-      "Referrals Given Rate": 1.4,
+      "Referrals Given Rate": 1.6154,
       "Referrals Given Score": 25,
-      "TYFCB": 1740000,
+      "TYFCB": 2330116,
       "TYFCB Score": 5,
       "Visitors": 5,
       "Visitor Score": 25,
-      "Sponsors": 0,
-      "Sponsor Score": 0
-    },
-    {
-      "Chapter": "Champions",
-      "Name": "Sneha Reddy",
-      "Total Score": 65,
-      "Attendance Rate": 0.88,
-      "Attendance Score": 5,
-      "CEU Rate": 0.1,
-      "CEU Score": 5,
-      "121 Rate": 0.75,
-      "121 Score": 15,
-      "Referrals Given Rate": 0.75,
-      "Referrals Given Score": 15,
-      "TYFCB": 210000,
-      "TYFCB Score": 3,
-      "Visitors": 3,
-      "Visitor Score": 15,
-      "Sponsors": 0,
-      "Sponsor Score": 0
-    },
-    {
-      "Chapter": "Champions",
-      "Name": "Arjun Nair",
-      "Total Score": 55,
-      "Attendance Rate": 0.85,
-      "Attendance Score": 0,
-      "CEU Rate": 0.05,
-      "CEU Score": 5,
-      "121 Rate": 0.5,
-      "121 Score": 10,
-      "Referrals Given Rate": 0.5,
-      "Referrals Given Score": 10,
-      "TYFCB": 85000,
-      "TYFCB Score": 2,
-      "Visitors": 2,
-      "Visitor Score": 10,
-      "Sponsors": 0,
-      "Sponsor Score": 0
-    },
-    {
-      "Chapter": "Champions",
-      "Name": "Kavita Joshi",
-      "Total Score": 42,
-      "Attendance Rate": 0.80,
-      "Attendance Score": 0,
-      "CEU Rate": 0.0,
-      "CEU Score": 0,
-      "121 Rate": 0.25,
-      "121 Score": 5,
-      "Referrals Given Rate": 0.25,
-      "Referrals Given Score": 5,
-      "TYFCB": 10000,
-      "TYFCB Score": 1,
-      "Visitors": 1,
-      "Visitor Score": 5,
-      "Sponsors": 0,
-      "Sponsor Score": 0
+      "Sponsors": 1,
+      "Sponsor Score": 5
     }
   ];
 
-  const ws = XLSX.utils.json_to_sheet(sampleData);
+  const ws = XLSX.utils.json_to_sheet(sampleRows, {
+    header: [
+      "Chapter", "Name", "Total Score",
+      "Attendance Rate", "Attendance Score",
+      "CEU Rate", "CEU Score",
+      "121 Rate", "121 Score",
+      "Referrals Given Rate", "Referrals Given Score",
+      "TYFCB", "TYFCB Score",
+      "Visitors", "Visitor Score",
+      "Sponsors", "Sponsor Score"
+    ]
+  });
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Traffic Lights");
   return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
