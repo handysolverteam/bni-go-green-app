@@ -35,13 +35,14 @@ export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
       return { members: [], errors: ['Sheet is empty or missing data'] };
     }
 
-    // Header row auto-detection (scans rows 0 to 12)
+    // Header row auto-detection (scans rows 0 to 15)
     let headerIndex = -1;
-    for (let i = 0; i < Math.min(12, rows.length); i++) {
+    for (let i = 0; i < Math.min(15, rows.length); i++) {
       const rowText = rows[i].map(c => String(c).toLowerCase()).join(' ');
       if (
-        rowText.includes('name') ||
+        rowText.includes('member name') ||
         rowText.includes('member') ||
+        rowText.includes('rgt') ||
         (rowText.includes('p') && rowText.includes('a') && (rowText.includes('v') || rowText.includes('tyfcb')))
       ) {
         headerIndex = i;
@@ -61,8 +62,8 @@ export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
       });
     };
 
-    const nameIdx = findCol(['name', 'member name', 'member', 'full name']);
-    const phoneIdx = findCol(['phone', 'mobile', 'whatsapp', 'contact', 'tel']);
+    const nameIdx = findCol(['member name', 'name', 'member', 'full name']);
+    const phoneIdx = findCol(['mobile', 'phone', 'whatsapp', 'contact', 'tel']);
     const emailIdx = findCol(['email', 'mail']);
     const pIdx = findCol(['p', 'present']);
     const aIdx = findCol(['a', 'absent']);
@@ -70,9 +71,9 @@ export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
     const mIdx = findCol(['m', 'medical', 'leave']);
     const rgtIdx = findCol(['rgt', 'referrals given', 'referral given', 'rg', 'referral', 'refs']);
     const vIdx = findCol(['v', 'visitors', 'visitor']);
-    const tyfcbIdx = findCol(['tyfcb', 'thank you for closed business', 'closed business', 'business', 'tyfcb (rs)']);
+    const tyfcbIdx = findCol(['tyfcb', 'tyfcb (rs)', 'thank you for closed business', 'closed business', 'business']);
     const ceuIdx = findCol(['ceu', 'ceus', 'trainings', 'chapter education']);
-    const otoIdx = findCol(['1-2-1', '121', 'rrt', 'one to one', 'one-to-one', '1-2-1s']);
+    const otoIdx = findCol(['1-2-1', '1-2-1s', '121', 'rrt', 'one to one', 'one-to-one']);
     const sponsorIdx = findCol(['sponsors', 'sponsor', 'sponsored']);
 
     if (nameIdx === -1) {
@@ -119,163 +120,163 @@ export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
   }
 }
 
-// Generates 10 realistic sample members in Excel format
+// Generates 10 realistic sample members using EXACT official BNI Report column headers
 export function generateSampleExcelBuffer(): ArrayBuffer {
   const sampleData = [
     {
       "Member Name": "Amit Patel",
-      "Phone": "9876543210",
+      "Mobile": "9876543210",
       "Email": "amit.patel@example.com",
       "P": 12,
       "A": 0,
       "S": 0,
       "M": 0,
-      "Referrals Given": 14,
-      "Visitors": 3,
+      "RGT": 14,
+      "V": 3,
       "TYFCB (Rs)": 850000,
       "CEU": 8,
-      "1-2-1s": 9,
+      "1-2-1": 9,
       "Sponsors": 1
     },
     {
       "Member Name": "Priya Sharma",
-      "Phone": "9812345678",
+      "Mobile": "9812345678",
       "Email": "priya.sharma@example.com",
       "P": 11,
       "A": 1,
       "S": 0,
       "M": 0,
-      "Referrals Given": 10,
-      "Visitors": 2,
+      "RGT": 10,
+      "V": 2,
       "TYFCB (Rs)": 450000,
       "CEU": 6,
-      "1-2-1s": 7,
+      "1-2-1": 7,
       "Sponsors": 0
     },
     {
       "Member Name": "Rohan Mehta",
-      "Phone": "9898989898",
+      "Mobile": "9898989898",
       "Email": "rohan.mehta@example.com",
       "P": 10,
       "A": 2,
       "S": 0,
       "M": 0,
-      "Referrals Given": 6,
-      "Visitors": 1,
+      "RGT": 6,
+      "V": 1,
       "TYFCB (Rs)": 210000,
       "CEU": 4,
-      "1-2-1s": 5,
+      "1-2-1": 5,
       "Sponsors": 0
     },
     {
       "Member Name": "Neha Gupta",
-      "Phone": "9765432109",
+      "Mobile": "9765432109",
       "Email": "neha.gupta@example.com",
       "P": 12,
       "A": 0,
       "S": 0,
       "M": 0,
-      "Referrals Given": 16,
-      "Visitors": 4,
+      "RGT": 16,
+      "V": 4,
       "TYFCB (Rs)": 1250000,
       "CEU": 10,
-      "1-2-1s": 12,
+      "1-2-1": 12,
       "Sponsors": 2
     },
     {
       "Member Name": "Vikram Singh",
-      "Phone": "9823012345",
+      "Mobile": "9823012345",
       "Email": "vikram.singh@example.com",
       "P": 9,
       "A": 3,
       "S": 0,
       "M": 0,
-      "Referrals Given": 4,
-      "Visitors": 0,
+      "RGT": 4,
+      "V": 0,
       "TYFCB (Rs)": 95000,
       "CEU": 2,
-      "1-2-1s": 3,
+      "1-2-1": 3,
       "Sponsors": 0
     },
     {
       "Member Name": "Ananya Verma",
-      "Phone": "9988776655",
+      "Mobile": "9988776655",
       "Email": "ananya.v@example.com",
       "P": 12,
       "A": 0,
       "S": 0,
       "M": 0,
-      "Referrals Given": 12,
-      "Visitors": 2,
+      "RGT": 12,
+      "V": 2,
       "TYFCB (Rs)": 620000,
       "CEU": 7,
-      "1-2-1s": 8,
+      "1-2-1": 8,
       "Sponsors": 1
     },
     {
       "Member Name": "Deepak Kumar",
-      "Phone": "9811223344",
+      "Mobile": "9811223344",
       "Email": "deepak.k@example.com",
       "P": 8,
       "A": 4,
       "S": 0,
       "M": 0,
-      "Referrals Given": 2,
-      "Visitors": 0,
+      "RGT": 2,
+      "V": 0,
       "TYFCB (Rs)": 40000,
       "CEU": 1,
-      "1-2-1s": 2,
+      "1-2-1": 2,
       "Sponsors": 0
     },
     {
       "Member Name": "Sneha Reddy",
-      "Phone": "9744332211",
+      "Mobile": "9744332211",
       "Email": "sneha.reddy@example.com",
       "P": 11,
       "A": 1,
       "S": 0,
       "M": 0,
-      "Referrals Given": 8,
-      "Visitors": 1,
+      "RGT": 8,
+      "V": 1,
       "TYFCB (Rs)": 310000,
       "CEU": 5,
-      "1-2-1s": 6,
+      "1-2-1": 6,
       "Sponsors": 0
     },
     {
       "Member Name": "Arjun Nair",
-      "Phone": "9655443322",
+      "Mobile": "9655443322",
       "Email": "arjun.nair@example.com",
       "P": 12,
       "A": 0,
       "S": 0,
       "M": 0,
-      "Referrals Given": 15,
-      "Visitors": 5,
+      "RGT": 15,
+      "V": 5,
       "TYFCB (Rs)": 1500000,
       "CEU": 9,
-      "1-2-1s": 10,
+      "1-2-1": 10,
       "Sponsors": 2
     },
     {
       "Member Name": "Kavita Joshi",
-      "Phone": "9544332211",
+      "Mobile": "9544332211",
       "Email": "kavita.j@example.com",
       "P": 10,
       "A": 2,
       "S": 0,
       "M": 0,
-      "Referrals Given": 5,
-      "Visitors": 1,
+      "RGT": 5,
+      "V": 1,
       "TYFCB (Rs)": 180000,
       "CEU": 3,
-      "1-2-1s": 4,
+      "1-2-1": 4,
       "Sponsors": 0
     }
   ];
 
   const ws = XLSX.utils.json_to_sheet(sampleData);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Sample Report");
+  XLSX.utils.book_append_sheet(wb, ws, "BNI PALMS Report");
   return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 }
