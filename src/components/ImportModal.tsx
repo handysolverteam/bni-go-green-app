@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Member } from '../types';
-import { parsePalmsExcel } from '../lib/excelParser';
 import { GlassCard } from './GlassCard';
-import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, X, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Upload, FileSpreadsheet, Download, X, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { parsePalmsExcel, generateSampleExcelBuffer } from '../lib/excelParser';
+import { Member } from '../types';
 
 interface ImportModalProps {
   onImportComplete: (members: Member[]) => void;
@@ -12,19 +11,39 @@ interface ImportModalProps {
 
 export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onClose }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [parsedMembers, setParsedMembers] = useState<Member[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
-  const [fileName, setFileName] = useState<string>('');
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const handleFile = (file: File) => {
+    if (!file) return;
     setFileName(file.name);
+    setIsProcessing(true);
+    setErrors([]);
+    setSuccessMsg(null);
+
     const reader = new FileReader();
     reader.onload = (e) => {
-      const buffer = e.target?.result as ArrayBuffer;
-      if (buffer) {
-        const res = parsePalmsExcel(buffer);
-        setParsedMembers(res.members);
-        setErrors(res.errors);
+      try {
+        const data = e.target?.result as ArrayBuffer;
+        const result = parsePalmsExcel(data);
+
+        if (result.errors && result.errors.length > 0) {
+          setErrors(result.errors);
+          setParsedMembers([]);
+        } else if (result.members.length === 0) {
+          setErrors(['No valid member rows found in the report file.']);
+          setParsedMembers([]);
+        } else {
+          setParsedMembers(result.members);
+          setSuccessMsg(`Successfully parsed ${result.members.length} members from "${file.name}"!`);
+        }
+      } catch (err: any) {
+        setErrors([`File error: ${err.message || 'Could not process file'}`]);
+      } finally {
+        setIsProcessing(false);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -39,47 +58,25 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
   };
 
   const handleDownloadSample = () => {
-    const sampleData = [
-      {
-        "Member Name": "Rajesh Sharma",
-        "Phone": "9876543210",
-        "P": 24, "A": 2, "S": 0, "M": 0,
-        "Referrals Given": 18,
-        "Visitors": 4,
-        "TYFCB": 500000,
-        "CEU": 15,
-        "1-2-1": 12,
-        "Sponsors": 1
-      },
-      {
-        "Member Name": "Priya Patel",
-        "Phone": "9123456789",
-        "P": 18, "A": 8, "S": 0, "M": 0,
-        "Referrals Given": 5,
-        "Visitors": 0,
-        "TYFCB": 50000,
-        "CEU": 2,
-        "1-2-1": 3,
-        "Sponsors": 0
-      }
-    ];
-
-    const ws = XLSX.utils.json_to_sheet(sampleData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "PALMS Sample");
-    XLSX.writeFile(wb, "BNI_PALMS_Sample.xlsx");
+    const buffer = generateSampleExcelBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'BNI_Sample_Report.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleConfirmImport = () => {
     if (parsedMembers.length > 0) {
       onImportComplete(parsedMembers);
-      onClose();
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-      <GlassCard className="w-full max-w-2xl p-6 space-y-6 relative border-emerald-500/30">
+      <GlassCard className="w-full max-w-2xl p-6 space-y-6 relative border-emerald-500/30 shadow-2xl">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
@@ -92,9 +89,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
             <FileSpreadsheet className="w-5 h-5" />
             <span>Excel Import Engine</span>
           </div>
-          <h2 className="text-xl font-black text-white">Upload Weekly Member Report</h2>
+          <h2 className="text-xl font-black text-white">Upload Member Report</h2>
           <p className="text-xs text-slate-400">
-            Upload BNI Chapter Excel/CSV report to recalculate scores and update WhatsApp nudges.
+            Upload BNI Chapter Excel/CSV report to recalculate scores and sync with your chapter organization.
           </p>
         </div>
 
@@ -120,76 +117,67 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
             input.click();
           }}
         >
-          <Upload className="w-10 h-10 text-emerald-400 mx-auto mb-3 animate-bounce" />
-          <p className="text-sm font-bold text-white mb-1">
-            {fileName ? fileName : 'Click to select or drop Excel file (.xlsx / .csv)'}
-          </p>
-          <p className="text-xs text-slate-400">Supports standard BNI report format columns</p>
+          {isProcessing ? (
+            <div className="flex flex-col items-center space-y-2 py-4">
+              <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+              <p className="text-xs font-bold text-slate-300">Parsing member metrics from Excel...</p>
+            </div>
+          ) : (
+            <>
+              <Upload className="w-10 h-10 text-emerald-400 mx-auto mb-3 animate-bounce" />
+              <p className="text-sm font-bold text-white mb-1">
+                {fileName ? fileName : 'Click to select or drop Excel file (.xlsx / .csv)'}
+              </p>
+              <p className="text-xs text-slate-400">Supports standard BNI report format columns</p>
+            </>
+          )}
         </div>
 
-        {/* Download Sample */}
-        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/5 text-xs text-slate-300">
-          <span>Need a starting template?</span>
+        {/* Feedback Messages */}
+        {errors.length > 0 && (
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs space-y-1">
+            <div className="font-bold flex items-center gap-1.5 text-rose-400">
+              <AlertCircle className="w-4 h-4" />
+              <span>Import Warnings / Errors:</span>
+            </div>
+            {errors.map((err, idx) => (
+              <p key={idx}>&bull; {err}</p>
+            ))}
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
+        {/* Download Sample & Action Footer */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
           <button
             onClick={handleDownloadSample}
-            className="flex items-center space-x-1 font-bold text-emerald-400 hover:text-emerald-300"
+            className="flex items-center space-x-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download Sample Excel</span>
+            <Download className="w-4 h-4" />
+            <span>Download 10-Member Sample Excel</span>
           </button>
-        </div>
 
-        {/* Errors display */}
-        {errors.length > 0 && (
-          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-1 text-xs">
-            <div className="font-bold flex items-center gap-1">
-              <AlertCircle className="w-4 h-4" />
-              <span>Import Warning:</span>
-            </div>
-            {errors.map((err, i) => <p key={i}>&bull; {err}</p>)}
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
+            <button
+              onClick={onClose}
+              className="w-1/2 sm:w-auto px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmImport}
+              disabled={parsedMembers.length === 0}
+              className="w-1/2 sm:w-auto px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all disabled:opacity-40"
+            >
+              Confirm Import ({parsedMembers.length})
+            </button>
           </div>
-        )}
-
-        {/* Preview of Parsed Members */}
-        {parsedMembers.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold text-emerald-400">
-              <span className="flex items-center gap-1">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Successfully Parsed {parsedMembers.length} Members</span>
-              </span>
-            </div>
-
-            <div className="max-h-40 overflow-y-auto rounded-lg border border-white/10 p-2 space-y-1 bg-slate-950/60">
-              {parsedMembers.slice(0, 5).map((m, idx) => (
-                <div key={idx} className="text-xs text-slate-300 flex items-center justify-between px-2 py-1 bg-slate-900/40 rounded">
-                  <span className="font-semibold text-white">{m.Name}</span>
-                  <span className="text-emerald-400 font-bold">Score: {m.score}/100</span>
-                </div>
-              ))}
-              {parsedMembers.length > 5 && (
-                <p className="text-[11px] text-slate-500 text-center pt-1">+ {parsedMembers.length - 5} more members</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center justify-end space-x-3 pt-2 border-t border-white/10">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={handleConfirmImport}
-            disabled={parsedMembers.length === 0}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 hover:scale-105 transition-all disabled:opacity-40"
-          >
-            Import {parsedMembers.length > 0 ? `${parsedMembers.length} Members` : ''}
-          </button>
         </div>
       </GlassCard>
     </div>

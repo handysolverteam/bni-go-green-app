@@ -1,16 +1,8 @@
 import React, { useState } from 'react';
 import { UserProfileExtended, Organization, OrgMember } from '../types';
 import { GlassCard } from './GlassCard';
-import { User, ShieldCheck, Building2, Save, Check, Copy, Camera } from 'lucide-react';
+import { User, ShieldCheck, Building2, Save, Check, Copy, Camera, Upload, Link } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
-
-const PRESET_AVATARS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
-  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
-];
 
 interface ProfilePageProps {
   profile: UserProfileExtended | null;
@@ -22,13 +14,27 @@ interface ProfilePageProps {
 export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMember, onProfileUpdated }) => {
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [phone, setPhone] = useState(profile?.phone || '');
-  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || PRESET_AVATARS[0]);
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80');
   const [category, setCategory] = useState(profile?.business_category || '');
   const [bio, setBio] = useState(profile?.bio || '');
+  const [showCustomUrlInput, setShowCustomUrlInput] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setAvatarUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleCopyCode = () => {
     if (org?.code) {
@@ -68,11 +74,18 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
       <GlassCard glow className="p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
-            <img
-              src={avatarUrl}
-              alt="Profile Avatar"
-              className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500/50 shadow-lg"
-            />
+            <div className="relative group">
+              <img
+                src={avatarUrl}
+                alt="Profile Avatar"
+                className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500/50 shadow-lg"
+              />
+              <label className="absolute inset-0 rounded-2xl bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-all">
+                <Camera className="w-5 h-5 text-white" />
+                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+              </label>
+            </div>
+
             <div>
               <h2 className="text-2xl font-black text-white">{fullName || 'User Profile'}</h2>
               <div className="flex items-center space-x-2 text-xs text-slate-400 mt-0.5">
@@ -108,27 +121,36 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
       <GlassCard className="p-6 space-y-4">
         <h3 className="text-base font-bold text-white flex items-center gap-2">
           <User className="w-5 h-5 text-emerald-400" />
-          <span>Edit Profile & Avatar</span>
+          <span>Edit Profile & Avatar Photo</span>
         </h3>
 
-        {/* Preset Avatars */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-300">Choose Profile Avatar</label>
-          <div className="flex items-center space-x-3 pt-1">
-            {PRESET_AVATARS.map((url, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => setAvatarUrl(url)}
-                className={`w-10 h-10 rounded-xl overflow-hidden border-2 transition-all ${
-                  avatarUrl === url ? 'border-emerald-400 scale-110 shadow-lg shadow-emerald-500/25' : 'border-transparent opacity-60 hover:opacity-100'
-                }`}
-              >
-                <img src={url} alt="Preset Avatar" className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
+        {/* Upload Action Bar */}
+        <div className="flex items-center space-x-3 pt-1">
+          <label className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center space-x-1.5 cursor-pointer border border-white/10 transition-all">
+            <Upload className="w-4 h-4 text-emerald-400" />
+            <span>Upload Custom Photo</span>
+            <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setShowCustomUrlInput(!showCustomUrlInput)}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center space-x-1.5 border border-white/10 transition-all"
+          >
+            <Link className="w-4 h-4 text-teal-400" />
+            <span>Image URL</span>
+          </button>
         </div>
+
+        {showCustomUrlInput && (
+          <input
+            type="url"
+            placeholder="Paste image URL..."
+            value={avatarUrl}
+            onChange={(e) => setAvatarUrl(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold text-white animate-fadeIn"
+          />
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Organization, OrgMember, UserRole } from '../types';
 import { GlassCard } from './GlassCard';
-import { Building2, Copy, Check, Users, ShieldCheck, KeyRound, Crown, Shield } from 'lucide-react';
+import { Building2, Copy, Check, Users, ShieldCheck, Crown, Shield, Loader2 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 
 interface OrganizationTabProps {
@@ -110,41 +110,56 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 bg-slate-950/40">
-              {members.map((m) => (
-                <tr key={m.id} className="hover:bg-slate-800/40">
-                  <td className="px-4 py-3 font-bold text-white flex items-center space-x-2">
-                    {m.role === 'owner' ? <Crown className="w-4 h-4 text-amber-400" /> :
-                     m.role === 'admin' ? <ShieldCheck className="w-4 h-4 text-emerald-400" /> :
-                     <Shield className="w-4 h-4 text-slate-400" />}
-                    <span>{m.user_email || m.user_id}</span>
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full capitalize ${
-                      m.role === 'owner' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                      m.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                      'bg-slate-700/50 text-slate-400 border border-slate-600/30'
-                    }`}>
-                      {m.role}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-3 text-right">
-                    {isAdminOrOwner && m.role !== 'owner' ? (
-                      <select
-                        value={m.role}
-                        onChange={(e) => handleRoleChange(m.user_id, e.target.value as UserRole)}
-                        className="px-2 py-1 rounded-lg glass-input text-xs font-bold text-white bg-slate-900"
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    ) : (
-                      <span className="text-[11px] text-slate-500">Fixed</span>
-                    )}
+              {isLoading ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center">
+                    <Loader2 className="w-6 h-6 text-emerald-400 animate-spin mx-auto mb-2" />
+                    <span className="text-xs text-slate-400">Loading organization team members...</span>
                   </td>
                 </tr>
-              ))}
+              ) : members.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
+                    No team members found in this organization. Share your 6-digit invite code to invite members!
+                  </td>
+                </tr>
+              ) : (
+                members.map((m) => (
+                  <tr key={m.id} className="hover:bg-slate-800/40">
+                    <td className="px-4 py-3 font-bold text-white flex items-center space-x-2">
+                      {m.role === 'owner' ? <Crown className="w-4 h-4 text-amber-400" /> :
+                       m.role === 'admin' ? <ShieldCheck className="w-4 h-4 text-emerald-400" /> :
+                       <Shield className="w-4 h-4 text-slate-400" />}
+                      <span>{m.user_email || m.user_id}</span>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full capitalize ${
+                        m.role === 'owner' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                        m.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                        'bg-slate-700/50 text-slate-400 border border-slate-600/30'
+                      }`}>
+                        {m.role}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-3 text-right">
+                      {isAdminOrOwner && m.role !== 'owner' ? (
+                        <select
+                          value={m.role}
+                          onChange={(e) => handleRoleChange(m.user_id, e.target.value as UserRole)}
+                          className="px-2 py-1 rounded-lg glass-input text-xs font-bold text-white bg-slate-900"
+                        >
+                          <option value="member">Member</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      ) : (
+                        <span className="text-[11px] text-slate-500">Fixed</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
