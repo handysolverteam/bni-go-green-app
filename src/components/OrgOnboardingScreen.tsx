@@ -3,6 +3,7 @@ import { GlassCard } from './GlassCard';
 import { Building2, KeyRound, Plus, ArrowRight } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { Organization, OrgMember } from '../types';
 
 interface OrgOnboardingScreenProps {
@@ -11,6 +12,7 @@ interface OrgOnboardingScreenProps {
 
 export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJoined }) => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [mode, setMode] = useState<'create' | 'join'>('create');
 
   // Form states
@@ -38,12 +40,17 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
       );
 
       if (res) {
+        showToast(`Organization "${res.org.name}" created! Code: ${res.org.code}`, 'success');
         onOrgJoined(res);
       } else {
-        setErrorMsg(error || 'Failed to create organization. Ensure Supabase tables exist.');
+        const msg = error || 'Failed to create organization in database.';
+        setErrorMsg(msg);
+        showToast(msg, 'error');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Create organization failed.');
+      const msg = err.message || 'Create organization failed.';
+      setErrorMsg(msg);
+      showToast(msg, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -63,12 +70,17 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
       );
 
       if (res) {
+        showToast(`Successfully joined ${res.org.name}!`, 'success');
         onOrgJoined(res);
       } else {
-        setErrorMsg(error || 'Invalid 6-digit organization code. Please check and try again.');
+        const msg = error || 'Invalid 6-digit code. Please verify code with Chapter Admin.';
+        setErrorMsg(msg);
+        showToast(msg, 'error');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to join organization.');
+      const msg = err.message || 'Failed to join organization.';
+      setErrorMsg(msg);
+      showToast(msg, 'error');
     } finally {
       setIsLoading(false);
     }

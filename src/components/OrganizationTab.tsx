@@ -3,6 +3,7 @@ import { Organization, OrgMember, UserRole } from '../types';
 import { GlassCard } from './GlassCard';
 import { Building2, Copy, Check, Users, ShieldCheck, Crown, Shield, Loader2 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
+import { useToast } from '../context/ToastContext';
 
 interface OrganizationTabProps {
   org: Organization | null;
@@ -10,6 +11,7 @@ interface OrganizationTabProps {
 }
 
 export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember }) => {
+  const { showToast } = useToast();
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [copiedCode, setCopiedCode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +33,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
     if (org?.code) {
       navigator.clipboard.writeText(org.code);
       setCopiedCode(true);
+      showToast('6-digit organization code copied to clipboard!', 'info');
       setTimeout(() => setCopiedCode(false), 2000);
     }
   };
@@ -40,6 +43,9 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
     const ok = await supabaseService.updateOrgMemberRole(org.id, targetUserId, newRole);
     if (ok) {
       setMembers(prev => prev.map(m => m.user_id === targetUserId ? { ...m, role: newRole } : m));
+      showToast(`Updated member role to ${newRole.toUpperCase()}`, 'success');
+    } else {
+      showToast('Failed to update member role. Check DB permissions.', 'error');
     }
   };
 

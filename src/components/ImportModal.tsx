@@ -3,6 +3,7 @@ import { GlassCard } from './GlassCard';
 import { Upload, FileSpreadsheet, Download, X, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { parsePalmsExcel, generateSampleExcelBuffer } from '../lib/excelParser';
 import { Member } from '../types';
+import { useToast } from '../context/ToastContext';
 
 interface ImportModalProps {
   onImportComplete: (members: Member[]) => void;
@@ -10,6 +11,7 @@ interface ImportModalProps {
 }
 
 export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onClose }) => {
+  const { showToast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -33,15 +35,22 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
         if (result.errors && result.errors.length > 0) {
           setErrors(result.errors);
           setParsedMembers([]);
+          showToast(`File error: ${result.errors[0]}`, 'error');
         } else if (result.members.length === 0) {
-          setErrors(['No valid member rows found in the report file.']);
+          const err = 'No valid member rows found in the report file.';
+          setErrors([err]);
           setParsedMembers([]);
+          showToast(err, 'warning');
         } else {
           setParsedMembers(result.members);
-          setSuccessMsg(`Successfully parsed ${result.members.length} members from "${file.name}"!`);
+          const msg = `Parsed ${result.members.length} members from "${file.name}"!`;
+          setSuccessMsg(msg);
+          showToast(msg, 'success');
         }
       } catch (err: any) {
-        setErrors([`File error: ${err.message || 'Could not process file'}`]);
+        const errorMsg = `File error: ${err.message || 'Could not process file'}`;
+        setErrors([errorMsg]);
+        showToast(errorMsg, 'error');
       } finally {
         setIsProcessing(false);
       }
@@ -66,6 +75,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
     a.download = 'BNI_Sample_Report.xlsx';
     a.click();
     URL.revokeObjectURL(url);
+    showToast('Downloaded 10-member sample Excel file', 'info');
   };
 
   const handleConfirmImport = () => {

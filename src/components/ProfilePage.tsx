@@ -3,6 +3,7 @@ import { UserProfileExtended, Organization, OrgMember } from '../types';
 import { GlassCard } from './GlassCard';
 import { User, ShieldCheck, Building2, Save, Check, Copy, Camera, Upload, Link } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
+import { useToast } from '../context/ToastContext';
 
 interface ProfilePageProps {
   profile: UserProfileExtended | null;
@@ -12,6 +13,7 @@ interface ProfilePageProps {
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMember, onProfileUpdated }) => {
+  const { showToast } = useToast();
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [phone, setPhone] = useState(profile?.phone || '');
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80');
@@ -30,6 +32,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
       reader.onload = (event) => {
         if (event.target?.result) {
           setAvatarUrl(event.target.result as string);
+          showToast('New profile photo loaded!', 'success');
         }
       };
       reader.readAsDataURL(file);
@@ -40,6 +43,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
     if (org?.code) {
       navigator.clipboard.writeText(org.code);
       setCopiedCode(true);
+      showToast('Invite code copied to clipboard!', 'info');
       setTimeout(() => setCopiedCode(false), 2000);
     }
   };
@@ -63,7 +67,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
     if (ok) {
       onProfileUpdated(updated);
       setSavedSuccess(true);
+      showToast('Profile photo & details updated in database!', 'success');
       setTimeout(() => setSavedSuccess(false), 2000);
+    } else {
+      showToast('Failed to save profile. Check database connection.', 'error');
     }
     setIsLoading(false);
   };
