@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, FileText, Sun, Moon } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
 
-export type NavigationTab = 'dashboard' | 'import' | 'nudges' | 'org' | 'profile' | 'settings';
+export type NavigationTab = 'dashboard' | 'import' | 'nudges' | 'templates' | 'org' | 'profile' | 'settings';
 
 interface SidebarProps {
   activeTab: NavigationTab;
   setActiveTab: (tab: NavigationTab) => void;
   memberCount: number;
+  reportCount?: number;
   org: Organization | null;
   orgMember: OrgMember | null;
   userProfile: UserProfileExtended | null;
@@ -20,6 +21,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   memberCount,
+  reportCount = 0,
   org,
   orgMember,
   userProfile,
@@ -29,10 +31,32 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
-  // Persist sidebarMode in localStorage
+  // Persist sidebarMode & themeMode in localStorage
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(() => {
     return (localStorage.getItem('bni_sidebar_mode') as SidebarMode) || 'full';
   });
+
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('bni_theme_mode') as 'dark' | 'light') || 'dark';
+  });
+
+  const toggleTheme = (mode: 'dark' | 'light') => {
+    setThemeMode(mode);
+    localStorage.setItem('bni_theme_mode', mode);
+    if (mode === 'light') {
+      document.body.classList.add('light-mode');
+    } else {
+      document.body.classList.remove('light-mode');
+    }
+  };
+
+  useEffect(() => {
+    if (themeMode === 'light') {
+      document.body.classList.add('light-mode');
+    } else {
+      document.body.classList.remove('light-mode');
+    }
+  }, [themeMode]);
 
   const [showModeModal, setShowModeModal] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -46,8 +70,9 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   };
 
   const navItems = [
-    { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: memberCount > 0 ? memberCount : null },
+    { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
     { id: 'nudges' as NavigationTab, label: 'Outreach Messages', icon: MessageSquare },
+    { id: 'templates' as NavigationTab, label: 'Outreach Templates', icon: FileText },
     { id: 'org' as NavigationTab, label: 'Organization', icon: Building2 },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
   ];
@@ -138,6 +163,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
               <img
                 src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
                 alt="User Avatar"
+                referrerPolicy="no-referrer"
                 className="w-7 h-7 rounded-full object-cover ring-2 ring-emerald-500/40 group-hover:scale-105 transition-transform shrink-0"
               />
               {!isCompact && (
@@ -250,24 +276,58 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         {children}
       </main>
 
-      {/* Sidebar View Preferences Modal (Persisted in localStorage) */}
+      {/* Preferences Modal (Persisted in localStorage) */}
       {showModeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
           <div className="glass-panel w-full max-w-sm p-6 rounded-2xl space-y-5 border-emerald-500/30">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="text-base font-black text-white flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
-                <span>Sidebar View Preferences</span>
+                <span>Preferences</span>
               </h3>
               <button onClick={() => setShowModeModal(false)} className="p-1 text-slate-400 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
+            {/* Light / Dark Mode Switcher */}
             <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-300">Theme Mode</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggleTheme('dark')}
+                  className={`p-3 rounded-xl border text-center text-xs font-extrabold flex items-center justify-center space-x-2 transition-all ${
+                    themeMode === 'dark'
+                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-md'
+                      : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Moon className="w-4 h-4" />
+                  <span>Dark Mode</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggleTheme('light')}
+                  className={`p-3 rounded-xl border text-center text-xs font-extrabold flex items-center justify-center space-x-2 transition-all ${
+                    themeMode === 'light'
+                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-md'
+                      : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Sun className="w-4 h-4" />
+                  <span>Light Mode</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Sidebar View Mode Options */}
+            <div className="space-y-2 pt-1">
+              <label className="text-xs font-bold text-slate-300">Sidebar View Mode</label>
               <button
                 onClick={() => updateSidebarMode('full')}
-                className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'full' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
               >
@@ -277,7 +337,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
               <button
                 onClick={() => updateSidebarMode('icons')}
-                className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'icons' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
               >
@@ -287,7 +347,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
               <button
                 onClick={() => updateSidebarMode('hover')}
-                className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'hover' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
               >

@@ -1,59 +1,57 @@
-import { supabase } from '../lib/supabase';
-import { Member, Organization, OrgMember, UserProfileExtended, UserRole, ScoringConfig } from '../types';
-import { scoreMember, DEFAULTS } from '../lib/scoringEngine';
+import { createClient } from '@supabase/supabase-js';
+import { Member, Organization, OrgMember, UserProfileExtended, OutreachTemplate } from '../types';
+import { scoreMember } from '../lib/scoringEngine';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://oleckbfrkpmoikpkjcpa.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface OutreachLogRecord {
-  id?: string;
-  user_id?: string;
+  user_id: string;
   org_id?: string;
   member_name: string;
   phone: string;
-  status: 'sent' | 'pending' | 'failed' | 'skipped';
+  status: 'pending' | 'sent' | 'failed' | 'skipped';
   message: string;
-  sent_at: string;
-}
-
-export interface ImportLogRecord {
-  id?: string;
-  org_id: string;
-  user_id: string;
-  file_name?: string;
-  member_count: number;
-  imported_at?: string;
-}
-
-function generate6DigitCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  sent_at?: string;
 }
 
 export const supabaseService = {
-  // --- UNIQUE 6-DIGIT CODE GENERATION ---
+  // --- 6-DIGIT ORG CODE GENERATION & VERIFICATION ---
   async generateUnique6DigitCode(): Promise<string> {
-    let attempts = 0;
-    while (attempts < 10) {
-      const candidate = generate6DigitCode();
+    for (let attempts = 0; attempts < 10; attempts++) {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
       const { data } = await supabase
         .from('organizations')
         .select('id')
-        .eq('code', candidate)
+        .eq('code', code)
         .maybeSingle();
 
-      if (!data) return candidate;
-      attempts++;
+      if (!data) return code;
     }
-    return (Date.now() % 1000000).toString().padStart(6, '0');
+    return Math.floor(100000 + Math.random() * 900000).toString();
   },
 
-  // --- ORGANIZATION MANAGEMENT ---
-  async createOrganization(
-    name: string,
-    chapterName: string,
-    city: string,
-    userId: string,
-    userEmail?: string
-  ): Promise<{ res: { org: Organization; member: OrgMember } | null; error?: string }> {
+  async createOrganization(name: string, chapterName: string, city: string, userId: string, userEmail?: string): Promise<{ org: Organization; member: OrgMember } | null> {
     try {
       const code = await this.generateUnique6DigitCode();
+
+      // 1. Try server-side atomic RPC function
+      const { data: rpcData, error: rpcError } = await supabase.rpc('create_bni_organization', {
+        p_name: name,
+        p_chapter_name: chapterName,
+        p_city: city,
+        p_user_id: userId,
+        p_user_email: userEmail || '',
+        p_code: code
+      });
+
+      if (!rpcError && rpcData && rpcData.org && rpcData.member) {
+        return { org: rpcData.org, member: rpcData.member };
+      }
+
+      // 2. Direct table fallback
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .insert([{
@@ -61,122 +59,108 @@ export const supabaseService = {
           chapter_name: chapterName,
           city,
           code,
-          created_by: userId,
-          green_threshold: DEFAULTS.trafficLight.green,
-          amber_threshold: DEFAULTS.trafficLight.amber,
-          red_threshold: DEFAULTS.trafficLight.red,
-          custom_signature: 'Keep the momentum going! 💪',
-          custom_scoring: DEFAULTS,
+          created_by: userId
         }])
         .select()
         .single();
 
-      if (orgError || !orgData) {
-        console.error('Create org error:', orgError);
-        return { res: null, error: orgError?.message || 'Database error creating organization.' };
-      }
+      if (orgError || !orgData) throw orgError;
 
-      // Add user as owner in org_members
-      const { data: memData, error: memError } = await supabase
+      const { data: memberData, error: memberError } = await supabase
         .from('org_members')
         .insert([{
           org_id: orgData.id,
           user_id: userId,
           user_email: userEmail || '',
-          role: 'owner',
+          role: 'owner'
         }])
         .select()
         .single();
 
-      if (memError || !memData) {
-        console.error('Create org member error:', memError);
-        return { res: null, error: memError?.message || 'Error assigning org owner role.' };
-      }
+      if (memberError || !memberData) throw memberError;
 
-      // Seed chapter_settings table row by default
-      try {
-        await supabase.from('chapter_settings').upsert({
-          user_id: userId,
-          org_id: orgData.id,
-          green_threshold: DEFAULTS.trafficLight.green,
-          amber_threshold: DEFAULTS.trafficLight.amber,
-          red_threshold: DEFAULTS.trafficLight.red,
-          custom_signature: 'Keep the momentum going! 💪',
-          scoring_config: DEFAULTS,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
-      } catch (e) {
-        // Table optional fallback
-      }
-
-      return { res: { org: orgData as Organization, member: memData as OrgMember } };
-    } catch (e: any) {
-      console.error('Create org exception:', e);
-      return { res: null, error: e.message || 'Network exception creating organization.' };
+      return { org: orgData, member: memberData };
+    } catch (e) {
+      console.error('Error creating org:', e);
+      return null;
     }
   },
 
-  async joinOrganization(
-    code: string,
-    userId: string,
-    userEmail?: string
-  ): Promise<{ res: { org: Organization; member: OrgMember } | null; error?: string }> {
+  async joinOrganization(code: string, userId: string, userEmail?: string): Promise<{ org: Organization; member: OrgMember } | { error: string } | null> {
+    return this.joinOrganizationByCode(code, userId, userEmail);
+  },
+
+  async joinOrganizationByCode(code: string, userId: string, userEmail?: string): Promise<{ org: Organization; member: OrgMember } | { error: string } | null> {
     try {
+      const cleanCode = code.trim();
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .select('*')
-        .eq('code', code.trim())
-        .single();
+        .eq('code', cleanCode)
+        .maybeSingle();
 
       if (orgError || !orgData) {
-        console.error('Join org: invalid code', orgError);
-        return { res: null, error: 'Invalid 6-digit code. Organization not found.' };
+        return { error: 'Invalid 6-digit organization code. Please check and try again.' };
       }
 
-      const { data: memData, error: memError } = await supabase
+      const { data: existingMember } = await supabase
         .from('org_members')
-        .upsert([{
+        .select('*')
+        .eq('org_id', orgData.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existingMember) {
+        return { org: orgData, member: existingMember };
+      }
+
+      const { data: newMember, error: memberError } = await supabase
+        .from('org_members')
+        .insert([{
           org_id: orgData.id,
           user_id: userId,
           user_email: userEmail || '',
-          role: 'member',
-        }], { onConflict: 'org_id, user_id' })
+          role: 'member'
+        }])
         .select()
         .single();
 
-      if (memError || !memData) {
-        console.error('Join org member error:', memError);
-        return { res: null, error: memError?.message || 'Error joining org member.' };
-      }
+      if (memberError || !newMember) throw memberError;
 
-      return { res: { org: orgData as Organization, member: memData as OrgMember } };
+      return { org: orgData, member: newMember };
     } catch (e: any) {
-      console.error('Join org exception:', e);
-      return { res: null, error: e.message || 'Exception joining organization.' };
+      console.error('Error joining org by code:', e);
+      return { error: e.message || 'Failed to join organization.' };
     }
   },
 
   async fetchUserOrganization(userId: string): Promise<{ org: Organization; member: OrgMember } | null> {
     try {
-      const { data: memData, error: memError } = await supabase
+      const { data: memberData, error: memberError } = await supabase
         .from('org_members')
-        .select('*, org:organizations(*)')
+        .select('*, organization:organizations(*)')
         .eq('user_id', userId)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (memError || !memData || !memData.org) return null;
+      if (memberError || !memberData || !memberData.organization) {
+        return null;
+      }
 
       return {
-        org: memData.org as Organization,
+        org: memberData.organization,
         member: {
-          id: memData.id,
-          org_id: memData.org_id,
-          user_id: memData.user_id,
-          user_email: memData.user_email,
-          role: memData.role as UserRole,
-        },
+          id: memberData.id,
+          org_id: memberData.org_id,
+          user_id: memberData.user_id,
+          user_email: memberData.user_email,
+          role: memberData.role,
+          created_at: memberData.created_at
+        }
       };
     } catch (e) {
+      console.error('Error fetching user org:', e);
       return null;
     }
   },
@@ -186,62 +170,92 @@ export const supabaseService = {
       const { data, error } = await supabase
         .from('org_members')
         .select('*')
-        .eq('org_id', orgId);
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true });
 
       if (error || !data) return [];
-      return data as OrgMember[];
+      return data;
     } catch (e) {
+      console.error('Error fetching org members:', e);
       return [];
     }
   },
 
-  async updateOrgMemberRole(orgId: string, targetUserId: string, newRole: UserRole): Promise<boolean> {
+  async updateOrgMemberRole(orgId: string, userId: string, newRole: string): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('org_members')
         .update({ role: newRole })
         .eq('org_id', orgId)
-        .eq('user_id', targetUserId);
+        .eq('user_id', userId);
 
       return !error;
     } catch (e) {
+      console.error('Error updating member role:', e);
       return false;
     }
   },
 
-  // --- USER PROFILES ---
+  // --- USER PROFILE METHODS ---
   async fetchUserProfile(userId: string): Promise<UserProfileExtended | null> {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (error || !data) return null;
-      return data as UserProfileExtended;
+      return {
+        user_id: data.user_id,
+        full_name: data.full_name || '',
+        phone: data.phone || '',
+        business_category: data.business_category || data.chapter_role || '',
+        bio: data.bio || '',
+        avatar_url: data.avatar_url || '',
+        is_profile_completed: data.is_profile_completed ?? true,
+        updated_at: data.updated_at,
+      };
     } catch (e) {
+      console.error('Error fetching user profile:', e);
       return null;
     }
   },
 
-  async saveUserProfile(profile: UserProfileExtended): Promise<boolean> {
+  async saveUserProfile(profile: Partial<UserProfileExtended> & { user_id: string }): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          user_id: profile.user_id,
-          full_name: profile.full_name,
-          phone: profile.phone || '',
-          avatar_url: profile.avatar_url || '',
-          business_category: profile.business_category || '',
-          bio: profile.bio || '',
-          is_profile_completed: true,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+      const p = profile as any;
+      const { error: rpcError } = await supabase.rpc('save_user_profile', {
+        p_user_id: profile.user_id,
+        p_full_name: profile.full_name || '',
+        p_phone: profile.phone || '',
+        p_chapter_role: p.bni_chapter || '',
+        p_business_category: p.category || '',
+        p_avatar_url: profile.avatar_url || '',
+        p_is_profile_completed: profile.is_profile_completed ?? true,
+      });
 
-      return !error;
+      if (rpcError) {
+        console.warn('RPC profile save warning, executing fallback upsert:', rpcError);
+        const { error } = await supabase
+          .from('profiles')
+          .upsert({
+            user_id: profile.user_id,
+            full_name: profile.full_name || '',
+            phone: profile.phone || '',
+            chapter_role: p.bni_chapter || '',
+            business_category: p.category || '',
+            avatar_url: profile.avatar_url || '',
+            is_profile_completed: profile.is_profile_completed ?? true,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
+
+        return !error;
+      }
+
+      return true;
     } catch (e) {
+      console.error('Error saving user profile:', e);
       return false;
     }
   },
@@ -257,26 +271,31 @@ export const supabaseService = {
 
       if (error || !data) return [];
 
-      return data.map((row: any) => scoreMember({
-        id: row.id,
-        org_id: row.org_id,
-        Name: row.name,
-        Phone: row.phone || '',
-        Email: row.email || '',
-        P: row.present || 0,
-        A: row.absent || 0,
-        S: row.substitute || 0,
-        M: row.medical || 0,
-        RGT: row.referrals_given || 0,
-        V: row.visitors || 0,
-        TYFCB: Number(row.tyfcb) || 0,
-        CEU: Number(row.ceu) || 0,
-        OneToOnes: Number(row.one_to_ones) || 0,
-        Sponsors: row.sponsors || 0,
-        JoinDate: row.join_date || '',
-        batch_name: row.batch_name || '',
-        raw_data: row.raw_data || {},
-      }));
+      return data.map((row: any) => {
+        const mem = scoreMember({
+          id: row.id,
+          org_id: row.org_id,
+          Name: row.name,
+          Phone: row.phone || '',
+          Email: row.email || '',
+          P: row.present || 0,
+          A: row.absent || 0,
+          S: row.substitute || 0,
+          M: row.medical || 0,
+          RGT: row.referrals_given || 0,
+          V: row.visitors || 0,
+          TYFCB: Number(row.tyfcb) || 0,
+          CEU: Number(row.ceu) || 0,
+          OneToOnes: Number(row.one_to_ones) || 0,
+          Sponsors: row.sponsors || 0,
+          JoinDate: row.join_date || '',
+          batch_name: row.batch_name || '',
+          raw_data: row.raw_data || {},
+        });
+        (mem as any).created_at = row.created_at;
+        (mem as any).import_log_id = row.import_log_id;
+        return mem;
+      });
     } catch (e) {
       return [];
     }
@@ -284,44 +303,64 @@ export const supabaseService = {
 
   async saveSingleMember(member: Member, orgId: string, userId: string): Promise<Member | null> {
     try {
-      const row = {
-        ...(member.id ? { id: member.id } : {}),
-        org_id: orgId,
-        user_id: userId,
-        name: member.Name,
-        chapter: member.Chapter || 'Influencers',
-        phone: member.Phone || '',
-        email: member.Email || '',
-        present: member.P || 0,
-        absent: member.A || 0,
-        substitute: member.S || 0,
-        medical: member.M || 0,
-        referrals_given: member.RGT || 0,
-        visitors: member.V || 0,
-        tyfcb: member.TYFCB || 0,
-        ceu: member.CEU || 0,
-        one_to_ones: member.OneToOnes || 0,
-        sponsors: member.Sponsors || 0,
-        score: member.score || 0,
-        traffic_light: member.trafficLight?.label || 'Grey',
-        batch_name: member.batch_name || '',
-        raw_data: member.raw_data || {},
-        updated_at: new Date().toISOString(),
-      };
+      const { data, error } = await supabase.rpc('save_single_bni_member', {
+        p_org_id: orgId,
+        p_user_id: userId,
+        p_member: member,
+      });
 
-      const { data, error } = await supabase
-        .from('members')
-        .upsert(row, { onConflict: 'org_id,name' })
-        .select()
-        .single();
+      if (error || !data) {
+        const row = {
+          ...(member.id && !member.id.startsWith('temp_') ? { id: member.id } : {}),
+          org_id: orgId,
+          user_id: userId,
+          name: member.Name,
+          chapter: member.Chapter || 'Influencers',
+          phone: member.Phone || '',
+          email: member.Email || '',
+          present: member.P || 0,
+          absent: member.A || 0,
+          substitute: member.S || 0,
+          medical: member.M || 0,
+          referrals_given: member.RGT || 0,
+          visitors: member.V || 0,
+          tyfcb: member.TYFCB || 0,
+          ceu: member.CEU || 0,
+          one_to_ones: member.OneToOnes || 0,
+          sponsors: member.Sponsors || 0,
+          score: member.score || 0,
+          traffic_light: member.trafficLight?.label || 'Grey',
+          updated_at: new Date().toISOString(),
+        };
 
-      if (error || !data) return member;
+        const { data: upsertData } = await supabase.from('members').upsert(row).select().single();
+        if (upsertData) {
+          return scoreMember({
+            id: upsertData.id,
+            org_id: upsertData.org_id,
+            Name: upsertData.name,
+            Phone: upsertData.phone || '',
+            Email: upsertData.email || '',
+            P: upsertData.present || 0,
+            A: upsertData.absent || 0,
+            S: upsertData.substitute || 0,
+            M: upsertData.medical || 0,
+            RGT: upsertData.referrals_given || 0,
+            V: upsertData.visitors || 0,
+            TYFCB: Number(upsertData.tyfcb) || 0,
+            CEU: Number(upsertData.ceu) || 0,
+            OneToOnes: Number(upsertData.one_to_ones) || 0,
+            Sponsors: upsertData.sponsors || 0,
+            batch_name: upsertData.batch_name || '',
+          });
+        }
+        return null;
+      }
 
       return scoreMember({
         id: data.id,
         org_id: data.org_id,
         Name: data.name,
-        Chapter: data.chapter || member.Chapter || 'Influencers',
         Phone: data.phone || '',
         Email: data.email || '',
         P: data.present || 0,
@@ -334,11 +373,24 @@ export const supabaseService = {
         CEU: Number(data.ceu) || 0,
         OneToOnes: Number(data.one_to_ones) || 0,
         Sponsors: data.sponsors || 0,
-        batch_name: data.batch_name || member.batch_name,
-        raw_data: data.raw_data || member.raw_data,
+        batch_name: data.batch_name || '',
       });
     } catch (e) {
-      return member;
+      return null;
+    }
+  },
+
+  async deleteMember(memberId: string, orgId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('members')
+        .delete()
+        .eq('id', memberId)
+        .eq('org_id', orgId);
+
+      return !error;
+    } catch (e) {
+      return false;
     }
   },
 
@@ -353,28 +405,38 @@ export const supabaseService = {
     try {
       const finalBatchName = batchName || fileName || `Report Batch - ${new Date().toLocaleDateString()}`;
 
+      const safeNum = (val: any): number => {
+        if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+        if (!val) return 0;
+        const cleaned = String(val).replace(/[^0-9.-]/g, '');
+        const parsed = parseFloat(cleaned);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+
+      const now = new Date().toISOString();
       const rows = members.map(m => ({
         org_id: orgId,
-        user_id: userId,
-        name: m.Name ? m.Name.trim() : 'Unnamed Member',
-        chapter: m.Chapter || 'Influencers',
-        phone: m.Phone || '',
-        email: m.Email || '',
-        present: m.P || 0,
-        absent: m.A || 0,
-        substitute: m.S || 0,
-        medical: m.M || 0,
-        referrals_given: m.RGT || 0,
-        visitors: m.V || 0,
-        tyfcb: m.TYFCB || 0,
-        ceu: m.CEU || 0,
-        one_to_ones: m.OneToOnes || 0,
-        sponsors: m.Sponsors || 0,
-        score: m.score || 0,
-        traffic_light: m.trafficLight?.label || 'Grey',
+        user_id: userId || '',
+        name: m.Name ? String(m.Name).trim() : 'Unnamed Member',
+        chapter: m.Chapter ? String(m.Chapter).trim() : 'Influencers',
+        phone: m.Phone ? String(m.Phone).trim() : '',
+        email: m.Email ? String(m.Email).trim() : '',
+        present: safeNum(m.P),
+        absent: safeNum(m.A),
+        substitute: safeNum(m.S),
+        medical: safeNum(m.M),
+        referrals_given: safeNum(m.RGT),
+        visitors: safeNum(m.V),
+        tyfcb: safeNum(m.TYFCB),
+        ceu: safeNum(m.CEU),
+        one_to_ones: safeNum(m.OneToOnes),
+        sponsors: safeNum(m.Sponsors),
+        score: safeNum(m.score),
+        traffic_light: m.trafficLight?.label ? String(m.trafficLight.label).trim() : 'Grey',
         batch_name: finalBatchName,
-        raw_data: m.raw_data || {},
-        updated_at: new Date().toISOString(),
+        raw_data: typeof m.raw_data === 'object' && m.raw_data !== null ? m.raw_data : {},
+        created_at: now,
+        updated_at: now,
       }));
 
       // Ensure every single member row from the Excel file is preserved 100% without dropping duplicates
@@ -403,31 +465,67 @@ export const supabaseService = {
         else if (label === 'Amber') amberCount++;
         else if (label === 'Red') redCount++;
         else greyCount++;
-        totalScoreSum += m.score || 0;
+        totalScoreSum += safeNum(m.score);
       });
 
       const avgScore = members.length > 0 ? Math.round(totalScoreSum / members.length) : 0;
 
-      // Ultra-fast single-pass parallel execution for members & import log
-      const upsertPromise = supabase
-        .from('members')
-        .upsert(uniqueRows, { onConflict: 'org_id,name' });
-
-      const logPromise = this.saveImportLog({
-        org_id: orgId,
-        user_id: userId,
-        file_name: fileName || 'BNI_Traffic_Lights_Report.xlsx',
-        batch_name: finalBatchName,
-        total_records: members.length,
-        green_count: greenCount,
-        amber_count: amberCount,
-        red_count: redCount,
-        grey_count: greyCount,
-        avg_score: avgScore,
-        file_data: fileData || '',
+      // 1. Execute Supabase Database Function (RPC) server-side for atomic execution
+      const { error: rpcErr } = await supabase.rpc('import_bni_report', {
+        p_org_id: orgId,
+        p_user_id: userId || '',
+        p_batch_name: finalBatchName,
+        p_file_name: fileName || 'BNI_Traffic_Lights_Report.xlsx',
+        p_file_data: fileData || '',
+        p_members: rows,
       });
 
-      await Promise.all([upsertPromise, logPromise]);
+      if (rpcErr) {
+        console.warn('RPC import warning, running fallback batch insert:', rpcErr);
+
+        // Fallback: Clear previous records for this org & batch to prevent constraint conflicts
+        await supabase
+          .from('members')
+          .delete()
+          .eq('org_id', orgId)
+          .eq('batch_name', finalBatchName);
+
+        // Direct insert of all member rows into public.members table
+        const chunkSize = 50;
+        for (let i = 0; i < uniqueRows.length; i += chunkSize) {
+          const chunk = uniqueRows.slice(i, i + chunkSize);
+          const { error: membersErr } = await supabase
+            .from('members')
+            .insert(chunk);
+
+          if (membersErr) {
+            console.warn('Chunk insert warning, executing row-by-row fallback:', membersErr);
+            for (const row of chunk) {
+              try {
+                await supabase.from('members').insert(row);
+              } catch (e) {
+                console.error('Single row insert error:', row.name, e);
+              }
+            }
+          }
+        }
+
+        // Save import log entry fallback
+        await this.saveImportLog({
+          org_id: orgId,
+          user_id: userId,
+          file_name: fileName || 'BNI_Traffic_Lights_Report.xlsx',
+          batch_name: finalBatchName,
+          total_records: members.length,
+          green_count: greenCount,
+          amber_count: amberCount,
+          red_count: redCount,
+          grey_count: greyCount,
+          avg_score: avgScore,
+          file_data: fileData || '',
+        });
+      }
+
       return true;
     } catch (e) {
       console.error('upsertMembers error:', e);
@@ -435,28 +533,17 @@ export const supabaseService = {
     }
   },
 
-  async deleteMember(memberId: string, orgId: string): Promise<boolean> {
-    try {
-      const { error } = await supabase
-        .from('members')
-        .delete()
-        .eq('id', memberId)
-        .eq('org_id', orgId);
-
-      return !error;
-    } catch (e) {
-      return false;
-    }
-  },
-
   async purgeAllMembers(orgId: string): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('members')
-        .delete()
-        .eq('org_id', orgId);
+      const { error } = await supabase.rpc('purge_all_bni_chapter_data', {
+        p_org_id: orgId,
+      });
 
-      return !error;
+      if (error) {
+        await supabase.from('members').delete().eq('org_id', orgId);
+        await supabase.from('import_logs').delete().eq('org_id', orgId);
+      }
+      return true;
     } catch (e) {
       return false;
     }
@@ -525,7 +612,7 @@ export const supabaseService = {
     try {
       const { error } = await supabase.from('outreach_logs').insert([{
         user_id: log.user_id,
-        org_id: log.org_id,
+        org_id: log.org_id || null,
         member_name: log.member_name,
         phone: log.phone || '',
         status: log.status,
@@ -535,6 +622,28 @@ export const supabaseService = {
       return !error;
     } catch (e) {
       return false;
+    }
+  },
+
+  async fetchOutreachLogs(orgId?: string): Promise<OutreachLogRecord[]> {
+    try {
+      let query = supabase.from('outreach_logs').select('*');
+      if (orgId) {
+        query = query.eq('org_id', orgId);
+      }
+      const { data, error } = await query.order('sent_at', { ascending: false });
+      if (error || !data) return [];
+      return data.map((r: any) => ({
+        user_id: r.user_id,
+        org_id: r.org_id,
+        member_name: r.member_name,
+        phone: r.phone || '',
+        status: r.status,
+        message: r.message || '',
+        sent_at: r.sent_at,
+      }));
+    } catch (e) {
+      return [];
     }
   },
 
@@ -593,21 +702,137 @@ export const supabaseService = {
 
   async deleteImportBatch(orgId: string, batchName: string, logId?: string): Promise<boolean> {
     try {
-      await supabase
-        .from('members')
-        .delete()
-        .eq('org_id', orgId)
-        .eq('batch_name', batchName);
+      const { error } = await supabase.rpc('delete_bni_report_batch', {
+        p_org_id: orgId,
+        p_batch_name: batchName,
+        p_log_id: logId || '',
+      });
 
-      if (logId) {
-        await supabase.from('import_logs').delete().eq('id', logId);
+      if (error) {
+        await supabase.from('members').delete().eq('org_id', orgId).eq('batch_name', batchName);
+        if (logId) {
+          await supabase.from('import_logs').delete().eq('id', logId);
+        } else {
+          await supabase.from('import_logs').delete().eq('org_id', orgId).eq('batch_name', batchName);
+        }
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  // --- OUTREACH TEMPLATES CRUD ---
+  async fetchOutreachTemplates(orgId?: string): Promise<OutreachTemplate[]> {
+    try {
+      let query = supabase.from('outreach_templates').select('*');
+      if (orgId) {
+        query = query.or(`org_id.eq.${orgId},is_default.eq.true`);
       } else {
-        await supabase.from('import_logs').delete().eq('org_id', orgId).eq('batch_name', batchName);
+        query = query.eq('is_default', true);
       }
 
-      return true;
+      const { data, error } = await query.order('created_at', { ascending: true });
+      if (error || !data || data.length === 0) {
+        return DEFAULT_OUTREACH_TEMPLATES;
+      }
+      return data;
+    } catch (e) {
+      return DEFAULT_OUTREACH_TEMPLATES;
+    }
+  },
+
+  async saveOutreachTemplate(template: Partial<OutreachTemplate>): Promise<boolean> {
+    try {
+      const row = {
+        ...(template.id && !template.id.startsWith('temp_') && !template.id.startsWith('default_') ? { id: template.id } : {}),
+        org_id: template.org_id || null,
+        name: template.name || 'Custom Outreach Template',
+        status_target: template.status_target || 'All',
+        message_template: template.message_template || '',
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from('outreach_templates').upsert(row);
+      return !error;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async deleteOutreachTemplate(templateId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.from('outreach_templates').delete().eq('id', templateId);
+      return !error;
     } catch (e) {
       return false;
     }
   }
 };
+
+export const DEFAULT_OUTREACH_TEMPLATES: OutreachTemplate[] = [
+  {
+    id: 'default_green',
+    name: '🟢 Green Tier - Leadership Celebration',
+    status_target: 'Green',
+    message_template: `Dear {{name}} 👋
+
+Congratulations on achieving a score of *{{score}}/100* ({{traffic_light}} Tier) in BNI {{chapter}}! 🌟
+
+Your outstanding commitment with *{{present}}* attendances and *{{referrals}}* referrals is driving our chapter forward. Keep leading by example! 💪`,
+    is_default: true,
+  },
+  {
+    id: 'default_amber',
+    name: '🟡 Amber Tier - Green Level-Up Plan',
+    status_target: 'Amber',
+    message_template: `Hi {{name}} 👋
+
+Your current PALMS score is *{{score}}/100* ({{traffic_light}} Tier) in BNI {{chapter}}.
+
+You are just a few points away from Green! 🚀
+Completing 1 CEU unit or booking 1 One-to-One this week will elevate your score to Green status.
+
+Let us get you to Green together! 💪`,
+    is_default: true,
+  },
+  {
+    id: 'default_red',
+    name: '🔴 Red Tier - Support & Focus Nudge',
+    status_target: 'Red',
+    message_template: `Hello {{name}} 👋
+
+We noticed your current PALMS score is *{{score}}/100* ({{traffic_light}} Tier) in BNI {{chapter}}.
+
+We value your membership and want to support your business growth. Let us schedule a quick 1-to-1 this week to discuss how we can boost your score together! 🤝`,
+    is_default: true,
+  },
+  {
+    id: 'default_grey',
+    name: '⚪ Grey Tier - Urgent Chapter Engagement',
+    status_target: 'Grey',
+    message_template: `Dear {{name}} 👋
+
+Your current PALMS score is *{{score}}/100* ({{traffic_light}} Tier). We miss your active participation in BNI {{chapter}}!
+
+Please connect with your Vice President or Mentor this week so we can help reactivate your business networking momentum. 🙏`,
+    is_default: true,
+  },
+  {
+    id: 'default_all',
+    name: '🚀 General BNI Performance Update',
+    status_target: 'All',
+    message_template: `Hi {{name}} 👋
+
+Here is your latest BNI {{chapter}} performance report:
+
+• PALMS Score: *{{score}}/100* ({{traffic_light}} Tier)
+• Referrals Given: *{{referrals}}*
+• TYFCB: *{{tyfcb}}*
+• One-to-Ones: *{{one_to_ones}}*
+• CEUs: *{{ceu}}*
+
+Thank you for your continued contribution to our chapter! 🌟`,
+    is_default: true,
+  }
+];

@@ -8,6 +8,7 @@ import { SidebarLayout, NavigationTab } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { ImportModal } from './components/ImportModal';
 import { NudgeSender } from './components/NudgeSender';
+import { TemplateManagerPage } from './components/TemplateManagerPage';
 import { OrganizationTab } from './components/OrganizationTab';
 import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
@@ -20,8 +21,24 @@ export const AppContent: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const { showToast } = useToast();
 
-  // App & Org State
-  const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
+  // App & Org State (Persisted in URL Hash & localStorage)
+  const [activeTab, setActiveTabState] = useState<NavigationTab>(() => {
+    const hash = window.location.hash.replace('#', '') as NavigationTab;
+    if (['dashboard', 'import', 'nudges', 'templates', 'org', 'profile', 'settings'].includes(hash)) {
+      return hash;
+    }
+    const stored = localStorage.getItem('bni_active_tab') as NavigationTab;
+    if (['dashboard', 'import', 'nudges', 'templates', 'org', 'profile', 'settings'].includes(stored)) {
+      return stored;
+    }
+    return 'dashboard';
+  });
+
+  const setActiveTab = (tab: NavigationTab) => {
+    setActiveTabState(tab);
+    window.location.hash = tab;
+    localStorage.setItem('bni_active_tab', tab);
+  };
   
   const [org, setOrg] = useState<Organization | null>(() => {
     try {
@@ -58,11 +75,13 @@ export const AppContent: React.FC = () => {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [selectedNudgeReport, setSelectedNudgeReport] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   // 1. On Auth Load: Fetch Org & Profile with background revalidation & sessionStorage sync
   useEffect(() => {
     if (!user?.uid) {
       setIsInitializing(false);
+      setIsDataLoaded(true);
       return;
     }
 
@@ -133,6 +152,7 @@ export const AppContent: React.FC = () => {
         console.error('Initialization error:', err);
       } finally {
         setIsInitializing(false);
+        setIsDataLoaded(true);
       }
     };
 
@@ -173,19 +193,7 @@ export const AppContent: React.FC = () => {
   const handleImportMembers = async (batchName: string, imported: Member[], fileName: string, fileData?: string) => {
     setActiveTab('dashboard'); // Auto-close import modal immediately!
     if (org?.id && user?.uid) {
-      // 1. INSTANT OPTIMISTIC STATE UPDATE (0ms LATENCY!)
-      const taggedMembers = imported.map((m, idx) => ({
-        ...m,
-        id: m.id || `temp_${Date.now()}_${idx}`,
-        batch_name: batchName,
-        org_id: org.id,
-      }));
-
-      setMembers(prev => {
-        const otherMembers = prev.filter(m => m.batch_name !== batchName);
-        return [...otherMembers, ...taggedMembers];
-      });
-
+      // 1. INSTANT OPTIMISTIC UI RENDER (0ms LATENCY! Report card shows immediately without refresh!)
       const newLog: ImportLog = {
         id: `log_${Date.now()}`,
         org_id: org.id,
@@ -202,18 +210,33 @@ export const AppContent: React.FC = () => {
         created_at: new Date().toISOString(),
       };
 
+      const taggedMembers = imported.map((m, idx) => ({
+        ...m,
+        id: m.id || `temp_${Date.now()}_${idx}`,
+        batch_name: batchName,
+        org_id: org.id,
+      }));
+
+      // Render new report card & members ON SCREEN IMMEDIATELY
       setImportLogs(prev => [newLog, ...prev.filter(l => l.batch_name !== batchName)]);
+      setMembers(prev => [...prev.filter(m => m.batch_name !== batchName), ...taggedMembers]);
+
       showToast(`Successfully imported report "${batchName}" with ${imported.length} members!`, 'success');
 
-      // 2. Non-blocking background Supabase DB sync
+      // 2. Background database save & sync
       setIsSyncing(true);
-      try {
-        await supabaseService.upsertMembers(imported, org.id, user.uid, fileName, batchName, fileData);
-      } catch (err) {
-        console.error('Background import sync error:', err);
-      } finally {
-        setIsSyncing(false);
-      }
+      const success = await supabaseService.upsertMembers(imported, org.id, user.uid, fileName, batchName, fileData);
+
+      // Revalidate with fresh DB IDs
+      const [dbMembers, dbLogs] = await Promise.all([
+        supabaseService.fetchMembers(org.id),
+        supabaseService.fetchImportLogs(org.id),
+      ]);
+
+      if (dbMembers && dbMembers.length > 0) setMembers(dbMembers);
+      if (dbLogs && dbLogs.length > 0) setImportLogs(dbLogs);
+
+      setIsSyncing(false);
     }
   };
 
@@ -250,13 +273,49 @@ export const AppContent: React.FC = () => {
     setIsSyncing(false);
   };
 
-  // Loading Screen
-  if (authLoading || (isInitializing && !org)) {
+  // Full-Screen Skeleton Loading Screen (Waits until initial DB fetch completes)
+  if (authLoading || isInitializing || !isDataLoaded) {
     return (
-      <div className="min-h-screen bg-[#060a12] flex items-center justify-center">
-        <div className="flex flex-col items-center space-y-3">
-          <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
-          <p className="text-xs font-semibold text-slate-400">Loading BNI Chapter Operations...</p>
+      <div className="min-h-screen bg-[#060a12] text-slate-100 flex flex-col p-4 md:p-8 space-y-6 animate-pulse">
+        {/* Skeleton Top Nav Bar */}
+        <div className="flex items-center justify-between py-3 px-6 rounded-2xl bg-slate-900/60 border border-white/5">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-slate-800/80" />
+            <div className="h-5 bg-slate-800/80 rounded-md w-40" />
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="h-8 bg-slate-800/60 rounded-xl w-24" />
+            <div className="w-8 h-8 rounded-full bg-slate-800/80" />
+          </div>
+        </div>
+
+        {/* Skeleton Stat Cards Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="p-5 rounded-2xl bg-slate-900/60 border border-white/5 space-y-2">
+              <div className="h-3.5 bg-slate-800/50 rounded-md w-1/2" />
+              <div className="h-7 bg-slate-800/80 rounded-lg w-3/4" />
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton Report Cards Grid */}
+        <div className="space-y-3 pt-2">
+          <div className="h-6 bg-slate-800/80 rounded-md w-48" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="p-6 rounded-3xl bg-slate-900/60 border border-white/5 space-y-4">
+                <div className="h-5 bg-slate-800/80 rounded-md w-2/3" />
+                <div className="h-3 bg-slate-800/50 rounded-md w-1/2" />
+                <div className="grid grid-cols-4 gap-2 pt-2">
+                  <div className="h-8 bg-slate-800/40 rounded-lg" />
+                  <div className="h-8 bg-slate-800/40 rounded-lg" />
+                  <div className="h-8 bg-slate-800/40 rounded-lg" />
+                  <div className="h-8 bg-slate-800/40 rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -286,6 +345,7 @@ export const AppContent: React.FC = () => {
         setActiveTab(tab);
       }}
       memberCount={members.length}
+      reportCount={importLogs.length}
       org={org}
       orgMember={orgMember}
       userProfile={userProfile}
@@ -305,12 +365,15 @@ export const AppContent: React.FC = () => {
           onDeleteBatch={handleDeleteBatch}
           onPurgeAll={handlePurgeAll}
           isSyncing={isSyncing}
+          isInitialLoading={isInitializing}
+          isDataLoaded={isDataLoaded}
         />
       )}
 
       {activeTab === 'import' && (
         <div className="max-w-3xl mx-auto">
           <ImportModal
+            existingBatchNames={importLogs.map(l => l.batch_name).filter((b): b is string => Boolean(b))}
             onImportComplete={handleImportMembers}
             onClose={() => setActiveTab('dashboard')}
           />
@@ -324,6 +387,14 @@ export const AppContent: React.FC = () => {
           initialReportName={selectedNudgeReport}
           customSignature={org.custom_signature}
           orgId={org.id}
+          onOpenTemplateManager={() => setActiveTab('templates')}
+        />
+      )}
+
+      {activeTab === 'templates' && (
+        <TemplateManagerPage
+          orgId={org.id}
+          onSelectTemplate={() => setActiveTab('nudges')}
         />
       )}
 

@@ -37,6 +37,17 @@ export interface UserProfileExtended {
   updated_at?: string;
 }
 
+export interface OutreachTemplate {
+  id: string;
+  org_id?: string;
+  name: string;
+  status_target: 'All' | 'Green' | 'Amber' | 'Red' | 'Grey';
+  message_template: string;
+  is_default?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ThresholdTier {
   t: number;
   pts: number;

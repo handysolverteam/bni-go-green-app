@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Member, ImportLog } from '../types';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -21,6 +21,8 @@ interface DashboardProps {
   onDeleteBatch?: (batchName: string, logId?: string) => Promise<void>;
   onPurgeAll: () => Promise<void>;
   isSyncing?: boolean;
+  isInitialLoading?: boolean;
+  isDataLoaded?: boolean;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -34,13 +36,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onDeleteBatch,
   onPurgeAll,
   isSyncing = false,
+  isInitialLoading = false,
+  isDataLoaded = false,
 }) => {
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Green' | 'Amber' | 'Red' | 'Grey'>('All');
   const [sortField, setSortField] = useState<'score' | 'name' | 'attendance'>('score');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-
   // Currently selected Report / Batch view (null = Reports Cards list view)
   const [activeReportName, setActiveReportName] = useState<string | null>(null);
 
@@ -91,6 +94,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     return Array.from(reportMap.values());
   }, [members, importLogs]);
+
+  // Track if empty database state is 100% confirmed to prevent any premature "No Reports" flash
+  const [hasConfirmedEmptyDb, setHasConfirmedEmptyDb] = useState(false);
+
+  useEffect(() => {
+    if (availableReports.length > 0) {
+      setHasConfirmedEmptyDb(true);
+    } else if (isDataLoaded && !isSyncing && !isInitialLoading) {
+      const timer = setTimeout(() => {
+        setHasConfirmedEmptyDb(true);
+      }, 1200);
+      return () => clearTimeout(timer);
+    } else {
+      setHasConfirmedEmptyDb(false);
+    }
+  }, [isDataLoaded, isSyncing, isInitialLoading, availableReports.length]);
 
   // Active report details log object
   const currentReportLog = useMemo(() => {
@@ -284,58 +303,60 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* --- TOP SUMMARY CARDS --- */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
-            <span>{activeReportName ? 'Report Members' : 'Total Reports'}</span>
-            {activeReportName ? <Users className="w-3.5 h-3.5 text-emerald-400" /> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />}
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-white mt-1">
-            {activeReportName ? stats.total : availableReports.length}
-          </div>
-        </GlassCard>
+      {/* --- TOP SUMMARY CARDS (SHOWN ONLY WHEN VIEWING SPECIFIC ACTIVE REPORT) --- */}
+      {Boolean(activeReportName) && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+          <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between">
+            <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+              <span>Report Members</span>
+              <Users className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-white mt-1">
+              {stats.total}
+            </div>
+          </GlassCard>
 
-        <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-emerald-500/20">
-          <div className="text-[11px] font-bold text-emerald-400 flex items-center justify-between">
-            <span>🟢 Green (70+)</span>
-            <Award className="w-3.5 h-3.5 text-emerald-400" />
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-emerald-400 mt-1">{stats.green}</div>
-        </GlassCard>
+          <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-emerald-500/20">
+            <div className="text-[11px] font-bold text-emerald-400 flex items-center justify-between">
+              <span>🟢 Green (70+)</span>
+              <Award className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-emerald-400 mt-1">{stats.green}</div>
+          </GlassCard>
 
-        <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-amber-500/20">
-          <div className="text-[11px] font-bold text-amber-400 flex items-center justify-between">
-            <span>🟡 Amber (50-69)</span>
-            <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-amber-400 mt-1">{stats.amber}</div>
-        </GlassCard>
+          <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-amber-500/20">
+            <div className="text-[11px] font-bold text-amber-400 flex items-center justify-between">
+              <span>🟡 Amber (50-69)</span>
+              <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-amber-400 mt-1">{stats.amber}</div>
+          </GlassCard>
 
-        <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-rose-500/20">
-          <div className="text-[11px] font-bold text-rose-400 flex items-center justify-between">
-            <span>🔴 Red (30-49)</span>
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-rose-400 mt-1">{stats.red}</div>
-        </GlassCard>
+          <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between border-rose-500/20">
+            <div className="text-[11px] font-bold text-rose-400 flex items-center justify-between">
+              <span>🔴 Red (30-49)</span>
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-rose-400 mt-1">{stats.red}</div>
+          </GlassCard>
 
-        <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
-            <span>⚪ Grey (&lt;30)</span>
-            <Users className="w-3.5 h-3.5 text-slate-400" />
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-400 mt-1">{stats.grey}</div>
-        </GlassCard>
+          <GlassCard className="p-3.5 sm:p-4 flex flex-col justify-between">
+            <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+              <span>⚪ Grey (&lt;30)</span>
+              <Users className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-slate-400 mt-1">{stats.grey}</div>
+          </GlassCard>
 
-        <GlassCard glow className="p-3.5 sm:p-4 flex flex-col justify-between border-emerald-500/40">
-          <div className="text-[11px] font-bold text-emerald-400 flex items-center justify-between">
-            <span>Avg Traffic Score</span>
-            <Award className="w-3.5 h-3.5 text-emerald-400" />
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-white mt-1">{stats.avgScore} <span className="text-xs text-slate-400 font-normal">/ 100</span></div>
-        </GlassCard>
-      </div>
+          <GlassCard glow className="p-3.5 sm:p-4 flex flex-col justify-between border-emerald-500/40">
+            <div className="text-[11px] font-bold text-emerald-400 flex items-center justify-between">
+              <span>Avg Traffic Score</span>
+              <Award className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-white mt-1">{stats.avgScore} <span className="text-xs text-slate-400 font-normal">/ 100</span></div>
+          </GlassCard>
+        </div>
+      )}
 
       {/* --- VIEW 1: MAIN REPORTS CARDS LIST (DEFAULT DASHBOARD VIEW) --- */}
       {!activeReportName && (
@@ -343,23 +364,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-black text-white flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
-              <span>Uploaded Chapter Reports ({availableReports.length})</span>
+              <span>Uploaded Chapter Reports {availableReports.length === 0 && !hasConfirmedEmptyDb ? '' : `(${availableReports.length})`}</span>
             </h2>
-
-            {/* <button
-              onClick={onOpenImport}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center space-x-1.5 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>+ Import New Report</span>
-            </button> */}
           </div>
 
-          {isSyncing && availableReports.length === 0 ? (
-            <GlassCard className="p-12 text-center space-y-3">
-              <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-              <p className="text-xs font-bold text-slate-300">Loading chapter reports & database records...</p>
-            </GlassCard>
+          {!isDataLoaded || isSyncing || isInitialLoading || (availableReports.length === 0 && !hasConfirmedEmptyDb) ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <GlassCard key={i} className="p-5 space-y-4 border-emerald-500/20 bg-slate-900/60 animate-pulse">
+                  <div className="space-y-2">
+                    <div className="h-5 bg-slate-800/80 rounded-md w-3/4" />
+                    <div className="h-3.5 bg-slate-800/50 rounded-md w-1/2" />
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 pt-3 border-t border-white/5">
+                    <div className="h-10 bg-slate-800/40 rounded-xl" />
+                    <div className="h-10 bg-slate-800/40 rounded-xl" />
+                    <div className="h-10 bg-slate-800/40 rounded-xl" />
+                    <div className="h-10 bg-slate-800/40 rounded-xl" />
+                  </div>
+                  <div className="h-9 bg-slate-800/60 rounded-xl w-full" />
+                </GlassCard>
+              ))}
+            </div>
           ) : availableReports.length === 0 ? (
             <GlassCard className="p-10 text-center space-y-4 border-dashed border-emerald-500/30">
               <FileSpreadsheet className="w-12 h-12 text-emerald-400 mx-auto animate-bounce" />
@@ -589,12 +615,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                 <tbody className="divide-y divide-white/5 font-semibold">
                   {isSyncing ? (
-                    <tr>
-                      <td colSpan={9} className="py-16 text-center space-y-3">
-                        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-                        <p className="text-xs font-bold text-slate-300">Loading members for "{activeReportName}"...</p>
-                      </td>
-                    </tr>
+                    Array.from({ length: 5 }).map((_, idx) => (
+                      <tr key={idx} className="animate-pulse border-b border-white/5">
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-800/80 rounded-md w-32" /></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-800/60 rounded-md w-24" /></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-800/60 rounded-md w-28" /></td>
+                        <td className="py-4 px-4"><div className="h-6 bg-emerald-500/20 rounded-full w-16" /></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-800/50 rounded-md w-12" /></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-800/50 rounded-md w-10" /></td>
+                        <td className="py-4 px-4"><div className="h-4 bg-slate-800/50 rounded-md w-10" /></td>
+                        <td className="py-4 px-4 text-right"><div className="h-7 bg-slate-800/60 rounded-xl w-20 ml-auto" /></td>
+                      </tr>
+                    ))
                   ) : filteredMembers.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-12 text-center text-slate-400 space-y-2">

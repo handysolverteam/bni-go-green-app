@@ -6,11 +6,12 @@ import { Member } from '../types';
 import { useToast } from '../context/ToastContext';
 
 interface ImportModalProps {
+  existingBatchNames?: string[];
   onImportComplete: (batchName: string, members: Member[], fileName: string, fileData?: string) => void;
   onClose: () => void;
 }
 
-export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onClose }) => {
+export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [], onImportComplete, onClose }) => {
   const { showToast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -21,10 +22,24 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
   const [errors, setErrors] = useState<string[]>([]);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const isDuplicateBatchName = batchName.trim().length > 0 && existingBatchNames.some(
+    existing => existing.trim().toLowerCase() === batchName.trim().toLowerCase()
+  );
+
   const handleFile = (file: File) => {
     if (!file) return;
     const rawFileName = file.name;
-    const defaultBatch = rawFileName.replace(/\.[^/.]+$/, '');
+    let defaultBatch = rawFileName.replace(/\.[^/.]+$/, '');
+
+    // If batch name already exists, auto-suggest unique counter (e.g. Report #2)
+    if (existingBatchNames && existingBatchNames.some(name => name.toLowerCase() === defaultBatch.toLowerCase())) {
+      let counter = 2;
+      while (existingBatchNames.some(name => name.toLowerCase() === `${defaultBatch} #${counter}`.toLowerCase())) {
+        counter++;
+      }
+      defaultBatch = `${defaultBatch} #${counter}`;
+    }
+
     setFileName(rawFileName);
     setBatchName(defaultBatch);
     setIsProcessing(true);
@@ -163,20 +178,39 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
 
           {/* Report / Batch Name Option */}
           {parsedMembers.length > 0 && (
-            <div className="p-4 rounded-2xl bg-slate-900/90 border border-emerald-500/30 space-y-2 animate-fadeIn">
-              <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                <Tag className="w-4 h-4 text-emerald-400" />
-                <span>Give This Report / Batch A Name *</span>
-              </label>
+            <div className={`p-4 rounded-2xl bg-slate-900/90 border space-y-2 animate-fadeIn transition-colors ${
+              isDuplicateBatchName ? 'border-amber-500/50 bg-amber-500/5' : 'border-emerald-500/30'
+            }`}>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-emerald-400" />
+                  <span>Give This Report / Batch A Name *</span>
+                </label>
+                {isDuplicateBatchName && (
+                  <span className="text-[10px] font-extrabold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
+                    Overwrites Existing Report
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 required
                 value={batchName}
                 onChange={(e) => setBatchName(e.target.value)}
                 placeholder="e.g. Influencers July 2026 Traffic Light Report"
-                className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold text-white"
+                className={`w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold text-white transition-all ${
+                  isDuplicateBatchName ? 'border-amber-500/60 focus:border-amber-400 ring-1 ring-amber-500/30' : ''
+                }`}
               />
-              <p className="text-[11px] text-slate-400">This name will be saved and displayed on your Dashboard Batch Cards.</p>
+              {isDuplicateBatchName ? (
+                <p className="text-[11px] font-semibold text-amber-300">
+                  ⚠️ A report named "{batchName}" already exists. Importing will update/overwrite this report. Change the name above (e.g. add a date or number) to save as a separate report card.
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400">
+                  This report batch name will create a separate card on your Dashboard.
+                </p>
+              )}
             </div>
           )}
 

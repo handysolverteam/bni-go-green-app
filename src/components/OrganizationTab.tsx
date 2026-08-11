@@ -117,12 +117,13 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
             </thead>
             <tbody className="divide-y divide-white/5 bg-slate-950/40">
               {isLoading ? (
-                <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center">
-                    <Loader2 className="w-6 h-6 text-emerald-400 animate-spin mx-auto mb-2" />
-                    <span className="text-xs text-slate-400">Loading organization team members...</span>
-                  </td>
-                </tr>
+                Array.from({ length: 3 }).map((_, idx) => (
+                  <tr key={idx} className="animate-pulse border-b border-white/5">
+                    <td className="px-4 py-3.5"><div className="h-4 bg-slate-800/80 rounded-md w-48" /></td>
+                    <td className="px-4 py-3.5"><div className="h-5 bg-emerald-500/20 rounded-full w-16" /></td>
+                    <td className="px-4 py-3.5 text-right"><div className="h-7 bg-slate-800/60 rounded-xl w-24 ml-auto" /></td>
+                  </tr>
+                ))
               ) : members.length === 0 ? (
                 <tr>
                   <td colSpan={3} className="px-4 py-6 text-center text-slate-500">

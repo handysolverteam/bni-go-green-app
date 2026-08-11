@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GlassCard } from './GlassCard';
-import { Building2, KeyRound, Plus, ArrowRight } from 'lucide-react';
+import { ConfirmationModal } from './ConfirmationModal';
+import { Building2, KeyRound, Plus, ArrowRight, LogOut } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -11,9 +12,10 @@ interface OrgOnboardingScreenProps {
 }
 
 export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJoined }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { showToast } = useToast();
   const [mode, setMode] = useState<'create' | 'join'>('create');
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Form states
   const [orgName, setOrgName] = useState('');
@@ -36,7 +38,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const { res, error } = await supabaseService.createOrganization(
+      const res = await supabaseService.createOrganization(
         orgName.trim(),
         chapterName.trim(),
         city.trim(),
@@ -48,7 +50,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
         showToast(`Organization "${res.org.name}" created! Code: ${res.org.code}`, 'success');
         onOrgJoined(res);
       } else {
-        const msg = error || 'Failed to create organization in database.';
+        const msg = 'Failed to create organization in database.';
         setErrorMsg(msg);
         showToast(msg, 'error');
       }
@@ -73,17 +75,17 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const { res, error } = await supabaseService.joinOrganization(
+      const res: any = await supabaseService.joinOrganization(
         code.trim(),
         user.uid,
         user.email || undefined
       );
 
-      if (res) {
-        showToast(`Successfully joined ${res.org.name}!`, 'success');
-        onOrgJoined(res);
+      if (res && 'org' in res) {
+        showToast(`Joined organization "${res.org.name}"!`, 'success');
+        onOrgJoined({ org: res.org, member: res.member });
       } else {
-        const msg = error || 'Invalid 6-digit code. Please verify code with Chapter Admin.';
+        const msg = res?.error || 'Invalid 6-digit organization code.';
         setErrorMsg(msg);
         showToast(msg, 'error');
       }
@@ -160,7 +162,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
                 />
               </div>
 
-              <div className="space-y-1">
+              {/* <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-300">Sub-Chapter Name (Optional)</label>
                 <input
                   type="text"
@@ -169,7 +171,7 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
                   onChange={(e) => setChapterName(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold"
                 />
-              </div>
+              </div> */}
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-300">City / Region</label>
@@ -217,8 +219,35 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
               </button>
             </form>
           )}
+
+          {/* Subtle non-highlighted sign out option */}
+          <div className="pt-4 border-t border-white/10 text-center">
+            <button
+              type="button"
+              onClick={() => setShowLogoutConfirm(true)}
+              className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5 text-slate-400" />
+              <span>Sign out or switch account ({user?.email})</span>
+            </button>
+          </div>
         </GlassCard>
       </div>
+
+      {showLogoutConfirm && (
+        <ConfirmationModal
+          isOpen={showLogoutConfirm}
+          type="logout"
+          title="Sign Out of Account?"
+          message={`Are you sure you want to sign out of ${user?.email || 'your account'}? You can log in with a different account.`}
+          confirmText="Sign Out"
+          onConfirm={() => {
+            setShowLogoutConfirm(false);
+            logout();
+          }}
+          onClose={() => setShowLogoutConfirm(false)}
+        />
+      )}
     </div>
   );
 };

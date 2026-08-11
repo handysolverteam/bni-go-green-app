@@ -114,6 +114,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
               <img
                 src={avatarUrl}
                 alt="Profile Avatar"
+                referrerPolicy="no-referrer"
                 className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500/50 shadow-lg"
               />
               <label className="absolute inset-0 rounded-2xl bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-all">
