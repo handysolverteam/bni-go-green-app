@@ -30,7 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           uid: fbUser.uid,
           email: fbUser.email,
           displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Member',
-          photoURL: fbUser.photoURL,
+          photoURL: fbUser.photoURL || null,
           provider: 'google',
         });
         setLoading(false);
@@ -38,11 +38,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // 2. Check Supabase Auth State if Firebase is null
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session?.user) {
+            const googleAvatar =
+              session.user.user_metadata?.avatar_url ||
+              session.user.user_metadata?.picture ||
+              null;
+
             setUser({
               uid: session.user.id,
               email: session.user.email || null,
               displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Director',
-              photoURL: session.user.user_metadata?.avatar_url || null,
+              photoURL: googleAvatar,
               provider: 'supabase',
             });
           } else {
@@ -55,11 +60,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user && !firebaseAuth.currentUser) {
+        const googleAvatar =
+          session.user.user_metadata?.avatar_url ||
+          session.user.user_metadata?.picture ||
+          null;
+
         setUser({
           uid: session.user.id,
           email: session.user.email || null,
           displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Director',
-          photoURL: session.user.user_metadata?.avatar_url || null,
+          photoURL: googleAvatar,
           provider: 'supabase',
         });
       }

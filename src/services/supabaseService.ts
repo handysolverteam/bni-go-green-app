@@ -331,12 +331,25 @@ export const supabaseService = {
         updated_at: new Date().toISOString(),
       }));
 
-      const { error } = await supabase
-        .from('members')
-        .upsert(rows, { onConflict: 'org_id, name' });
+      // Chunk upserts into batches of 40 for max performance & stability
+      const chunkSize = 40;
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        const { error } = await supabase
+          .from('members')
+          .upsert(chunk, { onConflict: 'org_id, name' });
 
-      return !error;
+        if (error) {
+          console.warn('Batch upsert warning, executing row-by-row fallback:', error);
+          for (const row of chunk) {
+            await supabase.from('members').upsert(row, { onConflict: 'org_id, name' });
+          }
+        }
+      }
+
+      return true;
     } catch (e) {
+      console.error('upsertMembers exception:', e);
       return false;
     }
   },

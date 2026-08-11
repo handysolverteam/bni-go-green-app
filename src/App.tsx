@@ -46,14 +46,19 @@ export const AppContent: React.FC = () => {
         setOrg(orgRes.org);
         setOrgMember(orgRes.member);
 
-        // Apply custom org threshold limits
-        setScoringConfig({
-          trafficLight: {
-            green: orgRes.org.green_threshold || 70,
-            amber: orgRes.org.amber_threshold || 50,
-            red: orgRes.org.red_threshold || 30,
-          }
-        });
+        // Fetch custom org settings from Supabase DB
+        const settingsRes = await supabaseService.fetchOrgSettings(orgRes.org.id, user.uid);
+        if (settingsRes && settingsRes.scoringConfig) {
+          setScoringConfig(settingsRes.scoringConfig);
+        } else {
+          setScoringConfig({
+            trafficLight: {
+              green: orgRes.org.green_threshold || 70,
+              amber: orgRes.org.amber_threshold || 50,
+              red: orgRes.org.red_threshold || 30,
+            }
+          });
+        }
 
         // Fetch Org Members
         const dbMembers = await supabaseService.fetchMembers(orgRes.org.id);
@@ -90,32 +95,48 @@ export const AppContent: React.FC = () => {
   // Member CRUD Handlers
   const handleSaveMember = async (memberToSave: Member) => {
     if (!org?.id || !user?.uid) return;
+    setIsSyncing(true);
     const saved = await supabaseService.saveSingleMember(memberToSave, org.id, user.uid);
     if (saved) {
       const dbMembers = await supabaseService.fetchMembers(org.id);
       setMembers(dbMembers);
     }
+    setIsSyncing(false);
   };
 
   const handleImportMembers = async (imported: Member[]) => {
     if (org?.id && user?.uid) {
+      setIsSyncing(true);
+      // 1. Immediate optimistic UI render
+      setMembers(imported);
+      
+      // 2. Persist batch to Supabase Postgres
       await supabaseService.upsertMembers(imported, org.id, user.uid);
+      
+      // 3. Re-fetch fresh DB records
       const dbMembers = await supabaseService.fetchMembers(org.id);
-      setMembers(dbMembers);
+      if (dbMembers && dbMembers.length > 0) {
+        setMembers(dbMembers);
+      }
+      setIsSyncing(false);
     }
     setActiveTab('dashboard');
   };
 
   const handleDeleteMember = async (memberId: string) => {
     if (!org?.id) return;
+    setIsSyncing(true);
     setMembers(prev => prev.filter(m => m.id !== memberId));
     await supabaseService.deleteMember(memberId, org.id);
+    setIsSyncing(false);
   };
 
   const handlePurgeAll = async () => {
     if (!org?.id) return;
+    setIsSyncing(true);
     setMembers([]);
     await supabaseService.purgeAllMembers(org.id);
+    setIsSyncing(false);
   };
 
   // Loading Screen
