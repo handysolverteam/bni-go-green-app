@@ -13,11 +13,37 @@ export interface OutreachLogRecord {
   sent_at: string;
 }
 
+export interface ImportLogRecord {
+  id?: string;
+  org_id: string;
+  user_id: string;
+  file_name?: string;
+  member_count: number;
+  imported_at?: string;
+}
+
 function generate6DigitCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export const supabaseService = {
+  // --- UNIQUE 6-DIGIT CODE GENERATION ---
+  async generateUnique6DigitCode(): Promise<string> {
+    let attempts = 0;
+    while (attempts < 10) {
+      const candidate = generate6DigitCode();
+      const { data } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('code', candidate)
+        .maybeSingle();
+
+      if (!data) return candidate;
+      attempts++;
+    }
+    return (Date.now() % 1000000).toString().padStart(6, '0');
+  },
+
   // --- ORGANIZATION MANAGEMENT ---
   async createOrganization(
     name: string,
@@ -27,7 +53,7 @@ export const supabaseService = {
     userEmail?: string
   ): Promise<{ res: { org: Organization; member: OrgMember } | null; error?: string }> {
     try {
-      const code = generate6DigitCode();
+      const code = await this.generateUnique6DigitCode();
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .insert([{
@@ -104,7 +130,7 @@ export const supabaseService = {
 
       if (orgError || !orgData) {
         console.error('Join org: invalid code', orgError);
-        return { res: null, error: 'Invalid 6-digit code or table missing.' };
+        return { res: null, error: 'Invalid 6-digit code. Organization not found.' };
       }
 
       const { data: memData, error: memError } = await supabase
@@ -308,7 +334,7 @@ export const supabaseService = {
     }
   },
 
-  async upsertMembers(members: Member[], orgId: string, userId: string): Promise<boolean> {
+  async upsertMembers(members: Member[], orgId: string, userId: string, fileName?: string): Promise<boolean> {
     try {
       const rows = members.map(m => ({
         org_id: orgId,
@@ -331,7 +357,7 @@ export const supabaseService = {
         updated_at: new Date().toISOString(),
       }));
 
-      // Chunk upserts into batches of 40 for max performance & stability
+      // Chunk upserts into batches of 40
       const chunkSize = 40;
       for (let i = 0; i < rows.length; i += chunkSize) {
         const chunk = rows.slice(i, i + chunkSize);
@@ -340,12 +366,20 @@ export const supabaseService = {
           .upsert(chunk, { onConflict: 'org_id, name' });
 
         if (error) {
-          console.warn('Batch upsert warning, executing row-by-row fallback:', error);
+          console.warn('Batch upsert warning, fallback row-by-row:', error);
           for (const row of chunk) {
             await supabase.from('members').upsert(row, { onConflict: 'org_id, name' });
           }
         }
       }
+
+      // Log import activity to import_logs table in Supabase DB
+      await this.saveImportLog({
+        org_id: orgId,
+        user_id: userId,
+        file_name: fileName || 'Imported Excel File',
+        member_count: members.length,
+      });
 
       return true;
     } catch (e) {
@@ -399,10 +433,9 @@ export const supabaseService = {
     };
   },
 
-  // --- SETTINGS CRUD (Persists Full 7-Category Threshold Config to Supabase DB) ---
+  // --- SETTINGS CRUD ---
   async fetchOrgSettings(orgId: string, userId: string): Promise<{ scoringConfig: ScoringConfig; signature: string } | null> {
     try {
-      // Check organizations table
       const { data: orgData } = await supabase
         .from('organizations')
         .select('*')
@@ -416,7 +449,6 @@ export const supabaseService = {
         };
       }
 
-      // Fallback check chapter_settings table
       const { data: csData } = await supabase
         .from('chapter_settings')
         .select('*')
@@ -443,7 +475,6 @@ export const supabaseService = {
     fullScoringConfig: ScoringConfig
   ): Promise<boolean> {
     try {
-      // 1. Update organizations table
       const { error: orgError } = await supabase
         .from('organizations')
         .update({
@@ -455,7 +486,6 @@ export const supabaseService = {
         })
         .eq('id', orgId);
 
-      // 2. Upsert chapter_settings table
       try {
         await supabase
           .from('chapter_settings')
@@ -479,10 +509,33 @@ export const supabaseService = {
     }
   },
 
-  // --- OUTREACH LOGS ---
+  // --- ORG-BASED OUTREACH & IMPORT TRACKING LOGS ---
   async saveOutreachLog(log: OutreachLogRecord): Promise<boolean> {
     try {
-      const { error } = await supabase.from('outreach_logs').insert([log]);
+      const { error } = await supabase.from('outreach_logs').insert([{
+        user_id: log.user_id,
+        org_id: log.org_id,
+        member_name: log.member_name,
+        phone: log.phone || '',
+        status: log.status,
+        message: log.message,
+        sent_at: log.sent_at || new Date().toISOString(),
+      }]);
+      return !error;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async saveImportLog(log: ImportLogRecord): Promise<boolean> {
+    try {
+      const { error } = await supabase.from('import_logs').insert([{
+        org_id: log.org_id,
+        user_id: log.user_id,
+        file_name: log.file_name || 'Excel Import Report',
+        member_count: log.member_count,
+        imported_at: new Date().toISOString(),
+      }]);
       return !error;
     } catch (e) {
       return false;
