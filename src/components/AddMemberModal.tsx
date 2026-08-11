@@ -103,7 +103,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               {memberToEdit ? `Edit ${memberToEdit.Name}` : 'Add New Member'}
             </h2>
             <p className="text-xs text-slate-400">
-              Enter PALMS metrics to calculate score & sync to Supabase database.
+              Enter metrics to calculate score & sync to Supabase database.
             </p>
           </div>
         </div>
@@ -113,7 +113,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 flex items-center justify-between">
             <div className="flex items-center space-x-2 text-xs font-bold text-slate-300">
               <Calculator className="w-4 h-4 text-emerald-400" />
-              <span>Calculated PALMS Score:</span>
+              <span>Calculated Traffic Light Score:</span>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -123,19 +123,19 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 currentScored.trafficLight?.label === 'Amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
                 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
               }`}>
-                {currentScored.trafficLight?.label}
+                {currentScored.trafficLight?.emoji} {currentScored.trafficLight?.label}
               </span>
             </div>
           </div>
 
-          {/* Member Contact Info */}
+          {/* Member Basic Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">Member Name *</label>
+              <label className="text-xs font-bold text-slate-300">Member Full Name *</label>
               <input
                 type="text"
                 required
-                placeholder="e.g. Rajesh Sharma"
+                placeholder="e.g. Rahul Sharma"
                 value={formData.Name || ''}
                 onChange={(e) => setFormData({ ...formData, Name: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold"
@@ -154,7 +154,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
             </div>
           </div>
 
-          {/* PALMS Attendance & Referrals */}
+          {/* Attendance & Referrals */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
             <div className="space-y-1">
               <label className="text-[11px] font-bold text-slate-400">Present (P)</label>

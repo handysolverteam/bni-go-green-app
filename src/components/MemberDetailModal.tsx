@@ -15,7 +15,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
   const getWAUrl = () => {
     let phone = (member.Phone || '').replace(/\D/g, '');
     if (phone.length === 10) phone = '91' + phone;
-    const txt = encodeURIComponent(`Hi ${member.Name}, let's review your PALMS score (${member.score}/100) and targets!`);
+    const txt = encodeURIComponent(`Hi ${member.Name}, let's review your BNI score (${member.score}/100) and targets!`);
     return phone ? `https://web.whatsapp.com/send?phone=${phone}&text=${txt}` : `https://web.whatsapp.com/send?text=${txt}`;
   };
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, Copy, Check, LayoutGrid, SlidersHorizontal } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, Copy, Check, SlidersHorizontal } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
 
@@ -45,9 +45,8 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
   const navItems = [
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: memberCount > 0 ? memberCount : null },
-    { id: 'import' as NavigationTab, label: 'Import PALMS', icon: Upload, adminOnly: true },
     { id: 'nudges' as NavigationTab, label: 'Outreach Nudges', icon: MessageSquare },
-    { id: 'org' as NavigationTab, label: 'Organization', icon: Building2, subtitle: org?.code ? `Code: ${org.code}` : undefined },
+    { id: 'org' as NavigationTab, label: 'Organization', icon: Building2 },
     { id: 'profile' as NavigationTab, label: 'My Profile', icon: User },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
   ];
@@ -65,7 +64,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         onMouseLeave={() => { if (sidebarMode === 'hover') setIsHovered(false); }}
         className={`hidden lg:flex flex-col ${sidebarWidthClass} glass-panel border-r border-white/10 p-4 fixed top-0 bottom-0 z-40 overflow-y-auto transition-all duration-300 ease-in-out`}
       >
-        {/* Brand Header */}
+        {/* Brand Header & View Preference Toggle Icon */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 flex-shrink-0">
@@ -83,15 +82,13 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          {!isCompact && (
-            <button
-              onClick={() => setShowModeModal(true)}
-              className="p-1.5 rounded-lg bg-slate-900/80 text-slate-400 hover:text-white border border-white/10"
-              title="Sidebar Display Options"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </button>
-          )}
+          <button
+            onClick={() => setShowModeModal(true)}
+            className="p-1.5 rounded-lg bg-slate-900/80 text-slate-400 hover:text-white border border-white/10 transition-colors"
+            title="Sidebar View Preferences"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
         </div>
 
         {/* 6-Digit Org Code Widget */}
@@ -111,7 +108,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
           </div>
         )}
 
-        {/* Navigation Tabs */}
+        {/* Navigation Items */}
         <nav className="flex-1 space-y-1.5 py-3">
           {navItems.map((item) => {
             if (item.adminOnly && !isAdminOrOwner) return null;
@@ -142,6 +139,20 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
+
+        {/* Bottom Prominent Import Button (Admin / Owner Only) */}
+        {isAdminOrOwner && (
+          <div className="my-2">
+            <button
+              onClick={() => setActiveTab('import')}
+              title={isCompact ? 'Import' : undefined}
+              className={`w-full flex items-center ${isCompact ? 'justify-center px-2' : 'justify-center space-x-2 px-3'} py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-extrabold border border-emerald-500/30 text-xs shadow-md transition-all hover:scale-[1.02]`}
+            >
+              <Upload className="w-4 h-4 flex-shrink-0" />
+              {!isCompact && <span>Import Data</span>}
+            </button>
+          </div>
+        )}
 
         {/* Profile Footer & Logout */}
         <div className="pt-3 border-t border-white/10 space-y-2">
@@ -230,6 +241,16 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
               );
             })}
 
+            {isAdminOrOwner && (
+              <button
+                onClick={() => { setActiveTab('import'); setMobileMenuOpen(false); }}
+                className="w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 font-extrabold border border-emerald-500/30 text-xs"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Import Data</span>
+              </button>
+            )}
+
             <button
               onClick={() => { setMobileMenuOpen(false); setShowLogoutConfirm(true); }}
               className="w-full py-2.5 px-3.5 rounded-xl bg-rose-500/10 text-rose-400 font-bold text-xs flex items-center space-x-2 border border-rose-500/20"
@@ -246,7 +267,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         {children}
       </main>
 
-      {/* Sidebar View Preferences Modal */}
+      {/* Sidebar View Preferences Modal (Without raw pixel values) */}
       {showModeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
           <div className="glass-panel w-full max-w-sm p-6 rounded-2xl space-y-5 border-emerald-500/30">
@@ -263,27 +284,27 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             <div className="space-y-2">
               <button
                 onClick={() => { setSidebarMode('full'); setShowModeModal(false); }}
-                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'full' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
               >
-                <div>Full Expanded View (240px)</div>
-                <div className="text-[10px] text-slate-400 font-normal">Shows icons + navigation title labels</div>
+                <div>Expanded View</div>
+                <div className="text-[10px] text-slate-400 font-normal">Shows navigation icons and section titles</div>
               </button>
 
               <button
                 onClick={() => { setSidebarMode('icons'); setShowModeModal(false); }}
-                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'icons' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
               >
-                <div>Compact Icon-Only View (64px)</div>
-                <div className="text-[10px] text-slate-400 font-normal">Minimal sidebar showing only icons</div>
+                <div>Compact Icon View</div>
+                <div className="text-[10px] text-slate-400 font-normal">Minimal sidebar displaying icons only</div>
               </button>
 
               <button
                 onClick={() => { setSidebarMode('hover'); setShowModeModal(false); }}
-                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`w-full p-3.5 rounded-xl border text-left text-xs font-bold transition-all ${
                   sidebarMode === 'hover' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
                 }`}
               >

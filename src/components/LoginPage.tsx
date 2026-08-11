@@ -40,7 +40,7 @@ export const LoginPage: React.FC = () => {
             BNI <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">Go Green</span>
           </h1>
           <p className="text-xs text-slate-400 max-w-xs mx-auto">
-            PALMS 100-Point Score Engine & WhatsApp Direct Outreach
+            100-Point Score Engine & WhatsApp Direct Outreach
           </p>
         </div>
 

@@ -71,7 +71,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             <Settings className="w-6 h-6 text-emerald-400" />
             <span>Scoring & Message Settings</span>
           </h2>
-          <p className="text-xs text-slate-400">Configure PALMS 100-Point scoring threshold tiers and WhatsApp outreach signatures.</p>
+          <p className="text-xs text-slate-400">Configure 100-Point scoring threshold tiers and WhatsApp outreach signatures.</p>
         </div>
 
         <div className="flex items-center space-x-2">

@@ -252,7 +252,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <h3 className="text-sm font-bold text-slate-300">No members found</h3>
             <p className="text-xs text-slate-500 max-w-xs mx-auto">
               {members.length === 0
-                ? 'Add a member manually or import a BNI PALMS Excel report.'
+                ? 'Add a member manually or import an Excel report.'
                 : 'No members match the selected search or stage filter.'}
             </p>
             {members.length === 0 && (

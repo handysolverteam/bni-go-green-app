@@ -90,11 +90,11 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
         <div className="space-y-1">
           <div className="flex items-center space-x-2 text-emerald-400 font-bold text-sm">
             <FileSpreadsheet className="w-5 h-5" />
-            <span>PALMS Import Engine</span>
+            <span>Excel Import Engine</span>
           </div>
           <h2 className="text-xl font-black text-white">Upload Weekly Member Report</h2>
           <p className="text-xs text-slate-400">
-            Upload BNI Chapter PALMS Excel/CSV report to recalculate scores and update WhatsApp nudges.
+            Upload BNI Chapter Excel/CSV report to recalculate scores and update WhatsApp nudges.
           </p>
         </div>
 
@@ -122,9 +122,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onCl
         >
           <Upload className="w-10 h-10 text-emerald-400 mx-auto mb-3 animate-bounce" />
           <p className="text-sm font-bold text-white mb-1">
-            {fileName ? fileName : 'Click to select or drop PALMS Excel file (.xlsx / .csv)'}
+            {fileName ? fileName : 'Click to select or drop Excel file (.xlsx / .csv)'}
           </p>
-          <p className="text-xs text-slate-400">Supports standard BNI PALMS format columns</p>
+          <p className="text-xs text-slate-400">Supports standard BNI report format columns</p>
         </div>
 
         {/* Download Sample */}

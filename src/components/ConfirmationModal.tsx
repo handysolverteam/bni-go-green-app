@@ -51,7 +51,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         return {
           icon: <AlertTriangle className="w-6 h-6 text-rose-500 animate-pulse" />,
           title: title || 'Purge All Member Data',
-          message: message || 'DANGER: This will permanently delete ALL imported chapter members and PALMS score history from your Supabase database.',
+          message: message || 'DANGER: This will permanently delete ALL imported chapter members and score history from your Supabase database.',
           confirmText: confirmText || 'Purge All Data',
           confirmBtnClass: 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30',
         };
