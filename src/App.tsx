@@ -30,7 +30,7 @@ export const AppContent: React.FC = () => {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 1. On Auth Load: Fetch Org & User Profile
+  // 1. On Auth Load: Fetch Org & User Profile concurrently without flicker
   useEffect(() => {
     if (!user?.uid) {
       setIsInitializing(false);
@@ -40,42 +40,55 @@ export const AppContent: React.FC = () => {
     const initUserData = async () => {
       setIsInitializing(true);
 
-      // Fetch Org
-      const orgRes = await supabaseService.fetchUserOrganization(user.uid);
-      if (orgRes) {
-        setOrg(orgRes.org);
-        setOrgMember(orgRes.member);
+      try {
+        // Fetch Org and User Profile concurrently
+        const [orgRes, profRes] = await Promise.all([
+          supabaseService.fetchUserOrganization(user.uid),
+          supabaseService.fetchUserProfile(user.uid),
+        ]);
 
-        // Fetch custom org settings from Supabase DB
-        const settingsRes = await supabaseService.fetchOrgSettings(orgRes.org.id, user.uid);
-        if (settingsRes && settingsRes.scoringConfig) {
-          setScoringConfig(settingsRes.scoringConfig);
-        } else {
-          setScoringConfig({
-            trafficLight: {
-              green: orgRes.org.green_threshold || 70,
-              amber: orgRes.org.amber_threshold || 50,
-              red: orgRes.org.red_threshold || 30,
-            }
+        let fetchedMembers: Member[] = [];
+
+        if (orgRes) {
+          // Fetch settings & members concurrently
+          const [settingsRes, dbMembers] = await Promise.all([
+            supabaseService.fetchOrgSettings(orgRes.org.id, user.uid),
+            supabaseService.fetchMembers(orgRes.org.id),
+          ]);
+
+          if (settingsRes && settingsRes.scoringConfig) {
+            setScoringConfig(settingsRes.scoringConfig);
+          } else {
+            setScoringConfig({
+              trafficLight: {
+                green: orgRes.org.green_threshold || 70,
+                amber: orgRes.org.amber_threshold || 50,
+                red: orgRes.org.red_threshold || 30,
+              }
+            });
+          }
+
+          fetchedMembers = dbMembers;
+
+          // Subscribe to realtime members
+          supabaseService.subscribeToMembers(orgRes.org.id, async () => {
+            const fresh = await supabaseService.fetchMembers(orgRes.org.id);
+            setMembers(fresh);
           });
         }
 
-        // Fetch Org Members
-        const dbMembers = await supabaseService.fetchMembers(orgRes.org.id);
-        setMembers(dbMembers);
-
-        // Subscribe to realtime members
-        supabaseService.subscribeToMembers(orgRes.org.id, async () => {
-          const fresh = await supabaseService.fetchMembers(orgRes.org.id);
-          setMembers(fresh);
-        });
+        // Batch state updates together before turning off initialization spinner
+        if (orgRes) {
+          setOrg(orgRes.org);
+          setOrgMember(orgRes.member);
+        }
+        setUserProfile(profRes);
+        setMembers(fetchedMembers);
+      } catch (err) {
+        console.error('Initialization error:', err);
+      } finally {
+        setIsInitializing(false);
       }
-
-      // Fetch Profile
-      const profRes = await supabaseService.fetchUserProfile(user.uid);
-      setUserProfile(profRes);
-
-      setIsInitializing(false);
     };
 
     initUserData();
@@ -139,7 +152,7 @@ export const AppContent: React.FC = () => {
     setIsSyncing(false);
   };
 
-  // Loading Screen
+  // Loading Screen (Prevents screen flickering during initial resolution)
   if (authLoading || isInitializing) {
     return (
       <div className="min-h-screen bg-[#060a12] flex items-center justify-center">
