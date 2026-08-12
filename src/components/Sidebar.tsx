@@ -194,9 +194,9 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       </aside>
 
       {/* --- MOBILE HEADER & DRAWER (<1024px) --- */}
-      <header className="lg:hidden sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-4 py-3 backdrop-blur-xl">
+      <header className="lg:hidden sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-4 py-2.5 backdrop-blur-xl pt-[calc(env(safe-area-inset-top,0px)+10px)]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3" onClick={() => setActiveTab('dashboard')}>
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20">
               <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center">
                 <span className="text-base font-black text-emerald-400">BNI</span>
@@ -208,63 +208,58 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             </div>
           </div>
 
+          {/* Profile Photo Avatar Button replaces Hamburger Icon */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-xl bg-slate-900/60 text-slate-300 border border-white/10"
+            className="relative p-0.5 rounded-full ring-2 ring-emerald-500/50 hover:ring-emerald-400 transition-all active:scale-95"
+            title="Account Menu"
           >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {user ? (
+              <img
+                src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                alt="Profile Avatar"
+                referrerPolicy="no-referrer"
+                className="w-9 h-9 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-emerald-400 font-bold text-sm">
+                U
+              </div>
+            )}
           </button>
         </div>
 
-        {/* Mobile Menu Drawer */}
+        {/* Mobile Profile & Logout Menu Drawer */}
         {mobileMenuOpen && (
-          <div className="pt-3 pb-2 space-y-2 border-t border-white/10 mt-3 animate-fadeIn">
-            {navItems.map((item) => {
-              if (item.adminOnly && !isAdminOrOwner) return null;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold ${
-                    activeTab === item.id ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-300 bg-slate-900/60'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge && <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-200 text-[10px]">{item.badge}</span>}
-                </button>
-              );
-            })}
-
-            {/* Mobile Profile Card */}
+          <div className="pt-3 pb-2 space-y-2 border-t border-white/10 mt-2.5 animate-fadeIn">
+            {/* Profile Info Card */}
             {user && (
               <div
                 onClick={() => { setActiveTab('profile'); setMobileMenuOpen(false); }}
-                className={`flex items-center space-x-3 p-3 rounded-xl bg-slate-900/80 border ${
+                className={`flex items-center space-x-3 p-3 rounded-xl bg-slate-900/90 border ${
                   activeTab === 'profile' ? 'border-emerald-500/80 bg-emerald-500/10' : 'border-white/10'
-                } cursor-pointer transition-all`}
+                } cursor-pointer transition-all active:scale-[0.99]`}
               >
                 <img
                   src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
                   alt="User Avatar"
-                  className="w-9 h-9 rounded-full object-cover ring-2 ring-emerald-500/40 shrink-0"
+                  referrerPolicy="no-referrer"
+                  className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/40 shrink-0"
                 />
                 <div className="overflow-hidden flex-1 text-left">
-                  <div className="text-xs font-bold text-white truncate">{userProfile?.full_name || user.displayName}</div>
-                  <div className="text-[10px] text-slate-400 capitalize font-semibold flex items-center gap-1">
+                  <div className="text-xs font-bold text-white truncate">{userProfile?.full_name || user.displayName || 'Member Profile'}</div>
+                  <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-                    <span>{orgMember?.role || 'Member'} &bull; View Profile</span>
+                    <span>{orgMember?.role?.toUpperCase() || 'MEMBER'} &bull; View & Edit Profile</span>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Sign Out Action Button */}
             <button
               onClick={() => { setMobileMenuOpen(false); setShowLogoutConfirm(true); }}
-              className="w-full py-2.5 px-3.5 rounded-xl bg-rose-500/10 text-rose-400 font-bold text-xs flex items-center space-x-2 border border-rose-500/20"
+              className="w-full py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs flex items-center justify-center space-x-2 border border-rose-500/20 transition-all active:scale-[0.99]"
             >
               <LogOut className="w-4 h-4" />
               <span>Sign Out</span>
@@ -274,14 +269,43 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       </header>
 
       {/* --- MAIN CONTENT CONTAINER --- */}
-      <main className={`flex-1 ${mainMarginClass} p-2.5 sm:p-5 lg:p-8 min-h-screen transition-all duration-300 ease-in-out`}>
+      <main className={`flex-1 ${mainMarginClass} p-2.5 sm:p-5 lg:p-8 pb-[calc(env(safe-area-inset-bottom,0px)+100px)] lg:pb-8 min-h-screen transition-all duration-300 ease-in-out`}>
         {children}
       </main>
 
+      {/* --- MOBILE FLOATING GLASS CAPSULE BOTTOM NAVIGATION BAR (<1024px) --- */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] pointer-events-none">
+        <nav className="pointer-events-auto max-w-sm sm:max-w-md mx-auto bg-slate-900/80 backdrop-blur-3xl border border-white/20 rounded-full p-2 flex items-center justify-around shadow-[0_16px_40px_rgba(0,0,0,0.85)] shadow-emerald-500/20 ring-1 ring-white/10">
+          {navItems.map((item) => {
+            if (item.adminOnly && !isAdminOrOwner) return null;
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-300 active:scale-90 ${
+                  isActive
+                    ? 'text-emerald-400 bg-gradient-to-tr from-emerald-500/25 to-teal-400/25 border border-emerald-500/50 font-black shadow-lg shadow-emerald-500/20 -translate-y-0.5'
+                    : 'text-slate-400 hover:text-slate-200 font-medium'
+                }`}
+              >
+                <Icon className={`w-5 h-5 transition-all duration-300 ${isActive ? 'text-emerald-400 scale-110 -translate-y-0.5' : 'text-slate-400'}`} />
+                <span className={`text-[9px] sm:text-[10px] mt-0.5 truncate max-w-[60px] tracking-tight ${isActive ? 'text-emerald-300 font-black' : 'text-slate-400'}`}>
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
       {/* Preferences Modal (Persisted in localStorage) */}
       {showModeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-          <div className="glass-panel w-full max-w-sm p-6 rounded-2xl space-y-5 border-emerald-500/30">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+          <div className="glass-panel w-full max-w-sm p-5 sm:p-6 rounded-t-3xl sm:rounded-2xl space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/30">
+            {/* Mobile Drag Handle */}
+            <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-2 sm:hidden shrink-0" />
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="text-base font-black text-white flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-emerald-400" />

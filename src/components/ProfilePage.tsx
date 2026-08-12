@@ -240,7 +240,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
             <button
               type="submit"
               disabled={isLoading || !fullName.trim()}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all disabled:opacity-50"
+              className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all disabled:opacity-50"
             >
               {savedSuccess ? <Check className="w-4 h-4 text-slate-950" /> : <Save className="w-4 h-4" />}
               <span>{isLoading ? 'Saving...' : savedSuccess ? 'Profile Saved!' : 'Save Profile Changes'}</span>

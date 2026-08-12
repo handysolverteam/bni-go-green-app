@@ -158,8 +158,10 @@ export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId,
 
       {/* Editor App Modal */}
       {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-          <GlassCard className="w-full max-w-2xl max-h-[92vh] overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-5 border-emerald-500/40 bg-slate-900/95 shadow-2xl rounded-2xl sm:rounded-3xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+          <GlassCard className="w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/40 bg-slate-900/95 shadow-2xl rounded-t-3xl sm:rounded-3xl">
+            {/* Mobile Drag Handle */}
+            <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-1 sm:hidden shrink-0" />
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <h3 className="text-base font-black text-white flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-emerald-400" />

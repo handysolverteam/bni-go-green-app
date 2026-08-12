@@ -6,7 +6,7 @@ import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { useToast } from '../context/ToastContext';
 import {
   MessageSquare, ExternalLink, Copy, Check, Sparkles, Send, Play, Pause,
-  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, FileText, Edit, X, Tag, Phone
+  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, FileText, Edit, X, Tag, Phone, Search
 } from 'lucide-react';
 import { supabaseService, DEFAULT_OUTREACH_TEMPLATES } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
@@ -172,11 +172,19 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     return members.filter(m => (m.batch_name || '') === activeReportName);
   }, [members, activeReportName]);
 
+  // Search filter term
+  const [searchTerm, setSearchTerm] = useState('');
+
   // Target members needing outreach in scoped members (Sorted by Top Score DESC)
   const targetMembers = useMemo(() => {
     const list = scopedMembers.filter(m => {
-      if (selectedFilter === 'All') return true;
-      return m.trafficLight?.label === selectedFilter;
+      const matchesFilter = selectedFilter === 'All' || m.trafficLight?.label === selectedFilter;
+      const term = searchTerm.trim().toLowerCase();
+      const matchesSearch = !term ||
+        (m.Name || '').toLowerCase().includes(term) ||
+        (m.Phone || '').includes(term) ||
+        (m.Chapter || '').toLowerCase().includes(term);
+      return matchesFilter && matchesSearch;
     });
 
     return [...list].sort((a, b) => {
@@ -185,13 +193,27 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       if (scoreB !== scoreA) return scoreB - scoreA;
       return (a.Name || '').localeCompare(b.Name || '');
     });
-  }, [scopedMembers, selectedFilter]);
+  }, [scopedMembers, selectedFilter, searchTerm]);
 
-  const signature = customSignature || 'Keep the momentum going! 💪';
+  const [dbSignature, setDbSignature] = useState(customSignature || 'Keep the momentum going! 💪');
+  const [enableSignature, setEnableSignature] = useState(true);
+
+  useEffect(() => {
+    if (orgId && user?.uid) {
+      supabaseService.fetchOrgSettings(orgId, user.uid).then(res => {
+        if (res) {
+          if (res.signature) setDbSignature(res.signature);
+          if (res.enableSignature !== undefined) setEnableSignature(Boolean(res.enableSignature));
+        }
+      });
+    }
+  }, [orgId, user]);
 
   const generateNudgeMessage = (member: Member): string => {
+    const finalSignature = enableSignature ? dbSignature : '';
+
     if (activeTemplate && activeTemplate.message_template) {
-      return substituteKeywords(activeTemplate.message_template, {
+      const msg = substituteKeywords(activeTemplate.message_template, {
         name: member.Name || 'Member',
         score: String(member.score || 0),
         traffic_light: member.trafficLight?.label || 'Grey',
@@ -204,6 +226,11 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
         sponsors: String(member.Sponsors || 0),
         chapter: member.Chapter || 'Influencers',
       });
+
+      if (enableSignature && finalSignature) {
+        return `${msg}\n\n${finalSignature}`;
+      }
+      return msg;
     }
 
     const nudges = member.nudges || [];
@@ -211,7 +238,12 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     const light = member.trafficLight?.label || 'Grey';
     const topNudges = nudges.slice(0, 2).map(n => `• ${n.action}`).join('\n');
 
-    return `Hi ${member.Name}! 👋\n\nYour current BNI Traffic Light status is *${light}* with a score of *${score}/100*.\n\nTo reach Green status (70+ points), here are your top recommended actions:\n${topNudges || '• Maintain attendance and submit 1-2-1s!'}\n\n${signature}`;
+    const baseMsg = `Hi ${member.Name}! 👋\n\nYour current BNI Traffic Light status is *${light}* with a score of *${score}/100*.\n\nTo reach Green status (70+ points), here are your top recommended actions:\n${topNudges || '• Maintain attendance and submit 1-2-1s!'}`;
+
+    if (enableSignature && finalSignature) {
+      return `${baseMsg}\n\n${finalSignature}`;
+    }
+    return baseMsg;
   };
 
   const getWhatsAppLink = (member: Member, message: string): string => {
@@ -227,19 +259,44 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   const [editingJoinDateMap, setEditingJoinDateMap] = useState<Record<string, string>>({});
 
   const handleSaveDetails = async (member: Member, phoneVal: string, joinDateVal: string) => {
+    const cleanPhone = (phoneVal || '').trim();
+    const cleanJoinDate = (joinDateVal || '').trim();
+
+    // Scenario A: Both fields empty
+    if (!cleanPhone && !cleanJoinDate) {
+      showToast(`Please fill in at least a Phone Number or Joining Date for ${member.Name}!`, 'error');
+      return;
+    }
+
+    // Scenario B: Phone entered but invalid format (<10 digits)
+    const digitsOnly = cleanPhone.replace(/\D/g, '');
+    if (cleanPhone && digitsOnly.length < 10) {
+      showToast(`Phone number for ${member.Name} must contain at least 10 digits!`, 'error');
+      return;
+    }
+
     const key = member.id || member.Name;
     setSavingPhoneId(key);
 
     const success = await supabaseService.updateMemberDetails(member.id || '', {
-      phone: phoneVal,
-      joinDate: joinDateVal,
+      phone: cleanPhone,
+      joinDate: cleanJoinDate,
     });
 
     if (success) {
-      member.Phone = phoneVal.trim();
-      member.JoinDate = joinDateVal.trim();
-      (member as any).join_date = joinDateVal.trim();
-      showToast(`Phone & Join Date updated for ${member.Name}`, 'success');
+      member.Phone = cleanPhone;
+      member.JoinDate = cleanJoinDate;
+      (member as any).join_date = cleanJoinDate;
+
+      // Toast feedback based on which scenario was saved
+      if (cleanPhone && cleanJoinDate) {
+        showToast(`Phone & Joining Date updated for ${member.Name}`, 'success');
+      } else if (cleanPhone) {
+        showToast(`Phone number updated for ${member.Name}`, 'success');
+      } else {
+        showToast(`Joining Date updated for ${member.Name}`, 'success');
+      }
+
       setEditingPhoneMap(prev => {
         const next = { ...prev };
         delete next[key];
@@ -251,7 +308,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
         return next;
       });
     } else {
-      showToast('Failed to save details', 'error');
+      showToast('Failed to save details. Check database connection.', 'error');
     }
     setSavingPhoneId(null);
   };
@@ -318,12 +375,22 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
 
   const handleSendWhatsAppClick = (e: React.MouseEvent, member: Member, msg: string) => {
     const key = member.id || member.Name;
-    const currentPhone = editingPhoneMap[key] !== undefined ? editingPhoneMap[key] : (member.Phone || '');
+    const currentPhone = (editingPhoneMap[key] !== undefined ? editingPhoneMap[key] : (member.Phone || '')).trim();
+    const digitsOnly = currentPhone.replace(/\D/g, '');
 
-    if (!currentPhone || !currentPhone.trim()) {
+    // Scenario A: Missing Phone Number
+    if (!currentPhone) {
       e.preventDefault();
       showToast(`Please enter a phone number for ${member.Name} before sending WhatsApp message!`, 'error');
       setEditingPhoneMap(prev => ({ ...prev, [key]: '' }));
+      return;
+    }
+
+    // Scenario B: Phone entered but invalid length (<10 digits)
+    if (digitsOnly.length < 10) {
+      e.preventDefault();
+      showToast(`Phone number for ${member.Name} must contain at least 10 digits!`, 'error');
+      setEditingPhoneMap(prev => ({ ...prev, [key]: currentPhone }));
       return;
     }
 
@@ -479,17 +546,17 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                 <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-emerald-400">
                   <span className="flex items-center gap-1.5">
                     {isInlineEditing ? <Edit className="w-3.5 h-3.5 text-emerald-400" /> : <Eye className="w-3.5 h-3.5 text-emerald-400" />}
-                    <span>{isInlineEditing ? `Quick Editing: ${activeTemplate.name}` : 'Selected Template Preview & Dynamic Formatting'}</span>
+                    <span>{isInlineEditing ? `Editing: ${activeTemplate.name}` : 'Selected Template Preview & Dynamic Formatting'}</span>
                   </span>
 
                   {!isInlineEditing ? (
                     <button
                       onClick={handleStartQuickEdit}
                       className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[11px] font-bold border border-emerald-500/30 flex items-center space-x-1.5 transition-all"
-                      title="Quick Edit Template directly here"
+                      title="Edit Template directly here"
                     >
                       <Edit className="w-3.5 h-3.5" />
-                      <span>Quick Edit</span>
+                      <span>Edit</span>
                     </button>
                   ) : (
                     <div className="flex items-center space-x-2">
@@ -507,7 +574,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                         className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-black flex items-center space-x-1 shadow-md shadow-emerald-500/20 transition-all"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        <span>{isSavingInline ? 'Saving...' : 'Save Changes'}</span>
+                        <span>{isSavingInline ? 'Saving...' : 'Save'}</span>
                       </button>
                     </div>
                   )}
@@ -548,14 +615,31 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
             )}
           </GlassCard>
 
-          {/* Target Status Filter */}
+          {/* Target Status Filter & Search Input */}
           <GlassCard className="p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="text-xs font-bold text-slate-300 flex items-center space-x-2">
-                <span>Filter Target Members by Traffic Status:</span>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Search Input */}
+              <div className="relative w-full md:w-72 shrink-0">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search member name or phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 rounded-xl glass-input text-xs font-semibold text-white placeholder-slate-400 border-emerald-500/30"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-white rounded-md transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
-              <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0">
+              {/* Status Filter Pills */}
+              <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar w-full md:w-auto pb-1 md:pb-0">
                 {(['All', 'Red', 'Amber', 'Grey', 'Green'] as const).map((filter) => (
                   <button
                     key={filter}
@@ -589,113 +673,114 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                 const status = statuses[key] || 'pending';
 
                 return (
-                  <GlassCard key={key} className="p-4 border-white/10 hover:border-emerald-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px]">
-                        <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center font-black text-emerald-400 text-sm">
-                          {member.Name.charAt(0)}
+                  <GlassCard key={key} className="p-3.5 sm:p-4 border-white/10 hover:border-emerald-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      {/* Name Header with Avatar & Status Badge */}
+                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                        {/* Avatar directly before Name */}
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shrink-0 shadow-md shadow-emerald-500/20">
+                          <div className="w-full h-full bg-[#0a0f1d] rounded-full flex items-center justify-center font-black text-emerald-400 text-xs sm:text-xs">
+                            {member.Name.charAt(0)}
+                          </div>
                         </div>
+
+                        <h3 className="text-sm sm:text-base font-black text-white truncate max-w-[200px] sm:max-w-none">{member.Name}</h3>
+
+                        <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full whitespace-nowrap ${
+                          member.trafficLight?.label === 'Green' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                          member.trafficLight?.label === 'Amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                          'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        }`}>
+                          {member.trafficLight?.label} ({member.score}/100)
+                        </span>
                       </div>
+
+                      {/* Phone & Joining Date section */}
                       <div>
-                        <div className="flex items-center space-x-2">
-                          <h3 className="text-base font-black text-white">{member.Name}</h3>
-                          <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
-                            member.trafficLight?.label === 'Green' ? 'bg-emerald-500/20 text-emerald-400' :
-                            member.trafficLight?.label === 'Amber' ? 'bg-amber-500/20 text-amber-400' :
-                            'bg-rose-500/20 text-rose-400'
-                          }`}>
-                            {member.trafficLight?.label} ({member.score}/100)
-                          </span>
-                        </div>
-                        <div className="pt-1">
-                          {(!member.Phone || editingPhoneMap[key] !== undefined || editingJoinDateMap[key] !== undefined) ? (
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full pt-1">
-                              <input
-                                type="tel"
-                                placeholder="Phone number..."
-                                value={editingPhoneMap[key] ?? (member.Phone || '')}
-                                onChange={(e) => setEditingPhoneMap(prev => ({ ...prev, [key]: e.target.value }))}
-                                className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-40 border-emerald-500/40"
-                              />
-                              <input
-                                type="date"
-                                placeholder="Joining Date"
-                                value={editingJoinDateMap[key] ?? (member.JoinDate || (member as any).join_date || '')}
-                                onChange={(e) => setEditingJoinDateMap(prev => ({ ...prev, [key]: e.target.value }))}
-                                className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-36 border-emerald-500/40"
-                              />
-                              <button
-                                onClick={() => handleSaveDetails(
-                                  member,
-                                  editingPhoneMap[key] ?? member.Phone ?? '',
-                                  editingJoinDateMap[key] ?? member.JoinDate ?? (member as any).join_date ?? ''
-                                )}
-                                disabled={savingPhoneId === key}
-                                className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md flex items-center justify-center space-x-1 transition-all w-full sm:w-auto shrink-0"
-                                title="Save Phone & Join Date"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>{savingPhoneId === key ? 'Saving...' : 'Save'}</span>
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center space-x-3 text-xs">
-                              <p className="text-slate-400 font-mono flex items-center gap-1">
-                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>{member.Phone}</span>
-                              </p>
-                              {(member.JoinDate || (member as any).join_date) && (
-                                <p className="text-emerald-400 font-mono flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
-                                  <span>Joined: {member.JoinDate || (member as any).join_date}</span>
-                                </p>
+                        {(!member.Phone || editingPhoneMap[key] !== undefined || editingJoinDateMap[key] !== undefined) ? (
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full pt-1">
+                            <input
+                              type="tel"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              placeholder="Phone number..."
+                              value={editingPhoneMap[key] ?? (member.Phone || '')}
+                              onChange={(e) => {
+                                const digits = e.target.value.replace(/[^0-9]/g, '');
+                                setEditingPhoneMap(prev => ({ ...prev, [key]: digits }));
+                              }}
+                              className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-40 border-emerald-500/40"
+                            />
+                            <input
+                              type="date"
+                              placeholder="Joining Date"
+                              value={editingJoinDateMap[key] ?? (member.JoinDate || (member as any).join_date || '')}
+                              onChange={(e) => setEditingJoinDateMap(prev => ({ ...prev, [key]: e.target.value }))}
+                              className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-36 border-emerald-500/40"
+                            />
+                            <button
+                              onClick={() => handleSaveDetails(
+                                member,
+                                editingPhoneMap[key] ?? member.Phone ?? '',
+                                editingJoinDateMap[key] ?? member.JoinDate ?? (member as any).join_date ?? ''
                               )}
-                              <button
-                                onClick={() => {
-                                  setEditingPhoneMap(prev => ({ ...prev, [key]: member.Phone || '' }));
-                                  setEditingJoinDateMap(prev => ({ ...prev, [key]: member.JoinDate || (member as any).join_date || '' }));
-                                }}
-                                className="p-1 text-slate-400 hover:text-emerald-400 rounded-md transition-colors"
-                                title="Edit Phone & Join Date"
-                              >
-                                <Edit className="w-3 h-3" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                              disabled={savingPhoneId === key}
+                              className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md flex items-center justify-center space-x-1 transition-all w-full sm:w-auto shrink-0"
+                              title="Save Phone & Join Date"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{savingPhoneId === key ? 'Saving...' : 'Save'}</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-3 text-xs pt-0.5">
+                            <p className="text-slate-400 font-mono flex items-center gap-1">
+                              <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>{member.Phone}</span>
+                            </p>
+                            {(member.JoinDate || (member as any).join_date) && (
+                              <p className="text-emerald-400 font-mono flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span>Joined: {member.JoinDate || (member as any).join_date}</span>
+                              </p>
+                            )}
+                            <button
+                              onClick={() => {
+                                setEditingPhoneMap(prev => ({ ...prev, [key]: member.Phone || '' }));
+                                setEditingJoinDateMap(prev => ({ ...prev, [key]: member.JoinDate || (member as any).join_date || '' }));
+                              }}
+                              className="p-1 text-slate-400 hover:text-emerald-400 rounded-md transition-colors"
+                              title="Edit Phone & Join Date"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-t-0">
+                    {/* Action Button Section */}
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-t-0">
                       {status === 'sent' && (
-                        <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 text-xs font-extrabold border border-emerald-500/30 flex items-center justify-center gap-1 shrink-0">
+                        <span className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 text-xs font-extrabold border border-emerald-500/30 flex items-center justify-center gap-1 shrink-0">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Sent</span>
                         </span>
                       )}
-
-                      <button
-                        onClick={() => handleCopy(key, msg)}
-                        className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-xs flex items-center justify-center space-x-1.5 border border-white/10 transition-all shadow-sm"
-                        title="Copy personalized message for this member"
-                      >
-                        {copiedId === key ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
-                        <span>{copiedId === key ? 'Copied!' : 'Copy'}</span>
-                      </button>
 
                       <a
                         href={waLink}
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => handleSendWhatsAppClick(e, member, msg)}
-                        className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg transition-all hover:scale-[1.01] ${
+                        className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg transition-all hover:scale-[1.01] ${
                           status === 'sent'
                             ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 shadow-emerald-500/10'
                             : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
                         }`}
                       >
                         {status === 'sent' ? <RotateCcw className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-                        <span>{status === 'sent' ? 'Resend WhatsApp' : 'Send WhatsApp'}</span>
+                        <span>{status === 'sent' ? 'Resend' : 'Send'}</span>
                       </a>
                     </div>
                   </GlassCard>

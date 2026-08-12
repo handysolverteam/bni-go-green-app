@@ -580,9 +580,90 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </GlassCard>
 
-          {/* Member Data Table */}
-          <GlassCard className="overflow-hidden border-white/10 p-0">
-            <div className="overflow-x-auto">
+          {/* Member Data Table & Mobile Cards */}
+          <GlassCard className="overflow-hidden border-white/10 p-0 sm:p-0">
+            {/* Mobile Cards View (<768px) */}
+            <div className="md:hidden p-3 space-y-2.5">
+              {filteredMembers.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 space-y-2">
+                  <Users className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p className="text-xs font-bold text-slate-300">No members found matching filter criteria</p>
+                </div>
+              ) : (
+                filteredMembers.map((member) => (
+                  <div
+                    key={member.id || member.Name}
+                    className="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10 hover:border-emerald-500/40 transition-all space-y-2.5"
+                  >
+                    {/* Top Info Row */}
+                    <div
+                      className="flex items-center justify-between gap-2 cursor-pointer"
+                      onClick={() => onSelectMember(member)}
+                    >
+                      <div className="flex items-center space-x-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shrink-0">
+                          <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center font-black text-emerald-400 text-xs">
+                            {member.Name.charAt(0)}
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs sm:text-sm font-bold text-white truncate">{member.Name}</h4>
+                          <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+                            <span>{member.Phone || 'No phone'}</span>
+                            {(member.JoinDate || (member as any).join_date) && (
+                              <span className="text-emerald-400/90 font-sans text-[10px]">&bull; Joined: {member.JoinDate || (member as any).join_date}</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="text-xs font-black text-white">{member.score || 0} <span className="text-[9px] text-slate-400 font-normal">/ 100</span></div>
+                        <div>{getStatusBadge(member.trafficLight?.label)}</div>
+                      </div>
+                    </div>
+
+                    {/* Metrics Badges Row */}
+                    <div className="flex items-center justify-between text-[11px] text-slate-300 pt-2 border-t border-white/5 bg-slate-950/40 px-2.5 py-1.5 rounded-xl">
+                      <div>Att: <strong className="text-white">{((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%</strong></div>
+                      <div>1-2-1s: <strong className="text-white">{member.breakdown?.oneToOnes?.value ? Number(member.breakdown.oneToOnes.value).toFixed(1) : 0}</strong></div>
+                      <div>Refs: <strong className="text-white">{member.breakdown?.referrals?.value ? Number(member.breakdown.referrals.value).toFixed(1) : 0}</strong></div>
+                    </div>
+
+                    {/* Mobile Action Buttons Row */}
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      {/* <button
+                        onClick={() => onSelectMember(member)}
+                        className="flex-1 py-1.5 px-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-center space-x-1 border border-emerald-500/20 transition-all active:scale-95"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Details</span>
+                      </button> */}
+
+                      <button
+                        onClick={() => { setMemberToEdit(member); setIsAddModalOpen(true); }}
+                        className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center space-x-1 border border-white/10 transition-all active:scale-95"
+                      >
+                        <Edit className="w-3.5 h-3.5 text-slate-300" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        onClick={() => setMemberToDelete(member)}
+                        className="py-1.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold flex items-center justify-center space-x-1 border border-rose-500/20 transition-all active:scale-95"
+                        title="Delete Member"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Table View (>=768px) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-900/90 text-slate-400 font-bold border-b border-white/10 text-[11px] uppercase tracking-wider">

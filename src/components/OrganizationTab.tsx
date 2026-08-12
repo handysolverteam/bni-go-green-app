@@ -106,7 +106,62 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
           <span>Organization Team & Role Permissions</span>
         </h3>
 
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        {/* Mobile Roster Cards View (<640px) */}
+        <div className="sm:hidden space-y-2.5">
+          {isLoading ? (
+            <div className="py-6 text-center text-slate-500 flex items-center justify-center space-x-2">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+              <span>Loading roster...</span>
+            </div>
+          ) : (
+            members.map((mem) => {
+              const isMe = mem.user_id === orgMember?.user_id;
+              const isOwner = mem.role === 'owner';
+
+              return (
+                <div key={mem.id} className="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-white text-xs">
+                        {(mem.user_email || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-bold text-white text-xs flex items-center gap-1">
+                          <span className="truncate max-w-[180px]">{mem.user_email || 'User'}</span>
+                          {isMe && <span className="text-[10px] text-emerald-400 font-extrabold">(You)</span>}
+                        </div>
+                        <div className="pt-0.5">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            mem.role === 'owner' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                            mem.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                            'bg-slate-800 text-slate-400 border border-slate-700/50'
+                          }`}>
+                            {mem.role === 'owner' ? <Crown className="w-3 h-3 text-amber-400" /> : <Shield className="w-3 h-3 text-emerald-400" />}
+                            <span>{mem.role.toUpperCase()}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isAdminOrOwner && !isOwner && !isMe && (
+                    <div className="pt-2 border-t border-white/5 flex items-center gap-2">
+                      <button
+                        onClick={() => handleRoleChange(mem.user_id, mem.role === 'admin' ? 'member' : 'admin')}
+                        className="flex-1 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold text-center border border-white/10 transition-all"
+                      >
+                        {mem.role === 'admin' ? 'Demote to Member' : 'Promote to Admin'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Roster Table View (>=640px) */}
+        <div className="hidden sm:block overflow-x-auto rounded-xl border border-white/10">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-900/80 uppercase text-slate-400 border-b border-white/10 font-black">
               <tr>

@@ -47,7 +47,8 @@ export const ScrollToTopButton: React.FC = () => {
     <button
       onClick={scrollToTop}
       aria-label="Scroll to top"
-      className={`fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-slate-900/90 text-emerald-400 border border-emerald-500/40 shadow-2xl backdrop-blur-xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 hover:bg-slate-800 active:scale-95 ${
+      style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}
+      className={`fixed right-4 lg:bottom-6 lg:right-6 z-50 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-slate-900/95 text-emerald-400 border border-emerald-500/40 shadow-2xl backdrop-blur-xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 hover:bg-slate-800 active:scale-95 ${
         isVisible ? 'opacity-100 translate-y-0 pointer-events-auto shadow-emerald-500/20' : 'opacity-0 translate-y-4 pointer-events-none'
       }`}
       title="Go to top"

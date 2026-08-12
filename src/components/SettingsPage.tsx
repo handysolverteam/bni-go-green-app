@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getScoringConfig, setScoringConfig, DEFAULTS } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Heart, Loader2 } from 'lucide-react';
+import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Heart, Loader2, Phone, Mail, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { supabaseService } from '../services/supabaseService';
@@ -18,6 +18,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
   const { showToast } = useToast();
   const [config, setConfigState] = useState<ScoringConfig>(getScoringConfig());
   const [signatureText, setSignatureText] = useState('Keep the momentum going! 💪');
+  const [enableSignature, setEnableSignature] = useState(true);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
@@ -36,6 +37,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
         if (res.signature) {
           setSignatureText(res.signature);
         }
+        if (res.enableSignature !== undefined) {
+          setEnableSignature(Boolean(res.enableSignature));
+        }
       }
       setIsLoadingSettings(false);
     };
@@ -53,12 +57,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
           amber: config.trafficLight.amber,
           red: config.trafficLight.red,
           signature: signatureText,
+          enableSignature: enableSignature,
         },
         config
       );
     }
     setSavedSuccess(true);
-    showToast('Scoring thresholds & custom signature saved to database!', 'success');
+    showToast('Scoring thresholds & custom signature settings saved!', 'success');
     if (onSettingsSaved) onSettingsSaved();
     setTimeout(() => setSavedSuccess(false), 2000);
   };
@@ -67,6 +72,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
     setScoringConfig(DEFAULTS);
     setConfigState(DEFAULTS);
     setSignatureText('Keep the momentum going! 💪');
+    setEnableSignature(true);
     setShowResetConfirm(false);
     if (orgId && user?.uid) {
       await supabaseService.saveOrgSettings(
@@ -77,6 +83,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
           amber: DEFAULTS.trafficLight.amber,
           red: DEFAULTS.trafficLight.red,
           signature: 'Keep the momentum going! 💪',
+          enableSignature: true,
         },
         DEFAULTS
       );
@@ -130,20 +137,47 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
         </div>
       </div>
 
-      {/* 1. WhatsApp Signature Card */}
-      <GlassCard className="p-6 space-y-3">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-emerald-400" />
-          <span>WhatsApp Message Signature</span>
-        </h3>
-        <input
-          type="text"
-          value={signatureText}
-          onChange={(e) => setSignatureText(e.target.value)}
-          placeholder="Keep the momentum going! 💪"
-          className="w-full px-4 py-2.5 rounded-xl glass-input text-xs font-semibold text-white"
-        />
-        <p className="text-[11px] text-slate-400">Appended to outbound WhatsApp performance nudge messages</p>
+      {/* 1. WhatsApp Signature Card with Toggle Switch */}
+      <GlassCard className="p-5 sm:p-6 space-y-4 border-white/10">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-black text-white">WhatsApp Message Signature</h3>
+              <p className="text-[11px] text-slate-400">Append custom closing signature to outbound WhatsApp messages</p>
+            </div>
+          </div>
+
+          {/* Toggle Switch */}
+          <button
+            type="button"
+            onClick={() => setEnableSignature(!enableSignature)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              enableSignature ? 'bg-emerald-500 shadow-md shadow-emerald-500/30' : 'bg-slate-800'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                enableSignature ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {enableSignature && (
+          <div className="space-y-1.5 pt-1 animate-fadeIn">
+            <label className="text-xs font-bold text-slate-300">Custom Signature Text</label>
+            <input
+              type="text"
+              value={signatureText}
+              onChange={(e) => setSignatureText(e.target.value)}
+              placeholder="Keep the momentum going! 💪"
+              className="w-full px-4 py-2.5 rounded-xl glass-input text-xs font-semibold text-white border-emerald-500/40"
+            />
+          </div>
+        )}
       </GlassCard>
 
       {/* 2. Traffic Light Thresholds */}
@@ -367,16 +401,48 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
         </GlassCard>
       </div>
 
-      {/* Footer Credit Box */}
-      <GlassCard className="p-6 text-center space-y-2 border-white/10">
-        <p className="text-xs text-slate-300 font-medium flex items-center justify-center gap-1.5">
-          <span>Made with</span>
-          <Heart className="w-3.5 h-3.5 text-rose-500 fill-current animate-pulse" />
-          <span>by <strong className="text-white font-bold">Handysolver</strong> (Rahul Singh Matharu | BNI Influencers)</span>
-        </p>
-        <p className="text-[11px] text-slate-400 font-mono">
-          +91 9910662331 &bull; connect@handysolver.com
-        </p>
+      {/* Handysolver Modern Footer Credit Card */}
+      <GlassCard glow className="p-5 sm:p-6 rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-emerald-950/20 shadow-2xl space-y-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-3.5 text-center sm:text-left">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
+              <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-emerald-400" />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-medium text-slate-300 flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
+                <span>Made with</span>
+                <Heart className="w-4 h-4 text-rose-500 fill-current animate-pulse shrink-0" />
+                <span>by</span>
+                <strong className="text-white font-black text-sm sm:text-base">Handysolver</strong>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-400 font-semibold mt-0.5 flex items-center justify-center sm:justify-start gap-1 flex-wrap">
+                <span className="text-emerald-400 font-bold">Rahul Singh Matharu</span>
+                <span>&bull;</span>
+                <span className="text-slate-300">BNI Influencers</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto shrink-0">
+            <a
+              href="tel:+919910662331"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 text-xs font-mono font-bold border border-white/10 flex items-center justify-center space-x-2 transition-all hover:border-emerald-500/40 active:scale-95 shadow-sm"
+            >
+              <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>+91 9910662331</span>
+            </a>
+
+            <a
+              href="mailto:connect@handysolver.com"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 text-xs font-mono font-bold border border-white/10 flex items-center justify-center space-x-2 transition-all hover:border-teal-500/40 active:scale-95 shadow-sm"
+            >
+              <Mail className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <span>connect@handysolver.com</span>
+            </a>
+          </div>
+        </div>
       </GlassCard>
 
       {/* Confirmation Modal for Reset */}

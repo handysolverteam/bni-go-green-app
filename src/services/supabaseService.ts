@@ -566,6 +566,7 @@ export const supabaseService = {
         return {
           scoringConfig: orgData.custom_scoring || null,
           signature: orgData.custom_signature || 'Keep the momentum going! 💪',
+          enableSignature: (orgData as any).enable_signature !== undefined ? Boolean((orgData as any).enable_signature) : true,
         };
       }
       return null;
@@ -583,6 +584,7 @@ export const supabaseService = {
           amber_threshold: settings.amber,
           red_threshold: settings.red,
           custom_signature: settings.signature,
+          enable_signature: settings.enableSignature !== undefined ? settings.enableSignature : true,
           custom_scoring: fullScoringConfig,
         })
         .eq('id', orgId);

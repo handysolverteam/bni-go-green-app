@@ -29,8 +29,11 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden">
-      <GlassCard className="w-full max-w-3xl max-h-[92vh] flex flex-col relative border-emerald-500/30 shadow-2xl overflow-hidden rounded-2xl sm:rounded-3xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden animate-fadeIn">
+      <GlassCard className="w-full max-w-3xl max-h-[94dvh] sm:max-h-[90vh] flex flex-col relative border-t sm:border border-emerald-500/30 shadow-2xl overflow-hidden rounded-t-3xl sm:rounded-3xl">
+        {/* Mobile Drag Handle */}
+        <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto mt-2.5 sm:hidden shrink-0" />
+        
         {/* Header */}
         <div className="flex items-center justify-between p-3.5 sm:p-6 border-b border-white/10 shrink-0">
           <div className="flex items-center space-x-3 sm:space-x-3.5">
