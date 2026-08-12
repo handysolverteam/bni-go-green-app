@@ -73,9 +73,9 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
   const navItems = [
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
-    { id: 'nudges' as NavigationTab, label: 'Outreach Messages', icon: MessageSquare },
-    { id: 'templates' as NavigationTab, label: 'Outreach Templates', icon: FileText },
-    { id: 'org' as NavigationTab, label: 'Organization', icon: Building2 },
+    { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare },
+    { id: 'templates' as NavigationTab, label: 'Templates', icon: FileText },
+    { id: 'org' as NavigationTab, label: 'Chapter', icon: Building2 },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
   ];
 
@@ -86,22 +86,20 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row antialiased">
-      {/* --- DESKTOP SIDEBAR --- */}
+      {/* --- DESKTOP SIDEBAR (≥1024px) --- */}
       <aside
         onMouseEnter={() => { if (sidebarMode === 'hover') setIsHovered(true); }}
         onMouseLeave={() => { if (sidebarMode === 'hover') setIsHovered(false); }}
-        className={`hidden lg:flex flex-col ${sidebarWidthClass} glass-panel border-r border-white/10 p-4 fixed top-0 bottom-0 z-40 overflow-y-auto transition-all duration-300 ease-in-out`}
+        className={`hidden lg:flex flex-col ${sidebarWidthClass} fixed top-0 left-0 bottom-0 glass-panel border-r border-white/10 p-4 transition-all duration-300 ease-in-out z-30 overflow-y-auto`}
       >
-        {/* Brand Header */}
-        <div className={`flex ${isCompact ? 'flex-col items-center space-y-3' : 'items-center justify-between'} pb-4 border-b border-white/10`}>
+        {/* Sidebar Header with App Logo */}
+        <div className="flex items-center justify-between pb-4 border-b border-white/10">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 flex-shrink-0">
-              <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center">
-                <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
-                  BNI
-                </span>
-              </div>
-            </div>
+            <img
+              src="/icons/icon.svg"
+              alt="BNI Go Green Logo"
+              className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-emerald-500/20 shrink-0"
+            />
             {!isCompact && (
               <div className="overflow-hidden">
                 <h1 className="text-base font-extrabold text-white tracking-wide truncate">Go Green</h1>
@@ -197,11 +195,11 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       <header className="lg:hidden sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-4 py-2.5 backdrop-blur-xl pt-[calc(env(safe-area-inset-top,0px)+10px)]">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20">
-              <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center">
-                <span className="text-base font-black text-emerald-400">BNI</span>
-              </div>
-            </div>
+            <img
+              src="/icons/icon.svg"
+              alt="BNI Go Green Logo"
+              className="w-9 h-9 rounded-xl object-cover shadow-lg shadow-emerald-500/20 shrink-0"
+            />
             <div>
               <h1 className="text-sm font-extrabold text-white">Go Green</h1>
               <p className="text-[10px] text-emerald-400 font-semibold">{org?.name || 'Chapter'}</p>
@@ -269,7 +267,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       </header>
 
       {/* --- MAIN CONTENT CONTAINER --- */}
-      <main className={`flex-1 ${mainMarginClass} p-2.5 sm:p-5 lg:p-8 pb-[calc(env(safe-area-inset-bottom,0px)+100px)] lg:pb-8 min-h-screen transition-all duration-300 ease-in-out`}>
+      <main className={`flex-1 ${mainMarginClass} w-full min-w-0 p-2.5 sm:p-5 lg:p-8 pb-[calc(env(safe-area-inset-bottom,0px)+100px)] lg:pb-8 min-h-screen transition-all duration-300 ease-in-out`}>
         {children}
       </main>
 

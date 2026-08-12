@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Download, X, Share, Smartphone } from 'lucide-react';
+import { PlusCircle, X, Share, Smartphone, Laptop } from 'lucide-react';
 
 export const PWAInstallPrompt: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPrompt, setShowPrompt] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
-    // Check if already in standalone PWA mode
+    // Check if already in standalone PWA or installed mode
     const inStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (navigator as any).standalone ||
@@ -22,10 +23,9 @@ export const PWAInstallPrompt: React.FC = () => {
     const iosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(iosDevice);
 
-    // If iOS and not standalone, show iOS install guide after short delay
     const dismissed = localStorage.getItem('bni_pwa_prompt_dismissed');
-    if (iosDevice && !inStandalone && !dismissed) {
-      const timer = setTimeout(() => setShowPrompt(true), 3000);
+    if (!inStandalone && !dismissed) {
+      const timer = setTimeout(() => setShowPrompt(true), 2500);
       return () => clearTimeout(timer);
     }
 
@@ -45,14 +45,18 @@ export const PWAInstallPrompt: React.FC = () => {
     };
   }, []);
 
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setShowPrompt(false);
+  const handleAddClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setShowPrompt(false);
+      }
+      setDeferredPrompt(null);
+    } else {
+      // Toggle guide if browser needs manual Add to Home Screen step (iOS / Safari / Firefox)
+      setShowGuide(true);
     }
-    setDeferredPrompt(null);
   };
 
   const handleDismiss = () => {
@@ -63,18 +67,21 @@ export const PWAInstallPrompt: React.FC = () => {
   if (isStandalone || !showPrompt) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 animate-fadeIn">
-      <div className="p-4 rounded-2xl bg-slate-900/95 border border-emerald-500/40 text-white shadow-2xl backdrop-blur-xl space-y-3">
+    <div
+      style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 84px)' }}
+      className="fixed left-4 right-4 sm:left-auto sm:right-6 sm:max-w-sm z-50 animate-fadeIn"
+    >
+      <div className="p-4 rounded-3xl bg-slate-900/95 border border-emerald-500/40 text-white shadow-2xl backdrop-blur-2xl space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
-              <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
+              <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
                 <Smartphone className="w-5 h-5 text-emerald-400" />
               </div>
             </div>
             <div>
-              <h4 className="text-sm font-extrabold text-white">Install BNI Go Green App</h4>
-              <p className="text-xs text-slate-400">Add to your home screen for quick access & score tracking</p>
+              <h4 className="text-sm font-black text-white">Add to Home Screen</h4>
+              <p className="text-[11px] text-slate-400">Quick 1-tap access for score tracking & nudges</p>
             </div>
           </div>
 
@@ -86,33 +93,34 @@ export const PWAInstallPrompt: React.FC = () => {
           </button>
         </div>
 
-        {isIOS ? (
-          <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 space-y-1">
-            <div className="flex items-center gap-1.5 font-bold">
+        {/* Step Guide for iOS / Manual Browsers */}
+        {(isIOS || showGuide) && (
+          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 space-y-1.5 animate-fadeIn">
+            <div className="flex items-center gap-1.5 font-extrabold text-white">
               <Share className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>To install on iOS:</span>
+              <span>How to Add to Home Screen:</span>
             </div>
-            <p className="text-[11px] text-slate-300">
-              Tap the <strong className="text-white">Share</strong> button at bottom of Safari & select <strong className="text-white">'Add to Home Screen'</strong>.
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Tap <strong className="text-white font-bold">Share</strong> or <strong className="text-white font-bold">Menu (⋮)</strong> in your browser, then select <strong className="text-emerald-400 font-black">'Add to Home Screen'</strong>.
             </p>
           </div>
-        ) : (
-          <div className="flex items-center justify-end space-x-2 pt-1">
-            <button
-              onClick={handleDismiss}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-colors"
-            >
-              Not now
-            </button>
-            <button
-              onClick={handleInstallClick}
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Install App</span>
-            </button>
-          </div>
         )}
+
+        <div className="flex items-center justify-end space-x-2 pt-1">
+          <button
+            onClick={handleDismiss}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-colors"
+          >
+            Not now
+          </button>
+          <button
+            onClick={handleAddClick}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 active:scale-95"
+          >
+            <PlusCircle className="w-4 h-4 text-slate-950" />
+            <span>Add to Home Screen</span>
+          </button>
+        </div>
       </div>
     </div>
   );
