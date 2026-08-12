@@ -145,4 +145,4 @@ CREATE POLICY "Public full access outreach_logs" ON public.outreach_logs FOR ALL
    npm run build
    ```
 
-Developed by **HandySolver Team**. 
+Developed by **HandySolver Team**.
