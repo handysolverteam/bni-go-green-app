@@ -2,6 +2,7 @@ import React from 'react';
 import { Member } from '../types';
 import { levelUpPlan, formatCurrency } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
+import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { X, Award, CheckCircle2, TrendingUp, Send, ExternalLink, ShieldCheck } from 'lucide-react';
 
 interface MemberDetailModalProps {
@@ -13,10 +14,8 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
   const plan = levelUpPlan(member);
 
   const getWAUrl = () => {
-    let phone = (member.Phone || '').replace(/\D/g, '');
-    if (phone.length === 10) phone = '91' + phone;
-    const txt = encodeURIComponent(`Hi ${member.Name}, let's review your BNI score (${member.score}/100) and targets!`);
-    return phone ? `https://web.whatsapp.com/send?phone=${phone}&text=${txt}` : `https://web.whatsapp.com/send?text=${txt}`;
+    const txt = `Hi ${member.Name}, let's review your BNI score (${member.score}/100) and targets!`;
+    return getWhatsAppUrl(member.Phone || '', txt);
   };
 
   const categories = [

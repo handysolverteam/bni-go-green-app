@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Member, ImportLog, OutreachTemplate } from '../types';
 import { GlassCard } from './GlassCard';
 import { substituteKeywords } from './TemplateManagerPage';
+import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { useToast } from '../context/ToastContext';
 import {
   MessageSquare, ExternalLink, Copy, Check, Sparkles, Send, Play, Pause,
@@ -214,10 +215,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   };
 
   const getWhatsAppLink = (member: Member, message: string): string => {
-    let cleanPhone = (member.Phone || '').replace(/\D/g, '');
-    if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
-    const encoded = encodeURIComponent(message);
-    return cleanPhone ? `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}` : `https://web.whatsapp.com/send?text=${encoded}`;
+    return getWhatsAppUrl(member.Phone || '', message);
   };
 
   const handleCopy = (id: string, text: string) => {

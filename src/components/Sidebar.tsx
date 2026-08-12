@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, FileText, Sun, Moon } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
+import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
 
 export type NavigationTab = 'dashboard' | 'import' | 'nudges' | 'templates' | 'org' | 'profile' | 'settings';
@@ -368,8 +369,11 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         onClose={() => setShowLogoutConfirm(false)}
       />
 
-      {/* Floating Scroll To Top Circular Button (Shows on scroll, auto-hides after 2s) */}
+      {/* Floating Scroll To Top Circular Button (Shows on scroll, auto-hides after 3s) */}
       <ScrollToTopButton />
+
+      {/* PWA Install Prompt for iOS & Android */}
+      <PWAInstallPrompt />
     </div>
   );
 };
