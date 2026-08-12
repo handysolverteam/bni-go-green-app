@@ -300,7 +300,10 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
       {/* Preferences Modal (Persisted in localStorage) */}
       {showModeModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setShowModeModal(false); }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn cursor-pointer"
+        >
           <div className="glass-panel w-full max-w-sm p-5 sm:p-6 rounded-t-3xl sm:rounded-2xl space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/30">
             {/* Mobile Drag Handle */}
             <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-2 sm:hidden shrink-0" />

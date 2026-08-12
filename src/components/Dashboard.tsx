@@ -446,34 +446,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Traffic Light Distribution Badges */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <span className="px-2 py-0.5 text-[11px] font-extrabold rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    {/* Traffic Light Distribution Badges - Equal Width Grid */}
+                    <div className="grid grid-cols-4 gap-1.5 pt-1 w-full text-center">
+                      <span className="py-1 px-1 text-[11px] font-extrabold rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
                         🟢 {report.green_count || 0}
                       </span>
-                      <span className="px-2 py-0.5 text-[11px] font-extrabold rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      <span className="py-1 px-1 text-[11px] font-extrabold rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
                         🟡 {report.amber_count || 0}
                       </span>
-                      <span className="px-2 py-0.5 text-[11px] font-extrabold rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                      <span className="py-1 px-1 text-[11px] font-extrabold rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center">
                         🔴 {report.red_count || 0}
                       </span>
-                      {(report.grey_count || 0) > 0 && (
-                        <span className="px-2 py-0.5 text-[11px] font-extrabold rounded-md bg-slate-800 text-slate-400 border border-white/10">
-                          ⚪ {report.grey_count}
-                        </span>
-                      )}
+                      <span className="py-1 px-1 text-[11px] font-extrabold rounded-xl bg-slate-800 text-slate-400 border border-white/10 flex items-center justify-center">
+                        ⚪ {report.grey_count || 0}
+                      </span>
                     </div>
                   </div>
 
                   {/* Card Action Buttons */}
                   <div className="pt-3 border-t border-white/10 flex items-center space-x-2">
-                    {/* <button
-                      onClick={() => handleDownloadReportFile(report)}
-                      className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/20 transition-all shrink-0"
-                      title="Download Original Uploaded Excel File"
-                    >
-                      <FileDown className="w-4 h-4" />
-                    </button> */}
 
                     <button
                       onClick={() => setActiveReportName(report.batch_name || null)}
@@ -582,8 +573,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Member Data Table & Mobile Cards */}
           <GlassCard className="overflow-hidden border-white/10 p-0 sm:p-0">
-            {/* Mobile Cards View (<768px) */}
-            <div className="md:hidden p-3 space-y-2.5">
+            {/* Mobile Cards View (<768px) with reduced side padding */}
+            <div className="md:hidden p-1 sm:p-3 space-y-2">
               {filteredMembers.length === 0 ? (
                 <div className="py-8 text-center text-slate-400 space-y-2">
                   <Users className="w-8 h-8 text-slate-600 mx-auto" />
@@ -593,7 +584,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 filteredMembers.map((member) => (
                   <div
                     key={member.id || member.Name}
-                    className="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10 hover:border-emerald-500/40 transition-all space-y-2.5"
+                    className="p-2 sm:p-3.5 rounded-2xl bg-slate-900/80 border border-white/10 hover:border-emerald-500/40 transition-all space-y-2"
                   >
                     {/* Top Info Row */}
                     <div

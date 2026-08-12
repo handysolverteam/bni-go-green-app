@@ -515,14 +515,14 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                 <p className="text-[11px] text-slate-400">Choose a dynamic template to apply to all member outreach actions below</p>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto min-w-0">
                 <select
                   value={selectedTemplateId}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="px-3.5 py-2.5 rounded-xl glass-input text-xs font-bold text-white bg-slate-900 border-emerald-500/40"
+                  className="w-full sm:w-64 max-w-full px-3 py-2 rounded-xl glass-input text-xs font-bold text-white bg-slate-900 border-emerald-500/40 truncate overflow-hidden"
                 >
                   {templates.map(t => (
-                    <option key={t.id} value={t.id}>
+                    <option key={t.id} value={t.id} className="bg-slate-900 text-white">
                       {t.name} ({t.status_target} Tier)
                     </option>
                   ))}
@@ -531,7 +531,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                 {onOpenTemplateManager && (
                   <button
                     onClick={onOpenTemplateManager}
-                    className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-extrabold text-xs border border-emerald-500/30 flex items-center space-x-1.5 whitespace-nowrap transition-all"
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-extrabold text-xs border border-emerald-500/30 flex items-center justify-center space-x-1.5 whitespace-nowrap transition-all shrink-0"
                   >
                     <FileText className="w-4 h-4" />
                     <span>Manage Templates</span>
@@ -668,9 +668,10 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
             ) : (
               targetMembers.map((member) => {
                 const key = member.id || member.Name;
-                const msg = generateNudgeMessage(member);
-                const waLink = getWhatsAppLink(member, msg);
-                const status = statuses[key] || 'pending';
+                const status = statuses[key] || statuses[member.Name] || 'pending';
+                const nudgeMsg = generateNudgeMessage(member);
+                const waLink = getWhatsAppLink(member, nudgeMsg);
+                const isSent = status === 'sent';
 
                 return (
                   <GlassCard key={key} className="p-3.5 sm:p-4 border-white/10 hover:border-emerald-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -711,13 +712,17 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                               }}
                               className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-40 border-emerald-500/40"
                             />
-                            <input
-                              type="date"
-                              placeholder="Joining Date"
-                              value={editingJoinDateMap[key] ?? (member.JoinDate || (member as any).join_date || '')}
-                              onChange={(e) => setEditingJoinDateMap(prev => ({ ...prev, [key]: e.target.value }))}
-                              className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-36 border-emerald-500/40"
-                            />
+                            <div className="relative w-full sm:w-36">
+                              <input
+                                type={editingJoinDateMap[key] || member.JoinDate || (member as any).join_date ? "date" : "text"}
+                                onFocus={(e) => (e.target.type = "date")}
+                                onBlur={(e) => { if (!e.target.value) e.target.type = "text"; }}
+                                placeholder="📅 Joining Date"
+                                value={editingJoinDateMap[key] ?? (member.JoinDate || (member as any).join_date || '')}
+                                onChange={(e) => setEditingJoinDateMap(prev => ({ ...prev, [key]: e.target.value }))}
+                                className="w-full px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white border-emerald-500/40"
+                              />
+                            </div>
                             <button
                               onClick={() => handleSaveDetails(
                                 member,
@@ -772,7 +777,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                         href={waLink}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={(e) => handleSendWhatsAppClick(e, member, msg)}
+                        onClick={(e) => handleSendWhatsAppClick(e, member, nudgeMsg)}
                         className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg transition-all hover:scale-[1.01] ${
                           status === 'sent'
                             ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 shadow-emerald-500/10'

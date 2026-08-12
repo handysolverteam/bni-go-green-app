@@ -114,7 +114,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden animate-fadeIn">
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden animate-fadeIn cursor-pointer"
+    >
       <GlassCard className="w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col relative border-t sm:border border-emerald-500/30 shadow-2xl overflow-hidden rounded-t-3xl sm:rounded-3xl">
         {/* Mobile Sheet Drag Handle */}
         <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto mt-2.5 sm:hidden shrink-0" />
@@ -260,7 +263,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
               disabled={parsedMembers.length === 0 || !batchName.trim()}
               className="w-1/2 sm:w-auto px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all disabled:opacity-40"
             >
-              Confirm Import ({parsedMembers.length})
+              Confirm ({parsedMembers.length})
             </button>
           </div>
         </div>

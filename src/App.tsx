@@ -35,10 +35,25 @@ export const AppContent: React.FC = () => {
   });
 
   const setActiveTab = (tab: NavigationTab) => {
-    setActiveTabState(tab);
-    window.location.hash = tab;
-    localStorage.setItem('bni_active_tab', tab);
+    if (tab !== activeTab) {
+      window.history.pushState({ tab }, '', `#${tab}`);
+      setActiveTabState(tab);
+      localStorage.setItem('bni_active_tab', tab);
+    }
   };
+
+  // Listen to mobile swipe-back gesture and browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '') as NavigationTab;
+      if (['dashboard', 'import', 'nudges', 'templates', 'org', 'profile', 'settings'].includes(hash)) {
+        setActiveTabState(hash);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   
   const [org, setOrg] = useState<Organization | null>(() => {
     try {
@@ -116,6 +131,9 @@ export const AppContent: React.FC = () => {
       setIsDataLoaded(true);
       return;
     }
+
+    setIsInitializing(true);
+    setIsDataLoaded(false);
 
     const initUserData = async () => {
       try {
@@ -323,24 +341,40 @@ export const AppContent: React.FC = () => {
     setIsSyncing(false);
   };
 
-  // 1. Unauthenticated -> LoginPage (Only when auth check is complete)
-  if (!user && !authLoading) {
+  // 1. Unauthenticated / Login Process -> Always show LoginPage
+  if (!user) {
     return <LoginPage />;
   }
 
-  // 2. Authenticated but NO Organization -> Org Onboarding Screen
-  // Only render when DB fetch is 100% complete and org is confirmed null
-  if (user && isDataLoaded && !isInitializing && !org) {
+  // 2. User is Logged In (user != null) but Org Verification is in progress -> Verifying Splash
+  if (isInitializing || !isDataLoaded) {
+    return (
+      <div className="min-h-screen bg-[#080d19] flex flex-col items-center justify-center p-4 text-center space-y-4">
+        <div className="relative">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] animate-pulse">
+            <div className="w-full h-full bg-[#080d19] rounded-[14px] flex items-center justify-center">
+              <img src="/icons/icon.svg" alt="BNI Go Green Logo" className="w-10 h-10 rounded-xl object-cover" />
+            </div>
+          </div>
+          <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping absolute -top-1 -right-1" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-black text-white">Verifying Organization...</h3>
+          <p className="text-xs text-slate-400 font-medium">Checking chapter membership & credentials</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Authenticated & Verified, but NO Organization -> Org Onboarding Screen
+  if (!org) {
     return <OrgOnboardingScreen onOrgJoined={handleOrgJoined} />;
   }
 
-  // 3. Has Org but Profile NOT Completed -> Profile Onboarding Screen
-  if (user && isDataLoaded && !isInitializing && org && (!userProfile || !userProfile.is_profile_completed)) {
+  // 4. Authenticated & Verified, Has Org, but Profile NOT Completed -> Profile Onboarding Screen
+  if (!userProfile || !userProfile.is_profile_completed) {
     return <ProfileOnboardingScreen onProfileCompleted={handleProfileCompleted} />;
   }
-
-  // 4. Default Guard if org not yet loaded
-  if (!org) return null;
 
   // 4. Fully Authenticated & Onboarded -> App with Sidebar Layout
   return (
