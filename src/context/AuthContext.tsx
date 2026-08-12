@@ -100,6 +100,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setLoading(true);
     try {
+      localStorage.removeItem('bni_cached_org');
+      localStorage.removeItem('bni_cached_org_member');
+      localStorage.removeItem('bni_cached_profile');
+      localStorage.removeItem('bni_cached_members');
+      localStorage.removeItem('bni_cached_import_logs');
+      localStorage.removeItem('bni_active_tab');
+      sessionStorage.clear();
+
       await signOutFirebase();
       await signOutSupabase();
       setUser(null);

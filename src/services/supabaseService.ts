@@ -267,11 +267,20 @@ export const supabaseService = {
         .from('members')
         .select('*')
         .eq('org_id', orgId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (error || !data) return [];
 
+      data.sort((a: any, b: any) => {
+        const idxA = Number(a.raw_data?.excel_row_index);
+        const idxB = Number(b.raw_data?.excel_row_index);
+        if (!isNaN(idxA) && !isNaN(idxB) && idxA !== idxB) return idxA - idxB;
+        return (a.created_at || '').localeCompare(b.created_at || '');
+      });
+
       return data.map((row: any) => {
+        const raw = row.raw_data || {};
+        const totalVal = Number(raw['Total Score'] ?? raw['total_score'] ?? raw['TotalScore'] ?? row.score) || (row.score > 0 ? row.score : undefined);
         const mem = scoreMember({
           id: row.id,
           org_id: row.org_id,
@@ -290,7 +299,19 @@ export const supabaseService = {
           Sponsors: row.sponsors || 0,
           JoinDate: row.join_date || '',
           batch_name: row.batch_name || '',
-          raw_data: row.raw_data || {},
+          AttendanceRate: raw['Attendance Rate'] ?? raw['attendance_rate'] ?? row.attendance_rate,
+          CEURate: raw['CEU Rate'] ?? raw['ceu_rate'] ?? row.ceu_rate,
+          OneToOneRate: raw['121 Rate'] ?? raw['1-2-1 Rate'] ?? raw['one_to_one_rate'] ?? row.one_to_one_rate,
+          ReferralsGivenRate: raw['Referrals Given Rate'] ?? raw['referrals_given_rate'] ?? row.referrals_given_rate,
+          AttendanceScore: raw['Attendance Score'] ?? row.attendance_score,
+          CEUScore: raw['CEU Score'] ?? row.ceu_score,
+          OneToOneScore: raw['121 Score'] ?? raw['1-2-1 Score'] ?? row.one_to_one_score,
+          ReferralsGivenScore: raw['Referrals Given Score'] ?? row.referrals_given_score,
+          TYFCBScore: raw['TYFCB Score'] ?? row.tyfcb_score,
+          VisitorScore: raw['Visitor Score'] ?? raw['Visitors Score'] ?? row.visitor_score,
+          SponsorScore: raw['Sponsor Score'] ?? raw['Sponsors Score'] ?? row.sponsor_score,
+          workbookTotalScore: totalVal,
+          raw_data: raw,
         });
         (mem as any).created_at = row.created_at;
         (mem as any).import_log_id = row.import_log_id;
@@ -303,80 +324,44 @@ export const supabaseService = {
 
   async saveSingleMember(member: Member, orgId: string, userId: string): Promise<Member | null> {
     try {
-      const { data, error } = await supabase.rpc('save_single_bni_member', {
-        p_org_id: orgId,
-        p_user_id: userId,
-        p_member: member,
-      });
+      const scored = scoreMember(member);
 
-      if (error || !data) {
-        const row = {
-          ...(member.id && !member.id.startsWith('temp_') ? { id: member.id } : {}),
-          org_id: orgId,
-          user_id: userId,
-          name: member.Name,
-          chapter: member.Chapter || 'Influencers',
-          phone: member.Phone || '',
-          email: member.Email || '',
-          present: member.P || 0,
-          absent: member.A || 0,
-          substitute: member.S || 0,
-          medical: member.M || 0,
-          referrals_given: member.RGT || 0,
-          visitors: member.V || 0,
-          tyfcb: member.TYFCB || 0,
-          ceu: member.CEU || 0,
-          one_to_ones: member.OneToOnes || 0,
-          sponsors: member.Sponsors || 0,
-          score: member.score || 0,
-          traffic_light: member.trafficLight?.label || 'Grey',
-          updated_at: new Date().toISOString(),
-        };
+      const row = {
+        ...(scored.id && !scored.id.startsWith('temp_') ? { id: scored.id } : {}),
+        org_id: orgId,
+        user_id: userId,
+        name: scored.Name,
+        chapter: scored.Chapter || 'Influencers',
+        phone: scored.Phone || '',
+        email: scored.Email || '',
+        join_date: scored.JoinDate || (scored as any).join_date || '',
+        present: scored.P || 0,
+        absent: scored.A || 0,
+        substitute: scored.S || 0,
+        medical: scored.M || 0,
+        referrals_given: scored.RGT || 0,
+        visitors: scored.V || 0,
+        tyfcb: scored.TYFCB || 0,
+        ceu: scored.CEU || 0,
+        one_to_ones: scored.OneToOnes || 0,
+        sponsors: scored.Sponsors || 0,
+        score: scored.score || 0,
+        traffic_light: scored.trafficLight?.label || 'Grey',
+        batch_name: scored.batch_name || '',
+        raw_data: scored.raw_data || {},
+        updated_at: new Date().toISOString(),
+      };
 
-        const { data: upsertData } = await supabase.from('members').upsert(row).select().single();
-        if (upsertData) {
-          return scoreMember({
-            id: upsertData.id,
-            org_id: upsertData.org_id,
-            Name: upsertData.name,
-            Phone: upsertData.phone || '',
-            Email: upsertData.email || '',
-            P: upsertData.present || 0,
-            A: upsertData.absent || 0,
-            S: upsertData.substitute || 0,
-            M: upsertData.medical || 0,
-            RGT: upsertData.referrals_given || 0,
-            V: upsertData.visitors || 0,
-            TYFCB: Number(upsertData.tyfcb) || 0,
-            CEU: Number(upsertData.ceu) || 0,
-            OneToOnes: Number(upsertData.one_to_ones) || 0,
-            Sponsors: upsertData.sponsors || 0,
-            batch_name: upsertData.batch_name || '',
-          });
-        }
-        return null;
+      const { data: upsertData } = await supabase.from('members').upsert(row).select().single();
+      if (upsertData) {
+        return scoreMember({
+          ...scored,
+          id: upsertData.id,
+        });
       }
-
-      return scoreMember({
-        id: data.id,
-        org_id: data.org_id,
-        Name: data.name,
-        Phone: data.phone || '',
-        Email: data.email || '',
-        P: data.present || 0,
-        A: data.absent || 0,
-        S: data.substitute || 0,
-        M: data.medical || 0,
-        RGT: data.referrals_given || 0,
-        V: data.visitors || 0,
-        TYFCB: Number(data.tyfcb) || 0,
-        CEU: Number(data.ceu) || 0,
-        OneToOnes: Number(data.one_to_ones) || 0,
-        Sponsors: data.sponsors || 0,
-        batch_name: data.batch_name || '',
-      });
+      return scored;
     } catch (e) {
-      return null;
+      return scoreMember(member);
     }
   },
 
@@ -421,6 +406,7 @@ export const supabaseService = {
         chapter: m.Chapter ? String(m.Chapter).trim() : 'Influencers',
         phone: m.Phone ? String(m.Phone).trim() : '',
         email: m.Email ? String(m.Email).trim() : '',
+        join_date: m.JoinDate || (m as any).join_date || '',
         present: safeNum(m.P),
         absent: safeNum(m.A),
         substitute: safeNum(m.S),
@@ -763,6 +749,53 @@ export const supabaseService = {
   async deleteOutreachTemplate(templateId: string): Promise<boolean> {
     try {
       const { error } = await supabase.from('outreach_templates').delete().eq('id', templateId);
+      return !error;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async updateMemberPhone(memberId: string, phone: string): Promise<boolean> {
+    return this.updateMemberDetails(memberId, { phone });
+  },
+
+  async updateMemberDetails(memberId: string, details: { phone?: string; joinDate?: string }): Promise<boolean> {
+    try {
+      const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (details.phone !== undefined) payload.phone = details.phone.trim();
+      if (details.joinDate !== undefined) payload.join_date = details.joinDate.trim();
+
+      const { error } = await supabase
+        .from('members')
+        .update(payload)
+        .eq('id', memberId);
+      return !error;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async updateMemberOutreachStatus(memberId: string, status: string): Promise<boolean> {
+    try {
+      const { data: current } = await supabase
+        .from('members')
+        .select('raw_data')
+        .eq('id', memberId)
+        .maybeSingle();
+
+      const updatedRaw = {
+        ...(current?.raw_data || {}),
+        outreach_status: status,
+        outreach_sent_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('members')
+        .update({
+          raw_data: updatedRaw,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', memberId);
       return !error;
     } catch (e) {
       return false;

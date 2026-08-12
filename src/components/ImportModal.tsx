@@ -114,30 +114,30 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden">
-      <GlassCard className="w-full max-w-2xl max-h-[90vh] flex flex-col relative border-emerald-500/30 shadow-2xl overflow-hidden rounded-3xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden">
+      <GlassCard className="w-full max-w-2xl max-h-[92vh] flex flex-col relative border-emerald-500/30 shadow-2xl overflow-hidden rounded-2xl sm:rounded-3xl">
         {/* Header with Close Button */}
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-white/10 shrink-0">
+        <div className="flex items-center justify-between p-3.5 sm:p-6 border-b border-white/10 shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              <FileSpreadsheet className="w-6 h-6" />
+            <div className="p-2 sm:p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-black text-white">Upload Member Report</h2>
-              <p className="text-xs text-slate-400">Import BNI Chapter Excel/CSV file to calculate scores</p>
+              <h2 className="text-base sm:text-xl font-black text-white">Upload Member Report</h2>
+              <p className="text-[11px] sm:text-xs text-slate-400">Import BNI Chapter Excel/CSV file to calculate scores</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors z-20 shrink-0"
+            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors z-20 shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Content Body */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-5">
           {/* File Dropzone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}

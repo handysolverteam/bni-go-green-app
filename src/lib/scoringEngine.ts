@@ -17,8 +17,8 @@ export const DEFAULTS: ScoringConfig = {
   },
   ceu: {
     thresholds: [
-      { t: 0.000001, pts: 5 },
-      { t: 0.500001, pts: 10 },
+      { t: 0.5, pts: 5 },
+      { t: 1.0, pts: 10 },
     ],
   },
   oneToOnes: {
@@ -292,15 +292,41 @@ const SCORING_RULES = {
   }
 };
 
+function getExplicitComponentScore(member: Member, cat: string): number | undefined {
+  switch (cat) {
+    case 'attendance':
+      return member.AttendanceScore;
+    case 'ceu':
+      return member.CEUScore;
+    case 'oneToOnes':
+      return member.OneToOneScore;
+    case 'referrals':
+      return member.ReferralsGivenScore;
+    case 'tyfcb':
+      return member.TYFCBScore;
+    case 'visitors':
+      return member.VisitorScore;
+    case 'sponsors':
+      return member.SponsorScore;
+    default:
+      return undefined;
+  }
+}
+
 export function scoreBreakdown(member: Member) {
   const breakdown: Record<string, CategoryBreakdown> = {};
   let total = 0;
   const metrics = metricSnapshot(member);
 
   for (const [cat, rule] of Object.entries(SCORING_RULES)) {
-    const pts = rule.calc(member);
+    const explicitPts = getExplicitComponentScore(member, cat);
+    const pts = explicitPts !== undefined && !isNaN(explicitPts) ? explicitPts : rule.calc(member);
     breakdown[cat] = { points: pts, max: rule.max, value: rule.value(member) };
     total += pts;
+  }
+
+  if (member.workbookTotalScore !== undefined && !isNaN(member.workbookTotalScore) && member.workbookTotalScore > 0) {
+    total = member.workbookTotalScore;
   }
 
   return { breakdown, total, metrics };

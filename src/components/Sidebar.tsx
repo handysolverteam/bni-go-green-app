@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, FileText, Sun, Moon } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
+import { ScrollToTopButton } from './ScrollToTopButton';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
 
 export type NavigationTab = 'dashboard' | 'import' | 'nudges' | 'templates' | 'org' | 'profile' | 'settings';
@@ -83,7 +84,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   const mainMarginClass = sidebarMode === 'icons' ? 'lg:ml-20' : sidebarMode === 'hover' ? (isHovered ? 'lg:ml-64' : 'lg:ml-20') : 'lg:ml-64';
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#060a12] text-slate-100 antialiased">
+    <div className="min-h-screen flex flex-col lg:flex-row antialiased">
       {/* --- DESKTOP SIDEBAR --- */}
       <aside
         onMouseEnter={() => { if (sidebarMode === 'hover') setIsHovered(true); }}
@@ -156,7 +157,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             <div
               onClick={() => setActiveTab('profile')}
               title={isCompact ? 'View & Edit Profile' : undefined}
-              className={`flex items-center ${isCompact ? 'justify-center p-1.5' : 'space-x-2.5 p-2'} rounded-xl bg-slate-900/60 border ${
+              className={`sidebar-profile-card flex items-center ${isCompact ? 'justify-center p-1.5' : 'space-x-2.5 p-2'} rounded-xl bg-slate-900/60 border ${
                 activeTab === 'profile' ? 'border-emerald-500/80 bg-emerald-500/10' : 'border-white/5 hover:border-emerald-500/30 hover:bg-slate-800/80'
               } cursor-pointer transition-all group`}
             >
@@ -272,7 +273,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       </header>
 
       {/* --- MAIN CONTENT CONTAINER --- */}
-      <main className={`flex-1 ${mainMarginClass} p-4 lg:p-8 min-h-screen transition-all duration-300 ease-in-out`}>
+      <main className={`flex-1 ${mainMarginClass} p-2.5 sm:p-5 lg:p-8 min-h-screen transition-all duration-300 ease-in-out`}>
         {children}
       </main>
 
@@ -366,6 +367,9 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         onConfirm={logout}
         onClose={() => setShowLogoutConfirm(false)}
       />
+
+      {/* Floating Scroll To Top Circular Button (Shows on scroll, auto-hides after 2s) */}
+      <ScrollToTopButton />
     </div>
   );
 };

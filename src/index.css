@@ -15,11 +15,210 @@
   }
 
   body.light-mode {
-    background-color: #0f172a;
-    color: #f8fafc;
+    background-color: #f1f5f9;
+    color: #0f172a;
     background-image: 
-      radial-gradient(at 0% 0%, rgba(34, 197, 94, 0.18) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(14, 165, 233, 0.18) 0px, transparent 50%);
+      radial-gradient(at 0% 0%, rgba(34, 197, 94, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(20, 184, 166, 0.15) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(59, 130, 246, 0.1) 0px, transparent 50%);
+  }
+
+  /* Global Light Mode Overrides for all Glass Cards, Text, and Inputs */
+  body.light-mode .glass-panel {
+    background: rgba(255, 255, 255, 0.88) !important;
+    border-color: rgba(0, 0, 0, 0.08) !important;
+    color: #0f172a !important;
+    box-shadow: 0 8px 30px 0 rgba(0, 0, 0, 0.06) !important;
+  }
+
+  body.light-mode .glass-panel-hover:hover {
+    background: rgba(255, 255, 255, 0.98) !important;
+    border-color: rgba(34, 197, 94, 0.4) !important;
+  }
+
+  body.light-mode .glass-input {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-color: rgba(0, 0, 0, 0.15) !important;
+    color: #0f172a !important;
+  }
+
+  body.light-mode .glass-input::placeholder {
+    color: #64748b !important;
+  }
+
+  body.light-mode select.glass-input option {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Text color overrides for light mode */
+  body.light-mode .text-white {
+    color: #0f172a !important;
+  }
+
+  body.light-mode .text-slate-100,
+  body.light-mode .text-slate-200,
+  body.light-mode .text-slate-300 {
+    color: #334155 !important;
+  }
+
+  body.light-mode .text-slate-400 {
+    color: #64748b !important;
+  }
+
+  /* Background color overrides for light mode containers */
+  body.light-mode [class*="bg-[#060a12]"] {
+    background-color: transparent !important;
+  }
+
+  body.light-mode [class*="bg-[#0a0f1d]"] {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  body.light-mode .bg-slate-900,
+  body.light-mode .bg-slate-950,
+  body.light-mode .bg-slate-900\/90,
+  body.light-mode .bg-slate-900\/80,
+  body.light-mode .bg-slate-950\/80,
+  body.light-mode .bg-slate-950\/90,
+  body.light-mode .bg-slate-950\/60 {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    color: #0f172a !important;
+  }
+
+  body.light-mode .bg-slate-800 {
+    background-color: #e2e8f0 !important;
+    color: #0f172a !important;
+  }
+
+  body.light-mode .bg-slate-800\/80,
+  body.light-mode .bg-slate-800\/50,
+  body.light-mode .bg-slate-800\/40,
+  body.light-mode .bg-slate-800\/60 {
+    background-color: #e2e8f0 !important;
+  }
+
+  /* Border overrides for light mode */
+  body.light-mode .border-white\/10,
+  body.light-mode .border-white\/5 {
+    border-color: rgba(0, 0, 0, 0.08) !important;
+  }
+
+  body.light-mode .border-slate-800,
+  body.light-mode .border-slate-700 {
+    border-color: #cbd5e1 !important;
+  }
+
+  /* Container & card hover overrides for light mode */
+  body.light-mode .hover\:bg-slate-900\/80:hover,
+  body.light-mode .hover\:bg-slate-900:hover,
+  body.light-mode .hover\:bg-slate-950:hover {
+    background-color: #ffffff !important;
+  }
+
+  body.light-mode .hover\:bg-slate-800:hover,
+  body.light-mode .hover\:bg-slate-700:hover {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  body.light-mode .hover\:text-white:hover {
+    color: #020617 !important;
+  }
+
+  /* Unselected filter pills in light mode */
+  body.light-mode button.bg-slate-900\/60,
+  body.light-mode button.bg-slate-800 {
+    background-color: #ffffff !important;
+    border-color: rgba(0, 0, 0, 0.12) !important;
+    color: #475569 !important;
+  }
+
+  body.light-mode button.bg-slate-900\/60:hover,
+  body.light-mode button.bg-slate-800:hover {
+    background-color: #f8fafc !important;
+    border-color: rgba(34, 197, 94, 0.4) !important;
+    color: #0f172a !important;
+  }
+
+  /* Active Gradient Pills & Buttons - keep dark readable text */
+  body.light-mode .text-slate-950 {
+    color: #020617 !important;
+  }
+
+  /* Member names & profile card hover text contrast */
+  body.light-mode .group:hover .group-hover\:text-emerald-400,
+  body.light-mode .hover\:text-emerald-400:hover {
+    color: #059669 !important;
+  }
+
+  body.light-mode .text-emerald-400 {
+    color: #059669 !important;
+  }
+
+  body.light-mode .text-emerald-300 {
+    color: #047857 !important;
+  }
+
+  /* Table & row hover overrides for light mode */
+  body.light-mode tr.hover\:bg-slate-900\/60:hover,
+  body.light-mode tr.hover\:bg-slate-800\/40:hover,
+  body.light-mode tr.hover\:bg-slate-800:hover,
+  body.light-mode tr.hover\:bg-slate-700:hover,
+  body.light-mode div.hover\:bg-slate-800\/80:hover {
+    background-color: #f8fafc !important;
+  }
+
+  body.light-mode table thead tr,
+  body.light-mode table thead th {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    border-color: rgba(0, 0, 0, 0.08) !important;
+  }
+
+  body.light-mode table tbody {
+    background-color: #ffffff !important;
+  }
+
+  body.light-mode table tbody td {
+    border-color: rgba(0, 0, 0, 0.06) !important;
+    color: #0f172a !important;
+  }
+
+  /* Sidebar Profile Card in light mode */
+  body.light-mode .sidebar-profile-card {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+    color: #0f172a !important;
+  }
+
+  body.light-mode .sidebar-profile-card:hover {
+    background-color: #f8fafc !important;
+    border-color: rgba(34, 197, 94, 0.4) !important;
+  }
+
+  /* Category Breakdown & Rates progress tracks and cards */
+  body.light-mode .category-breakdown-card {
+    background-color: #ffffff !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+    color: #0f172a !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  body.light-mode .bg-slate-800 {
+    background-color: #e2e8f0 !important;
+  }
+
+  /* Role Badges in light mode */
+  body.light-mode .bg-slate-700\/50 {
+    background-color: #e2e8f0 !important;
+    color: #334155 !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  body.light-mode .text-slate-500 {
+    color: #64748b !important;
   }
 }
 

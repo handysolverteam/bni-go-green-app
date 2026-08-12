@@ -5,7 +5,7 @@ import { substituteKeywords } from './TemplateManagerPage';
 import { useToast } from '../context/ToastContext';
 import {
   MessageSquare, ExternalLink, Copy, Check, Sparkles, Send, Play, Pause,
-  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, FileText, Edit, X, Tag
+  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, FileText, Edit, X, Tag, Phone
 } from 'lucide-react';
 import { supabaseService, DEFAULT_OUTREACH_TEMPLATES } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
@@ -45,6 +45,10 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [inlineTemplateText, setInlineTemplateText] = useState('');
   const [isSavingInline, setIsSavingInline] = useState(false);
+
+  // Inline member phone edit states
+  const [editingPhoneMap, setEditingPhoneMap] = useState<Record<string, string>>({});
+  const [savingPhoneId, setSavingPhoneId] = useState<string | null>(null);
 
   useEffect(() => {
     supabaseService.fetchOutreachTemplates(orgId).then(data => {
@@ -153,9 +157,10 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     if (availableReports.length > 0) {
       setHasConfirmedEmptyReports(true);
     } else {
+      setHasConfirmedEmptyReports(false);
       const timer = setTimeout(() => {
         setHasConfirmedEmptyReports(true);
-      }, 1000);
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [availableReports.length]);
@@ -166,11 +171,18 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     return members.filter(m => (m.batch_name || '') === activeReportName);
   }, [members, activeReportName]);
 
-  // Target members needing outreach in scoped members
+  // Target members needing outreach in scoped members (Sorted by Top Score DESC)
   const targetMembers = useMemo(() => {
-    return scopedMembers.filter(m => {
+    const list = scopedMembers.filter(m => {
       if (selectedFilter === 'All') return true;
       return m.trafficLight?.label === selectedFilter;
+    });
+
+    return [...list].sort((a, b) => {
+      const scoreA = a.score ?? 0;
+      const scoreB = b.score ?? 0;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return (a.Name || '').localeCompare(b.Name || '');
     });
   }, [scopedMembers, selectedFilter]);
 
@@ -214,6 +226,38 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const [editingJoinDateMap, setEditingJoinDateMap] = useState<Record<string, string>>({});
+
+  const handleSaveDetails = async (member: Member, phoneVal: string, joinDateVal: string) => {
+    const key = member.id || member.Name;
+    setSavingPhoneId(key);
+
+    const success = await supabaseService.updateMemberDetails(member.id || '', {
+      phone: phoneVal,
+      joinDate: joinDateVal,
+    });
+
+    if (success) {
+      member.Phone = phoneVal.trim();
+      member.JoinDate = joinDateVal.trim();
+      (member as any).join_date = joinDateVal.trim();
+      showToast(`Phone & Join Date updated for ${member.Name}`, 'success');
+      setEditingPhoneMap(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setEditingJoinDateMap(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    } else {
+      showToast('Failed to save details', 'error');
+    }
+    setSavingPhoneId(null);
+  };
+
   const handleStartBatch = () => {
     setBatchActive(true);
     setBatchPaused(false);
@@ -240,9 +284,28 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     setStatuses({});
   };
 
+  // Sync statuses from members' raw_data.outreach_status on mount/prop change
+  useEffect(() => {
+    const map: Record<string, 'pending' | 'sent' | 'failed' | 'skipped'> = {};
+    members.forEach(m => {
+      const key = m.id || m.Name;
+      const rawStatus = (m as any).raw_data?.outreach_status || (m as any).outreach_status;
+      if (rawStatus) {
+        map[key] = rawStatus;
+        map[m.Name] = rawStatus;
+      }
+    });
+    setStatuses(prev => ({ ...map, ...prev }));
+  }, [members]);
+
   const handleMarkStatus = async (member: Member, status: 'sent' | 'failed' | 'skipped') => {
     const key = member.id || member.Name;
     setStatuses(prev => ({ ...prev, [key]: status, [member.Name]: status }));
+    (member as any).raw_data = { ...((member as any).raw_data || {}), outreach_status: status };
+
+    if (member.id && !member.id.startsWith('temp_')) {
+      await supabaseService.updateMemberOutreachStatus(member.id, status);
+    }
 
     await supabaseService.saveOutreachLog({
       user_id: user?.uid || 'user_anon',
@@ -253,6 +316,20 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       message: generateNudgeMessage(member),
       sent_at: new Date().toISOString(),
     });
+  };
+
+  const handleSendWhatsAppClick = (e: React.MouseEvent, member: Member, msg: string) => {
+    const key = member.id || member.Name;
+    const currentPhone = editingPhoneMap[key] !== undefined ? editingPhoneMap[key] : (member.Phone || '');
+
+    if (!currentPhone || !currentPhone.trim()) {
+      e.preventDefault();
+      showToast(`Please enter a phone number for ${member.Name} before sending WhatsApp message!`, 'error');
+      setEditingPhoneMap(prev => ({ ...prev, [key]: '' }));
+      return;
+    }
+
+    handleMarkStatus(member, 'sent');
   };
 
   return (
@@ -532,13 +609,68 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                             {member.trafficLight?.label} ({member.score}/100)
                           </span>
                         </div>
-                        <p className="text-xs text-slate-400 font-mono">{member.Phone || 'No phone provided'}</p>
+                        <div className="pt-1">
+                          {(!member.Phone || editingPhoneMap[key] !== undefined || editingJoinDateMap[key] !== undefined) ? (
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full pt-1">
+                              <input
+                                type="tel"
+                                placeholder="Phone number..."
+                                value={editingPhoneMap[key] ?? (member.Phone || '')}
+                                onChange={(e) => setEditingPhoneMap(prev => ({ ...prev, [key]: e.target.value }))}
+                                className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-40 border-emerald-500/40"
+                              />
+                              <input
+                                type="date"
+                                placeholder="Joining Date"
+                                value={editingJoinDateMap[key] ?? (member.JoinDate || (member as any).join_date || '')}
+                                onChange={(e) => setEditingJoinDateMap(prev => ({ ...prev, [key]: e.target.value }))}
+                                className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-36 border-emerald-500/40"
+                              />
+                              <button
+                                onClick={() => handleSaveDetails(
+                                  member,
+                                  editingPhoneMap[key] ?? member.Phone ?? '',
+                                  editingJoinDateMap[key] ?? member.JoinDate ?? (member as any).join_date ?? ''
+                                )}
+                                disabled={savingPhoneId === key}
+                                className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md flex items-center justify-center space-x-1 transition-all w-full sm:w-auto shrink-0"
+                                title="Save Phone & Join Date"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{savingPhoneId === key ? 'Saving...' : 'Save'}</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-3 text-xs">
+                              <p className="text-slate-400 font-mono flex items-center gap-1">
+                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{member.Phone}</span>
+                              </p>
+                              {(member.JoinDate || (member as any).join_date) && (
+                                <p className="text-emerald-400 font-mono flex items-center gap-1">
+                                  <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
+                                  <span>Joined: {member.JoinDate || (member as any).join_date}</span>
+                                </p>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setEditingPhoneMap(prev => ({ ...prev, [key]: member.Phone || '' }));
+                                  setEditingJoinDateMap(prev => ({ ...prev, [key]: member.JoinDate || (member as any).join_date || '' }));
+                                }}
+                                className="p-1 text-slate-400 hover:text-emerald-400 rounded-md transition-colors"
+                                title="Edit Phone & Join Date"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2 self-end sm:self-auto">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-t-0">
                       {status === 'sent' && (
-                        <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 flex items-center gap-1">
+                        <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 text-xs font-extrabold border border-emerald-500/30 flex items-center justify-center gap-1 shrink-0">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Sent</span>
                         </span>
@@ -546,10 +678,10 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
 
                       <button
                         onClick={() => handleCopy(key, msg)}
-                        className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+                        className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-xs flex items-center justify-center space-x-1.5 border border-white/10 transition-all shadow-sm"
                         title="Copy personalized message for this member"
                       >
-                        {copiedId === key ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedId === key ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
                         <span>{copiedId === key ? 'Copied!' : 'Copy'}</span>
                       </button>
 
@@ -557,11 +689,15 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                         href={waLink}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={() => handleMarkStatus(member, 'sent')}
-                        className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 transition-all"
+                        onClick={(e) => handleSendWhatsAppClick(e, member, msg)}
+                        className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg transition-all hover:scale-[1.01] ${
+                          status === 'sent'
+                            ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 shadow-emerald-500/10'
+                            : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
+                        }`}
                       >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Send WhatsApp</span>
+                        {status === 'sent' ? <RotateCcw className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+                        <span>{status === 'sent' ? 'Resend WhatsApp' : 'Send WhatsApp'}</span>
                       </a>
                     </div>
                   </GlassCard>

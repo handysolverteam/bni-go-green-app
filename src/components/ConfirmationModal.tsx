@@ -50,9 +50,9 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       case 'purge':
         return {
           icon: <AlertTriangle className="w-6 h-6 text-rose-500 animate-pulse" />,
-          title: title || 'Purge All Member Data',
+          title: title || 'Delete All Member Data',
           message: message || 'DANGER: This will permanently delete ALL imported chapter members and score history from your Supabase database.',
-          confirmText: confirmText || 'Purge All Data',
+          confirmText: confirmText || 'Delete All Data',
           confirmBtnClass: 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30',
         };
       case 'reset':

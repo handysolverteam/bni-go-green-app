@@ -104,7 +104,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     } else if (isDataLoaded && !isSyncing && !isInitialLoading) {
       const timer = setTimeout(() => {
         setHasConfirmedEmptyDb(true);
-      }, 1200);
+      }, 1500);
       return () => clearTimeout(timer);
     } else {
       setHasConfirmedEmptyDb(false);
@@ -361,12 +361,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* --- VIEW 1: MAIN REPORTS CARDS LIST (DEFAULT DASHBOARD VIEW) --- */}
       {!activeReportName && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          {/* <div className="flex items-center justify-between">
             <h2 className="text-lg font-black text-white flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
               <span>Uploaded Chapter Reports {availableReports.length === 0 && !hasConfirmedEmptyDb ? '' : `(${availableReports.length})`}</span>
             </h2>
-          </div>
+          </div> */}
 
           {!isDataLoaded || isSyncing || isInitialLoading || (availableReports.length === 0 && !hasConfirmedEmptyDb) ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

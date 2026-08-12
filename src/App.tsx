@@ -15,7 +15,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
-import { setScoringConfig } from './lib/scoringEngine';
+import { setScoringConfig, scoreMember } from './lib/scoringEngine';
 
 export const AppContent: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -42,7 +42,7 @@ export const AppContent: React.FC = () => {
   
   const [org, setOrg] = useState<Organization | null>(() => {
     try {
-      const cached = sessionStorage.getItem('bni_cached_org');
+      const cached = localStorage.getItem('bni_cached_org');
       return cached ? JSON.parse(cached) : null;
     } catch {
       return null;
@@ -51,7 +51,7 @@ export const AppContent: React.FC = () => {
 
   const [orgMember, setOrgMember] = useState<OrgMember | null>(() => {
     try {
-      const cached = sessionStorage.getItem('bni_cached_org_member');
+      const cached = localStorage.getItem('bni_cached_org_member');
       return cached ? JSON.parse(cached) : null;
     } catch {
       return null;
@@ -60,7 +60,7 @@ export const AppContent: React.FC = () => {
 
   const [userProfile, setUserProfile] = useState<UserProfileExtended | null>(() => {
     try {
-      const cached = sessionStorage.getItem('bni_cached_profile');
+      const cached = localStorage.getItem('bni_cached_profile');
       return cached ? JSON.parse(cached) : null;
     } catch {
       return null;
@@ -69,15 +69,47 @@ export const AppContent: React.FC = () => {
 
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Members, Import Logs & Selected Member
-  const [members, setMembers] = useState<Member[]>([]);
-  const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
+  // Members, Import Logs & Selected Member (Hydrated instantly from SWR localStorage)
+  const [members, setMembersState] = useState<Member[]>(() => {
+    try {
+      const cached = localStorage.getItem('bni_cached_members');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [importLogs, setImportLogsState] = useState<ImportLog[]>(() => {
+    try {
+      const cached = localStorage.getItem('bni_cached_import_logs');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const setMembers = (mems: Member[] | ((prev: Member[]) => Member[])) => {
+    setMembersState((prev) => {
+      const next = typeof mems === 'function' ? mems(prev) : mems;
+      try { localStorage.setItem('bni_cached_members', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const setImportLogs = (logs: ImportLog[] | ((prev: ImportLog[]) => ImportLog[])) => {
+    setImportLogsState((prev) => {
+      const next = typeof logs === 'function' ? logs(prev) : logs;
+      try { localStorage.setItem('bni_cached_import_logs', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [selectedNudgeReport, setSelectedNudgeReport] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
-  // 1. On Auth Load: Fetch Org & Profile with background revalidation & sessionStorage sync
+  // 1. On Auth Load: Fetch Org & Profile with background revalidation & localStorage sync
   useEffect(() => {
     if (!user?.uid) {
       setIsInitializing(false);
@@ -97,8 +129,8 @@ export const AppContent: React.FC = () => {
         let fetchedLogs: ImportLog[] = [];
 
         if (orgRes) {
-          sessionStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
-          sessionStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
+          localStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
+          localStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
 
           const [settingsRes, dbMembers, dbLogs] = await Promise.all([
             supabaseService.fetchOrgSettings(orgRes.org.id, user.uid),
@@ -118,7 +150,8 @@ export const AppContent: React.FC = () => {
             });
           }
 
-          fetchedMembers = dbMembers;
+          // Re-score fetched members with active custom org scoring configuration
+          fetchedMembers = dbMembers.map(m => scoreMember(m));
           fetchedLogs = dbLogs;
 
           supabaseService.subscribeToMembers(orgRes.org.id, async () => {
@@ -128,19 +161,19 @@ export const AppContent: React.FC = () => {
         }
 
         if (profRes) {
-          sessionStorage.setItem('bni_cached_profile', JSON.stringify(profRes));
+          localStorage.setItem('bni_cached_profile', JSON.stringify(profRes));
         } else {
-          sessionStorage.removeItem('bni_cached_profile');
+          localStorage.removeItem('bni_cached_profile');
         }
 
         if (orgRes) {
-          sessionStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
-          sessionStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
+          localStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
+          localStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
           setOrg(orgRes.org);
           setOrgMember(orgRes.member);
         } else {
-          sessionStorage.removeItem('bni_cached_org');
-          sessionStorage.removeItem('bni_cached_org_member');
+          localStorage.removeItem('bni_cached_org');
+          localStorage.removeItem('bni_cached_org_member');
           setOrg(null);
           setOrgMember(null);
         }
@@ -161,8 +194,8 @@ export const AppContent: React.FC = () => {
 
   // Handle Org Created / Joined
   const handleOrgJoined = (data: { org: Organization; member: OrgMember }) => {
-    sessionStorage.setItem('bni_cached_org', JSON.stringify(data.org));
-    sessionStorage.setItem('bni_cached_org_member', JSON.stringify(data.member));
+    localStorage.setItem('bni_cached_org', JSON.stringify(data.org));
+    localStorage.setItem('bni_cached_org_member', JSON.stringify(data.member));
     setOrg(data.org);
     setOrgMember(data.member);
     showToast(`Joined ${data.org.name}! Org Code: ${data.org.code}`, 'success');
@@ -170,7 +203,7 @@ export const AppContent: React.FC = () => {
 
   // Handle Profile Completed
   const handleProfileCompleted = (profile: UserProfileExtended) => {
-    sessionStorage.setItem('bni_cached_profile', JSON.stringify(profile));
+    localStorage.setItem('bni_cached_profile', JSON.stringify(profile));
     setUserProfile(profile);
     showToast('Profile completed successfully!', 'success');
   };
@@ -210,12 +243,29 @@ export const AppContent: React.FC = () => {
         created_at: new Date().toISOString(),
       };
 
-      const taggedMembers = imported.map((m, idx) => ({
-        ...m,
-        id: m.id || `temp_${Date.now()}_${idx}`,
-        batch_name: batchName,
-        org_id: org.id,
-      }));
+      // Build lookup map of existing member phone numbers & join dates by name
+      const existingMap = new Map<string, { phone: string; joinDate: string }>();
+      members.forEach(m => {
+        if (m.Name) {
+          existingMap.set(m.Name.trim().toLowerCase(), {
+            phone: m.Phone || '',
+            joinDate: m.JoinDate || (m as any).join_date || '',
+          });
+        }
+      });
+
+      const taggedMembers = imported.map((m, idx) => {
+        const norm = (m.Name || '').trim().toLowerCase();
+        const prev = existingMap.get(norm);
+        return scoreMember({
+          ...m,
+          Phone: m.Phone || prev?.phone || '',
+          JoinDate: m.JoinDate || prev?.joinDate || '',
+          id: m.id || `temp_${Date.now()}_${idx}`,
+          batch_name: batchName,
+          org_id: org.id,
+        });
+      });
 
       // Render new report card & members ON SCREEN IMMEDIATELY
       setImportLogs(prev => [newLog, ...prev.filter(l => l.batch_name !== batchName)]);
@@ -225,7 +275,7 @@ export const AppContent: React.FC = () => {
 
       // 2. Background database save & sync
       setIsSyncing(true);
-      const success = await supabaseService.upsertMembers(imported, org.id, user.uid, fileName, batchName, fileData);
+      const success = await supabaseService.upsertMembers(taggedMembers, org.id, user.uid, fileName, batchName, fileData);
 
       // Revalidate with fresh DB IDs
       const [dbMembers, dbLogs] = await Promise.all([
@@ -273,68 +323,24 @@ export const AppContent: React.FC = () => {
     setIsSyncing(false);
   };
 
-  // Full-Screen Skeleton Loading Screen (Waits until initial DB fetch completes)
-  if (authLoading || isInitializing || !isDataLoaded) {
-    return (
-      <div className="min-h-screen bg-[#060a12] text-slate-100 flex flex-col p-4 md:p-8 space-y-6 animate-pulse">
-        {/* Skeleton Top Nav Bar */}
-        <div className="flex items-center justify-between py-3 px-6 rounded-2xl bg-slate-900/60 border border-white/5">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-slate-800/80" />
-            <div className="h-5 bg-slate-800/80 rounded-md w-40" />
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className="h-8 bg-slate-800/60 rounded-xl w-24" />
-            <div className="w-8 h-8 rounded-full bg-slate-800/80" />
-          </div>
-        </div>
-
-        {/* Skeleton Stat Cards Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="p-5 rounded-2xl bg-slate-900/60 border border-white/5 space-y-2">
-              <div className="h-3.5 bg-slate-800/50 rounded-md w-1/2" />
-              <div className="h-7 bg-slate-800/80 rounded-lg w-3/4" />
-            </div>
-          ))}
-        </div>
-
-        {/* Skeleton Report Cards Grid */}
-        <div className="space-y-3 pt-2">
-          <div className="h-6 bg-slate-800/80 rounded-md w-48" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="p-6 rounded-3xl bg-slate-900/60 border border-white/5 space-y-4">
-                <div className="h-5 bg-slate-800/80 rounded-md w-2/3" />
-                <div className="h-3 bg-slate-800/50 rounded-md w-1/2" />
-                <div className="grid grid-cols-4 gap-2 pt-2">
-                  <div className="h-8 bg-slate-800/40 rounded-lg" />
-                  <div className="h-8 bg-slate-800/40 rounded-lg" />
-                  <div className="h-8 bg-slate-800/40 rounded-lg" />
-                  <div className="h-8 bg-slate-800/40 rounded-lg" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 1. Not Authenticated -> Login Page
-  if (!user) {
+  // 1. Unauthenticated -> LoginPage (Only when auth check is complete)
+  if (!user && !authLoading) {
     return <LoginPage />;
   }
 
-  // 2. Authenticated but NO Organization -> Org Onboarding Screen (6-Digit Code)
-  if (!org) {
+  // 2. Authenticated but NO Organization -> Org Onboarding Screen
+  // Only render when DB fetch is 100% complete and org is confirmed null
+  if (user && isDataLoaded && !isInitializing && !org) {
     return <OrgOnboardingScreen onOrgJoined={handleOrgJoined} />;
   }
 
   // 3. Has Org but Profile NOT Completed -> Profile Onboarding Screen
-  if (!userProfile || !userProfile.is_profile_completed) {
+  if (user && isDataLoaded && !isInitializing && org && (!userProfile || !userProfile.is_profile_completed)) {
     return <ProfileOnboardingScreen onProfileCompleted={handleProfileCompleted} />;
   }
+
+  // 4. Default Guard if org not yet loaded
+  if (!org) return null;
 
   // 4. Fully Authenticated & Onboarded -> App with Sidebar Layout
   return (
@@ -417,6 +423,9 @@ export const AppContent: React.FC = () => {
       {activeTab === 'settings' && (
         <SettingsPage
           orgId={org.id}
+          onSettingsSaved={() => {
+            setMembers(prev => prev.map(m => scoreMember(m)));
+          }}
         />
       )}
 

@@ -30,23 +30,23 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden">
-      <GlassCard className="w-full max-w-3xl max-h-[90vh] flex flex-col relative border-emerald-500/30 shadow-2xl overflow-hidden rounded-3xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden">
+      <GlassCard className="w-full max-w-3xl max-h-[92vh] flex flex-col relative border-emerald-500/30 shadow-2xl overflow-hidden rounded-2xl sm:rounded-3xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-white/10 shrink-0">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
-              <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center text-lg font-black text-emerald-400">
+        <div className="flex items-center justify-between p-3.5 sm:p-6 border-b border-white/10 shrink-0">
+          <div className="flex items-center space-x-3 sm:space-x-3.5">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
+              <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center text-base sm:text-lg font-black text-emerald-400">
                 {member.Name.charAt(0)}
               </div>
             </div>
             <div>
-              <h2 className="text-xl sm:text-2xl font-black text-white">{member.Name}</h2>
-              <p className="text-xs text-slate-400">{member.Phone || 'No phone'} &bull; {member.Email || 'No email'}</p>
+              <h2 className="text-lg sm:text-2xl font-black text-white">{member.Name}</h2>
+              <p className="text-[11px] sm:text-xs text-slate-400">{member.Phone || 'No phone'} &bull; {member.Email || 'No email'}</p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             <div className="text-right hidden sm:block">
               <div className="text-xl font-black text-white">{member.score} <span className="text-xs font-normal text-slate-400">/ 100</span></div>
               <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full whitespace-nowrap ${
@@ -62,7 +62,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
               href={getWAUrl()}
               target="_blank"
               rel="noreferrer"
-              className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 transition-all flex items-center space-x-1 shrink-0"
+              className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 transition-all flex items-center space-x-1 shrink-0"
               title="Open WhatsApp chat"
             >
               <Send className="w-4 h-4" />
@@ -70,7 +70,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
 
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors z-20 shrink-0"
+              className="p-1.5 sm:p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors z-20 shrink-0"
             >
               <X className="w-5 h-5" />
             </button>
@@ -78,7 +78,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6">
           {/* Level Up Plan */}
           <GlassCard glow className="p-5 space-y-3 border-emerald-500/30">
             <div className="flex items-center justify-between">
@@ -131,7 +131,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
                 const pct = max > 0 ? (pts / max) * 100 : 0;
 
                 return (
-                  <div key={cat.key} className="p-3.5 rounded-2xl bg-slate-900/60 border border-white/10 space-y-2">
+                  <div key={cat.key} className="category-breakdown-card p-3.5 rounded-2xl bg-slate-900/60 border border-white/10 space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 font-semibold">{cat.label}</span>
                       <span className="text-white font-black">{pts} / {max} pts</span>

@@ -137,6 +137,7 @@ function parseSheetData(sheet: XLSX.WorkSheet): ParseResult {
   const regionIdx = getColIndex(['region', 'region name']);
   const phoneIdx = getColIndex(['mobile', 'phone', 'whatsapp', 'contact', 'tel']);
   const emailIdx = getColIndex(['email', 'mail']);
+  const joinDateIdx = getColIndex(['join date', 'joining date', 'date joined', 'join_date', 'induction date']);
 
   // Exact BNI Rates and Scores
   const attRateIdx = getColIndex(['attendance rate', 'attendancerate']);
@@ -207,6 +208,7 @@ function parseSheetData(sheet: XLSX.WorkSheet): ParseResult {
 
     const phoneVal = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
     const emailVal = emailIdx !== -1 ? String(row[emailIdx] || '').trim() : '';
+    const joinDateVal = joinDateIdx !== -1 ? String(row[joinDateIdx] || '').trim() : '';
     const totalScoreVal = totalScoreIdx !== -1 ? cleanNumber(row[totalScoreIdx]) : undefined;
 
     // Extract Rates
@@ -235,7 +237,7 @@ function parseSheetData(sheet: XLSX.WorkSheet): ParseResult {
     const mVal = mIdx !== -1 ? cleanNumber(row[mIdx]) : 0;
 
     // Build JSON representation of ALL raw columns from the Excel row
-    const rawObj: Record<string, any> = {};
+    const rawObj: Record<string, any> = { excel_row_index: i };
     rawHeaders.forEach((h, idx) => {
       if (h && row[idx] !== undefined) {
         rawObj[h] = row[idx];
@@ -248,6 +250,7 @@ function parseSheetData(sheet: XLSX.WorkSheet): ParseResult {
       Region: regionVal,
       Phone: phoneVal,
       Email: emailVal,
+      JoinDate: joinDateVal,
       P: pVal,
       A: aVal,
       S: sVal,

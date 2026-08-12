@@ -8,6 +8,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var theme = localStorage.getItem('bni_theme_mode');
+          if (theme === 'light') {
+            document.documentElement.classList.add('light-mode');
+            document.documentElement.classList.remove('dark');
+            document.addEventListener('DOMContentLoaded', function() {
+              if (document.body) document.body.classList.add('light-mode');
+            });
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-[#0b0f19] text-slate-100 font-['Plus_Jakarta_Sans',sans-serif] min-h-screen antialiased selection:bg-emerald-500 selection:text-white">
     <div id="root"></div>
