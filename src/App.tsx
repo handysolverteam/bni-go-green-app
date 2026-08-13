@@ -17,42 +17,71 @@ import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from 
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
 
+const parseHash = () => {
+  const raw = decodeURIComponent(window.location.hash.replace('#', ''));
+  if (!raw) return { tab: 'dashboard' as NavigationTab, report: null };
+  const parts = raw.split('/');
+  const mainTab = parts[0] as NavigationTab;
+  const subReport = parts.slice(1).join('/');
+
+  let reportName: string | null = null;
+  if (subReport) {
+    reportName = subReport.startsWith('report/') ? subReport.replace('report/', '') : subReport;
+  }
+
+  const validTabs: NavigationTab[] = ['dashboard', 'import', 'nudges', 'templates', 'org', 'profile', 'settings'];
+  if (validTabs.includes(mainTab)) {
+    return { tab: mainTab, report: ['dashboard', 'nudges'].includes(mainTab) ? (reportName || null) : null };
+  }
+  return { tab: 'dashboard' as NavigationTab, report: null };
+};
+
 export const AppContent: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const { showToast } = useToast();
+  const hasVerifiedRef = React.useRef(false);
 
   // App & Org State (Persisted in URL Hash & localStorage)
-  const [activeTab, setActiveTabState] = useState<NavigationTab>(() => {
-    const hash = window.location.hash.replace('#', '') as NavigationTab;
-    if (['dashboard', 'import', 'nudges', 'templates', 'org', 'profile', 'settings'].includes(hash)) {
-      return hash;
-    }
-    const stored = localStorage.getItem('bni_active_tab') as NavigationTab;
-    if (['dashboard', 'import', 'nudges', 'templates', 'org', 'profile', 'settings'].includes(stored)) {
-      return stored;
-    }
-    return 'dashboard';
-  });
+  const initialNav = parseHash();
+  const [activeTab, setActiveTabState] = useState<NavigationTab>(initialNav.tab);
+  const [selectedNudgeReport, setSelectedNudgeReportState] = useState<string | null>(initialNav.report);
 
-  const setActiveTab = (tab: NavigationTab) => {
-    if (tab !== activeTab) {
-      window.history.pushState({ tab }, '', `#${tab}`);
-      setActiveTabState(tab);
-      localStorage.setItem('bni_active_tab', tab);
+  const navigateTo = (tab: NavigationTab, reportName: string | null = null) => {
+    let newHash = `#${tab}`;
+    if (reportName && ['dashboard', 'nudges'].includes(tab)) {
+      newHash = `#${tab}/report/${encodeURIComponent(reportName)}`;
+    }
+    if (window.location.hash !== newHash) {
+      window.history.pushState({ tab, report: reportName }, '', newHash);
+    }
+    setActiveTabState(tab);
+    setSelectedNudgeReportState(reportName);
+    localStorage.setItem('bni_active_tab', tab);
+    if (reportName) {
+      localStorage.setItem('bni_active_report', reportName);
+    } else {
+      localStorage.removeItem('bni_active_report');
     }
   };
 
-  // Listen to mobile swipe-back gesture and browser back/forward buttons
+  const setActiveTab = (tab: NavigationTab) => {
+    navigateTo(tab, null);
+  };
+
+  // Listen to mobile swipe-back gesture and browser back/forward buttons & hash changes
   useEffect(() => {
-    const handlePopState = () => {
-      const hash = window.location.hash.replace('#', '') as NavigationTab;
-      if (['dashboard', 'import', 'nudges', 'templates', 'org', 'profile', 'settings'].includes(hash)) {
-        setActiveTabState(hash);
-      }
+    const handleSyncFromHash = () => {
+      const { tab, report } = parseHash();
+      setActiveTabState(tab);
+      setSelectedNudgeReportState(report);
     };
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleSyncFromHash);
+    window.addEventListener('hashchange', handleSyncFromHash);
+    return () => {
+      window.removeEventListener('popstate', handleSyncFromHash);
+      window.removeEventListener('hashchange', handleSyncFromHash);
+    };
   }, []);
   
   const [org, setOrg] = useState<Organization | null>(() => {
@@ -120,7 +149,6 @@ export const AppContent: React.FC = () => {
   };
 
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [selectedNudgeReport, setSelectedNudgeReport] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
@@ -132,8 +160,10 @@ export const AppContent: React.FC = () => {
       return;
     }
 
-    setIsInitializing(true);
-    setIsDataLoaded(false);
+    if (!hasVerifiedRef.current) {
+      setIsInitializing(true);
+      setIsDataLoaded(false);
+    }
 
     const initUserData = async () => {
       try {
@@ -202,6 +232,7 @@ export const AppContent: React.FC = () => {
       } catch (err) {
         console.error('Initialization error:', err);
       } finally {
+        hasVerifiedRef.current = true;
         setIsInitializing(false);
         setIsDataLoaded(true);
       }
@@ -348,19 +379,24 @@ export const AppContent: React.FC = () => {
 
   // 2. User is Logged In (user != null) but Org Verification is in progress -> Verifying Splash
   if (isInitializing || !isDataLoaded) {
+    const isLight = localStorage.getItem('bni_theme_mode') === 'light' || document.body.classList.contains('light-mode');
     return (
-      <div className="min-h-screen bg-[#080d19] flex flex-col items-center justify-center p-4 text-center space-y-4">
+      <div className={`min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4 transition-colors ${
+        isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#080d19] text-white'
+      }`}>
         <div className="relative">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] animate-pulse">
-            <div className="w-full h-full bg-[#080d19] rounded-[14px] flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] animate-pulse shadow-lg shadow-emerald-500/20">
+            <div className={`w-full h-full rounded-[14px] flex items-center justify-center ${
+              isLight ? 'bg-white' : 'bg-[#080d19]'
+            }`}>
               <img src="/icons/icon.svg" alt="BNI Go Green Logo" className="w-10 h-10 rounded-xl object-cover" />
             </div>
           </div>
           <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping absolute -top-1 -right-1" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-base font-black text-white">Verifying Organization...</h3>
-          <p className="text-xs text-slate-400 font-medium">Checking chapter membership & credentials</p>
+          <h3 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Verifying Organization...</h3>
+          <p className={`text-xs font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Checking chapter membership & credentials</p>
         </div>
       </div>
     );
@@ -380,10 +416,7 @@ export const AppContent: React.FC = () => {
   return (
     <SidebarLayout
       activeTab={activeTab}
-      setActiveTab={(tab) => {
-        if (tab !== 'nudges') setSelectedNudgeReport(null);
-        setActiveTab(tab);
-      }}
+      setActiveTab={(tab) => navigateTo(tab)}
       memberCount={members.length}
       reportCount={importLogs.length}
       org={org}
@@ -394,12 +427,11 @@ export const AppContent: React.FC = () => {
         <Dashboard
           members={members}
           importLogs={importLogs}
+          selectedReportName={selectedNudgeReport}
+          onSelectReportName={(repName) => navigateTo('dashboard', repName)}
           onSelectMember={(m) => setSelectedMember(m)}
-          onOpenImport={() => setActiveTab('import')}
-          onOpenNudges={(reportName) => {
-            setSelectedNudgeReport(reportName || null);
-            setActiveTab('nudges');
-          }}
+          onOpenImport={() => navigateTo('import')}
+          onOpenNudges={(reportName) => navigateTo('nudges', reportName)}
           onSaveMember={handleSaveMember}
           onDeleteMember={handleDeleteMember}
           onDeleteBatch={handleDeleteBatch}
@@ -425,9 +457,10 @@ export const AppContent: React.FC = () => {
           members={members}
           importLogs={importLogs}
           initialReportName={selectedNudgeReport}
+          onSelectReportName={(repName) => navigateTo('nudges', repName)}
           customSignature={org.custom_signature}
           orgId={org.id}
-          onOpenTemplateManager={() => setActiveTab('templates')}
+          onOpenTemplateManager={() => navigateTo('templates')}
         />
       )}
 

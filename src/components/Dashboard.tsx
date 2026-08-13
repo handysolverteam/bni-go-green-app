@@ -5,14 +5,17 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { AddMemberModal } from './AddMemberModal';
 import {
   Search, Filter, MessageSquare, Award, ArrowUpDown, Download, Users, TrendingUp,
-  Trash2, Edit, UserPlus, Calendar, Layers, X, Eye, FileSpreadsheet, ArrowLeft, Loader2, FileDown
+  Trash2, Edit, UserPlus, Calendar, Layers, X, Eye, FileSpreadsheet, ArrowLeft, Loader2, FileDown, BarChart3
 } from 'lucide-react';
 import { generateSampleExcelBuffer } from '../lib/excelParser';
 import { useToast } from '../context/ToastContext';
+import { formatDisplayDate, formatDisplayDateTime } from '../lib/outreachUtils';
 
 interface DashboardProps {
   members: Member[];
   importLogs?: ImportLog[];
+  selectedReportName?: string | null;
+  onSelectReportName?: (name: string | null) => void;
   onSelectMember: (member: Member) => void;
   onOpenImport: () => void;
   onOpenNudges: (reportName?: string) => void;
@@ -28,6 +31,8 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({
   members,
   importLogs = [],
+  selectedReportName = null,
+  onSelectReportName,
   onSelectMember,
   onOpenImport,
   onOpenNudges,
@@ -44,8 +49,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [statusFilter, setStatusFilter] = useState<'All' | 'Green' | 'Amber' | 'Red' | 'Grey'>('All');
   const [sortField, setSortField] = useState<'score' | 'name' | 'attendance'>('score');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  // Currently selected Report / Batch view (null = Reports Cards list view)
-  const [activeReportName, setActiveReportName] = useState<string | null>(null);
+  // Currently selected Report / Batch view synced with parent router
+  const activeReportName = selectedReportName || null;
+
+  const setActiveReportName = (name: string | null) => {
+    if (onSelectReportName) {
+      onSelectReportName(name);
+    }
+  };
 
   // Modal states
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
@@ -244,33 +255,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
       case 'Red':
         return <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2.5 py-0.5 text-xs font-black rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40">🔴 Red</span>;
       default:
-        return <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2.5 py-0.5 text-xs font-black rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/40">⚪ Grey</span>;
+        return <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2.5 py-0.5 text-xs font-black rounded-full badge-grey">⚪ Grey</span>;
     }
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-2 pb-12">
       {/* --- DASHBOARD HEADER --- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-2">
-            <span>{activeReportName ? `Report: ${activeReportName}` : 'Chapter Reports Dashboard'}</span>
+          <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-emerald-400 shrink-0" />
+            <span>{activeReportName ? `Report: ${activeReportName}` : 'Reports Dashboard'}</span>
             {isSyncing && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
             )}
           </h1>
-          <p className="text-xs text-slate-400">
-            {activeReportName
-              ? `Displaying all ${reportMembers.length} member metrics & traffic scores for this report`
-              : `Overview of ${availableReports.length} imported Excel reports (${members.length} total members)`}
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           {activeReportName ? (
             <button
               onClick={() => setActiveReportName(null)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+              className="w-full sm:w-auto px-4 py-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm sm:text-xs flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
             >
               <ArrowLeft className="w-4 h-4 text-emerald-400" />
               <span>Back to Reports</span>
@@ -278,7 +285,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           ) : (
             <button
               onClick={onOpenImport}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
+              className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm sm:text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all min-h-[44px] sm:min-h-0"
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>Import New Report</span>
@@ -418,7 +425,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         </h3>
                         <p className="text-[11px] text-slate-400 flex items-center gap-1.5 font-medium">
                           <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{report.created_at ? new Date(report.created_at).toLocaleString('en-IN') : 'Uploaded Recently'}</span>
+                          <span>{report.created_at ? formatDisplayDateTime(report.created_at) : 'Uploaded Recently'}</span>
                         </p>
                       </div>
 
@@ -463,15 +470,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Card Action Buttons */}
-                  <div className="pt-3 border-t border-white/10 flex items-center space-x-2">
-
+                  {/* Card Action Buttons: Stacked Vertically on All Screens */}
+                  <div className="pt-3 border-t border-white/10 flex flex-col items-stretch gap-2 w-full">
+                    {/* Button 1: Open Report & Members Table inside Dashboard */}
                     <button
-                      onClick={() => setActiveReportName(report.batch_name || null)}
-                      className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-500/20 hover:scale-[1.02] transition-all"
+                      onClick={(e) => { e.stopPropagation(); setActiveReportName(report.batch_name || null); }}
+                      className="w-full py-3 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-sm flex items-center justify-center space-x-2 border border-white/10 transition-all min-h-[44px] shadow-sm active:scale-[0.99]"
                     >
-                      <Eye className="w-3.5 h-3.5" />
+                      <Eye className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>Open Report & Members ({report.total_records || 0})</span>
+                    </button>
+
+                    {/* Button 2: Start WhatsApp Outreach */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onOpenNudges(report.batch_name || undefined); }}
+                      className="w-full py-3 px-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm flex items-center justify-center space-x-2 shadow-md shadow-emerald-500/20 hover:scale-[1.01] transition-all min-h-[44px] active:scale-[0.99]"
+                    >
+                      <MessageSquare className="w-4 h-4 shrink-0" />
+                      <span>Start WhatsApp Outreach</span>
                     </button>
                   </div>
                 </GlassCard>
@@ -602,7 +618,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
                             <span>{member.Phone || 'No phone'}</span>
                             {(member.JoinDate || (member as any).join_date) && (
-                              <span className="text-emerald-400/90 font-sans text-[10px]">&bull; Joined: {member.JoinDate || (member as any).join_date}</span>
+                              <span className="text-emerald-400/90 font-sans text-[10px]">&bull; Joined: {formatDisplayDate(member.JoinDate || (member as any).join_date)}</span>
                             )}
                           </p>
                         </div>

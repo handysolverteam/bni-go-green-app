@@ -52,7 +52,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           icon: <AlertTriangle className="w-6 h-6 text-rose-500 animate-pulse" />,
           title: title || 'Delete All Member Data',
           message: message || 'DANGER: This will permanently delete ALL imported chapter members and score history from your Supabase database.',
-          confirmText: confirmText || 'Delete All Data',
+          confirmText: confirmText || 'Delete',
           confirmBtnClass: 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30',
         };
       case 'reset':
@@ -79,7 +79,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn cursor-pointer"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md animate-fadeIn cursor-pointer"
     >
       <GlassCard className="w-full max-w-md p-5 sm:p-6 space-y-5 sm:space-y-6 relative border-t sm:border border-white/15 shadow-2xl rounded-t-3xl sm:rounded-3xl">
         {/* Mobile Drag Handle */}

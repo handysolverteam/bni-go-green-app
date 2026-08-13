@@ -70,7 +70,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
               </div>
             </div>
             <div>
-              <h2 className="text-2xl font-black text-white">{org.name}</h2>
+              <h2 className="text-xl sm:text-2xl font-black text-white">{org.name}</h2>
               <p className="text-xs text-slate-400">
                 {org.chapter_name || 'BNI Chapter'} &bull; {org.city || 'Regional Division'}
               </p>

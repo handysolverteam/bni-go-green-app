@@ -93,7 +93,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         className={`hidden lg:flex flex-col ${sidebarWidthClass} fixed top-0 left-0 bottom-0 glass-panel border-r border-white/10 p-4 transition-all duration-300 ease-in-out z-30 overflow-y-auto`}
       >
         {/* Sidebar Header with App Logo */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/10">
+        <div className={`pb-4 border-b border-white/10 flex ${isCompact ? 'flex-col items-center space-y-3' : 'items-center justify-between'}`}>
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <img
               src="/icons/icon.svg"
@@ -111,7 +111,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
           {/* Menu Icon (Shows beside title when expanded, directly BELOW logo when compact/closed) */}
           <button
             onClick={() => setShowModeModal(true)}
-            className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-white/10 transition-all shadow-md"
+            className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-white/10 transition-all shadow-md shrink-0"
             title="Sidebar View Preferences"
           >
             <SlidersHorizontal className="w-4 h-4" />
@@ -154,28 +154,46 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         <div className="pt-3 border-t border-white/10 space-y-2">
           {user && (
             <div
-              onClick={() => setActiveTab('profile')}
-              title={isCompact ? 'View & Edit Profile' : undefined}
-              className={`sidebar-profile-card flex items-center ${isCompact ? 'justify-center p-1.5' : 'space-x-2.5 p-2'} rounded-xl bg-slate-900/60 border ${
+              className={`sidebar-profile-card flex items-center justify-between ${isCompact ? 'justify-center p-1.5' : 'p-2'} rounded-xl bg-slate-900/60 border ${
                 activeTab === 'profile' ? 'border-emerald-500/80 bg-emerald-500/10' : 'border-white/5 hover:border-emerald-500/30 hover:bg-slate-800/80'
-              } cursor-pointer transition-all group`}
+              } transition-all group`}
             >
-              <img
-                src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                alt="User Avatar"
-                referrerPolicy="no-referrer"
-                className="w-7 h-7 rounded-full object-cover ring-2 ring-emerald-500/40 group-hover:scale-105 transition-transform shrink-0"
-              />
+              <div
+                onClick={() => setActiveTab('profile')}
+                title={isCompact ? 'View & Edit Profile' : undefined}
+                className="flex items-center space-x-2.5 flex-1 min-w-0 cursor-pointer"
+              >
+                <img
+                  src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                  alt="User Avatar"
+                  referrerPolicy="no-referrer"
+                  className="w-7 h-7 rounded-full object-cover ring-2 ring-emerald-500/40 group-hover:scale-105 transition-transform shrink-0"
+                />
+                {!isCompact && (
+                  <div className="overflow-hidden flex-1 text-left">
+                    <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors truncate">
+                      {userProfile?.full_name || user.displayName}
+                    </div>
+                    <div className="text-[10px] text-slate-400 capitalize font-semibold flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>{orgMember?.role || 'Member'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {!isCompact && (
-                <div className="overflow-hidden flex-1 text-left">
-                  <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors truncate">
-                    {userProfile?.full_name || user.displayName}
-                  </div>
-                  <div className="text-[10px] text-slate-400 capitalize font-semibold flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-                    <span>{orgMember?.role || 'Member'} &bull; Edit Profile</span>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTheme(themeMode === 'dark' ? 'light' : 'dark');
+                  }}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 border border-white/10 transition-all shrink-0 ml-1 cursor-pointer"
+                  title={themeMode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                >
+                  {themeMode === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-400" />}
+                </button>
               )}
             </div>
           )}
@@ -233,24 +251,40 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             {/* Profile Info Card */}
             {user && (
               <div
-                onClick={() => { setActiveTab('profile'); setMobileMenuOpen(false); }}
-                className={`flex items-center space-x-3 p-3 rounded-xl bg-slate-900/90 border ${
+                className={`flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border ${
                   activeTab === 'profile' ? 'border-emerald-500/80 bg-emerald-500/10' : 'border-white/10'
-                } cursor-pointer transition-all active:scale-[0.99]`}
+                } transition-all`}
               >
-                <img
-                  src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                  alt="User Avatar"
-                  referrerPolicy="no-referrer"
-                  className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/40 shrink-0"
-                />
-                <div className="overflow-hidden flex-1 text-left">
-                  <div className="text-xs font-bold text-white truncate">{userProfile?.full_name || user.displayName || 'Member Profile'}</div>
-                  <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-                    <span>{orgMember?.role?.toUpperCase() || 'MEMBER'} &bull; View & Edit Profile</span>
+                <div
+                  onClick={() => { setActiveTab('profile'); setMobileMenuOpen(false); }}
+                  className="flex items-center space-x-3 flex-1 min-w-0 cursor-pointer"
+                >
+                  <img
+                    src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                    alt="User Avatar"
+                    referrerPolicy="no-referrer"
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/40 shrink-0"
+                  />
+                  <div className="overflow-hidden flex-1 text-left">
+                    <div className="text-xs font-bold text-white truncate">{userProfile?.full_name || user.displayName || 'Member Profile'}</div>
+                    <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>{orgMember?.role?.toUpperCase() || 'MEMBER'} &bull; View Profile</span>
+                    </div>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTheme(themeMode === 'dark' ? 'light' : 'dark');
+                  }}
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-white/10 transition-all shrink-0 ml-2 cursor-pointer"
+                  title={themeMode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                >
+                  {themeMode === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-400" />}
+                </button>
               </div>
             )}
 
@@ -302,7 +336,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       {showModeModal && (
         <div
           onClick={(e) => { if (e.target === e.currentTarget) setShowModeModal(false); }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn cursor-pointer"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md animate-fadeIn cursor-pointer"
         >
           <div className="glass-panel w-full max-w-sm p-5 sm:p-6 rounded-t-3xl sm:rounded-2xl space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/30">
             {/* Mobile Drag Handle */}

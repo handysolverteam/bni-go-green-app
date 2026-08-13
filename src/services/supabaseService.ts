@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Member, Organization, OrgMember, UserProfileExtended, OutreachTemplate } from '../types';
 import { scoreMember } from '../lib/scoringEngine';
+import { UNIVERSAL_DEFAULT_TEMPLATE_TEXT } from '../lib/outreachUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://oleckbfrkpmoikpkjcpa.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
@@ -512,6 +513,42 @@ export const supabaseService = {
         });
       }
 
+      // Auto-map existing phone numbers AND join_dates from existing members into the new report
+      try {
+        const { data: existingMap } = await supabase
+          .from('members')
+          .select('name, phone, join_date')
+          .eq('org_id', orgId);
+
+        if (existingMap && existingMap.length > 0) {
+          const phoneLookup: Record<string, string> = {};
+          const joinDateLookup: Record<string, string> = {};
+          existingMap.forEach(m => {
+            if (m.name && m.phone) phoneLookup[m.name] = m.phone;
+            if (m.name && m.join_date) joinDateLookup[m.name] = m.join_date;
+          });
+
+          for (const name of Object.keys({ ...phoneLookup, ...joinDateLookup })) {
+            const phone = phoneLookup[name];
+            const joinDate = joinDateLookup[name];
+            const updates: Record<string, string> = {};
+            if (phone) updates.phone = phone;
+            if (joinDate) updates.join_date = joinDate;
+
+            if (Object.keys(updates).length > 0) {
+              await supabase
+                .from('members')
+                .update(updates)
+                .eq('org_id', orgId)
+                .eq('batch_name', finalBatchName)
+                .eq('name', name);
+            }
+          }
+        }
+      } catch (mapErr) {
+        console.warn('Auto-map existing details warning:', mapErr);
+      }
+
       return true;
     } catch (e) {
       console.error('upsertMembers error:', e);
@@ -710,34 +747,90 @@ export const supabaseService = {
     }
   },
 
-  // --- OUTREACH TEMPLATES CRUD ---
+  // --- OUTREACH TEMPLATES CRUD (STRICT ORG ISOLATION) ---
   async fetchOutreachTemplates(orgId?: string): Promise<OutreachTemplate[]> {
     try {
-      let query = supabase.from('outreach_templates').select('*');
-      if (orgId) {
-        query = query.or(`org_id.eq.${orgId},is_default.eq.true`);
-      } else {
-        query = query.eq('is_default', true);
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: true });
-      if (error || !data || data.length === 0) {
+      if (!orgId) {
         return DEFAULT_OUTREACH_TEMPLATES;
       }
-      return data;
+
+      // Fetch org-specific templates
+      const { data: orgTemplates } = await supabase
+        .from('outreach_templates')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true });
+
+      const dbList = (orgTemplates && orgTemplates.length > 0) ? orgTemplates : [];
+
+      // If org has no templates saved in DB yet, auto-seed defaults for this org
+      if (dbList.length === 0) {
+        const seedRows = DEFAULT_OUTREACH_TEMPLATES.map(t => ({
+          org_id: orgId,
+          name: t.name,
+          status_target: t.status_target,
+          message_template: t.message_template,
+          is_default: true,
+          updated_at: new Date().toISOString(),
+        }));
+
+        const { data: seeded } = await supabase
+          .from('outreach_templates')
+          .insert(seedRows)
+          .select();
+
+        if (seeded && seeded.length > 0) {
+          seeded.sort((a, b) => (a.name?.includes('Universal') ? -1 : b.name?.includes('Universal') ? 1 : 0));
+          return seeded;
+        }
+
+        return DEFAULT_OUTREACH_TEMPLATES.map(t => ({ ...t, org_id: orgId }));
+      }
+
+      // Merge defaults with org's DB list if any default template missing
+      const mergedMap = new Map<string, OutreachTemplate>();
+      DEFAULT_OUTREACH_TEMPLATES.forEach(t => mergedMap.set(t.name.trim().toLowerCase(), { ...t, org_id: orgId }));
+      dbList.forEach(t => {
+        const key = (t.name || '').trim().toLowerCase();
+        mergedMap.set(key, t);
+      });
+
+      const list = Array.from(mergedMap.values());
+
+      // Secondary deduplication by content signature (name + message body)
+      const seenContent = new Set<string>();
+      const result: OutreachTemplate[] = [];
+
+      for (const t of list) {
+        const normName = (t.name || '').trim().toLowerCase();
+        const normMsg = (t.message_template || '').replace(/\s+/g, ' ').trim();
+        const contentSig = `${normName}::${normMsg}`;
+
+        if (seenContent.has(contentSig)) {
+          continue;
+        }
+
+        seenContent.add(contentSig);
+        result.push(t);
+      }
+
+      result.sort((a, b) => (a.name?.includes('Universal') || a.id === 'default_universal' ? -1 : b.name?.includes('Universal') || b.id === 'default_universal' ? 1 : 0));
+      return result;
     } catch (e) {
       return DEFAULT_OUTREACH_TEMPLATES;
     }
   },
 
-  async saveOutreachTemplate(template: Partial<OutreachTemplate>): Promise<boolean> {
+  async saveOutreachTemplate(template: Partial<OutreachTemplate>, orgId?: string): Promise<boolean> {
     try {
-      const row = {
+      const targetOrgId = template.org_id || orgId;
+      const row: Record<string, any> = {
         ...(template.id && !template.id.startsWith('temp_') && !template.id.startsWith('default_') ? { id: template.id } : {}),
-        org_id: template.org_id || null,
+        org_id: targetOrgId || null,
         name: template.name || 'Custom Outreach Template',
         status_target: template.status_target || 'All',
         message_template: template.message_template || '',
+        is_default: template.is_default ?? false,
         updated_at: new Date().toISOString(),
       };
 
@@ -767,10 +860,28 @@ export const supabaseService = {
       if (details.phone !== undefined) payload.phone = details.phone.trim();
       if (details.joinDate !== undefined) payload.join_date = details.joinDate.trim();
 
+      const { data: memberData } = await supabase
+        .from('members')
+        .select('name, org_id')
+        .eq('id', memberId)
+        .maybeSingle();
+
       const { error } = await supabase
         .from('members')
         .update(payload)
         .eq('id', memberId);
+
+      if (!error && memberData?.name) {
+        let mapQuery = supabase
+          .from('members')
+          .update(payload)
+          .eq('name', memberData.name);
+        if (memberData.org_id) {
+          mapQuery = mapQuery.eq('org_id', memberData.org_id);
+        }
+        await mapQuery;
+      }
+
       return !error;
     } catch (e) {
       return false;
@@ -806,6 +917,13 @@ export const supabaseService = {
 };
 
 export const DEFAULT_OUTREACH_TEMPLATES: OutreachTemplate[] = [
+  {
+    id: 'default_universal',
+    name: '⚡ Universal PALMS Score & Action Snapshot',
+    status_target: 'All',
+    message_template: UNIVERSAL_DEFAULT_TEMPLATE_TEXT,
+    is_default: true,
+  },
   {
     id: 'default_green',
     name: '🟢 Green Tier - Leadership Celebration',

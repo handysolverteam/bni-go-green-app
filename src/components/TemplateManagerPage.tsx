@@ -3,6 +3,7 @@ import { GlassCard } from './GlassCard';
 import { OutreachTemplate } from '../types';
 import { supabaseService, DEFAULT_OUTREACH_TEMPLATES } from '../services/supabaseService';
 import { useToast } from '../context/ToastContext';
+import { substituteKeywords } from '../lib/outreachUtils';
 import {
   FileText, Plus, Edit, Trash2, Check, Sparkles, Tag, Eye, RefreshCw, Copy, Layers, Save
 } from 'lucide-react';
@@ -16,20 +17,58 @@ const DYNAMIC_KEYWORDS = [
   { label: 'Member Name', key: '{{name}}' },
   { label: 'PALMS Score', key: '{{score}}' },
   { label: 'Traffic Light Tier', key: '{{traffic_light}}' },
-  { label: 'Present Count', key: '{{present}}' },
-  { label: 'Absent Count', key: '{{absent}}' },
-  { label: 'Referrals Given', key: '{{referrals}}' },
-  { label: 'TYFCB Amount', key: '{{tyfcb}}' },
-  { label: 'One-to-Ones', key: '{{one_to_ones}}' },
-  { label: 'CEU Units', key: '{{ceu}}' },
-  { label: 'Sponsors', key: '{{sponsors}}' },
-  { label: 'Chapter Name', key: '{{chapter}}' },
+  { label: 'Points to Green', key: '{{pts_to_green}}' },
+  { label: 'Action Steps Nudges', key: '{{nudges_list}}' },
+  { label: 'Attendance Rate', key: '{{attendance_rate}}' },
+  { label: 'Attendance Points', key: '{{attendance_pts}}' },
+  { label: 'Attendance Target', key: '{{attendance_target}}' },
+  { label: 'CEU Current', key: '{{ceu_current}}' },
+  { label: 'CEU Points', key: '{{ceu_pts}}' },
+  { label: 'CEU Target', key: '{{ceu_target}}' },
+  { label: '1-2-1s Current', key: '{{one_to_ones_current}}' },
+  { label: '1-2-1s Points', key: '{{one_to_ones_pts}}' },
+  { label: '1-2-1s Target', key: '{{one_to_ones_target}}' },
+  { label: 'Referrals Current', key: '{{referrals_current}}' },
+  { label: 'Referrals Points', key: '{{referrals_pts}}' },
+  { label: 'Referrals Target', key: '{{referrals_target}}' },
+  { label: 'Visitors Current', key: '{{visitors_current}}' },
+  { label: 'Visitors Points', key: '{{visitors_pts}}' },
+  { label: 'Visitors Target', key: '{{visitors_target}}' },
+  { label: 'TYFCB Current', key: '{{tyfcb_current}}' },
+  { label: 'TYFCB Points', key: '{{tyfcb_pts}}' },
+  { label: 'TYFCB Target', key: '{{tyfcb_target}}' },
+  { label: 'Sponsors Current', key: '{{sponsors_current}}' },
+  { label: 'Sponsors Points', key: '{{sponsors_pts}}' },
+  { label: 'Sponsors Target', key: '{{sponsors_target}}' },
 ];
 
 const SAMPLE_MEMBER = {
   name: 'Neraj K Anand',
   score: '78',
   traffic_light: 'Green',
+  pts_to_green: '0',
+  nudges_list: '1. - Maintain 100% Attendance Rate',
+  attendance_rate: '100',
+  attendance_pts: '10',
+  attendance_target: 'max achieved',
+  ceu_current: '0.85',
+  ceu_pts: '5',
+  ceu_target: 'next: 1.0 for 10 pts',
+  one_to_ones_current: '2.50',
+  one_to_ones_pts: '20',
+  one_to_ones_target: 'max achieved',
+  referrals_current: '1.40',
+  referrals_pts: '25',
+  referrals_target: 'max achieved',
+  visitors_current: '5',
+  visitors_pts: '25',
+  visitors_target: 'max achieved',
+  tyfcb_current: 'Rs 12,50,000',
+  tyfcb_pts: '5',
+  tyfcb_target: 'max achieved',
+  sponsors_current: '2',
+  sponsors_pts: '5',
+  sponsors_target: 'max achieved',
   present: '12',
   absent: '1',
   referrals: '45',
@@ -40,27 +79,23 @@ const SAMPLE_MEMBER = {
   chapter: 'Influencers',
 };
 
-export const substituteKeywords = (templateText: string, data: Record<string, string>): string => {
-  let result = templateText;
-  Object.entries(data).forEach(([key, val]) => {
-    const reg = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
-    result = result.replace(reg, val);
-  });
-  return result;
-};
-
 export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId, onSelectTemplate }) => {
   const { showToast } = useToast();
   const [templates, setTemplates] = useState<OutreachTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Editor states
+  // Editor & Card Expand states
+  const [expandedTemplates, setExpandedTemplates] = useState<Record<string, boolean>>({});
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState('');
   const [targetStatus, setTargetStatus] = useState<'All' | 'Green' | 'Amber' | 'Red' | 'Grey'>('All');
   const [messageTemplate, setMessageTemplate] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  const toggleExpand = (id: string) => {
+    setExpandedTemplates(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const loadTemplates = async () => {
     setIsLoading(true);
@@ -134,22 +169,19 @@ export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId,
   const previewRendered = substituteKeywords(messageTemplate || 'Select or type a template...', SAMPLE_MEMBER);
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-2 pb-12">
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
             <FileText className="w-6 h-6 text-emerald-400" />
-            <span>WhatsApp Outreach Templates</span>
+            <span>WhatsApp Templates</span>
           </h2>
-          <p className="text-xs text-slate-400">
-            Manage dynamic message templates for chapter members with automated keyword substitution (e.g. {"{{name}}"}, {"{{score}}"})
-          </p>
         </div>
 
         <button
           onClick={handleOpenNew}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-2 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all self-start md:self-auto"
+          className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm sm:text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all min-h-[44px] sm:min-h-0"
         >
           <Plus className="w-4 h-4" />
           <span>Create New Template</span>
@@ -159,7 +191,7 @@ export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId,
       {isEditing && (
         <div
           onClick={(e) => { if (e.target === e.currentTarget) setIsEditing(false); }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn cursor-pointer"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md animate-fadeIn cursor-pointer"
         >
           <GlassCard className="w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/40 bg-slate-900/95 shadow-2xl rounded-t-3xl sm:rounded-3xl cursor-default">
             <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-1 sm:hidden shrink-0" />
@@ -285,7 +317,11 @@ export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId,
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {templates.map((t) => {
-            const sampleText = substituteKeywords(t.message_template, SAMPLE_MEMBER);
+            const isExpanded = Boolean(expandedTemplates[t.id]);
+            const isLongText = t.message_template.length > 180 || t.message_template.split('\n').length > 5;
+            const displayText = (!isExpanded && isLongText)
+              ? t.message_template.slice(0, 180).trim() + '...'
+              : t.message_template;
 
             return (
               <GlassCard key={t.id} className="p-5 space-y-4 border-white/10 hover:border-emerald-500/40 transition-all flex flex-col justify-between">
@@ -332,11 +368,32 @@ export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId,
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-950/80 border border-white/10 space-y-1">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Raw Message Template:</div>
+                  <div className="p-3.5 rounded-xl bg-slate-950/80 border border-white/10 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Raw Message Template:</div>
+                      {isLongText && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(t.id)}
+                          className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1"
+                        >
+                          <span>{isExpanded ? 'Show Less' : 'Show More'}</span>
+                          <span className="text-[9px]">{isExpanded ? '▲' : '▼'}</span>
+                        </button>
+                      )}
+                    </div>
                     <p className="text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
-                      {t.message_template}
+                      {displayText}
                     </p>
+                    {isLongText && !isExpanded && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(t.id)}
+                        className="text-[11px] font-bold text-emerald-400 hover:underline pt-1 block"
+                      >
+                        ... Show More
+                      </button>
+                    )}
                   </div>
                 </div>
               </GlassCard>

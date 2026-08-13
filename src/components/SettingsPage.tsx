@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getScoringConfig, setScoringConfig, DEFAULTS } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Heart, Loader2, Phone, Mail, Sparkles } from 'lucide-react';
+import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Heart, Loader2, Phone, Mail, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { supabaseService } from '../services/supabaseService';
@@ -12,6 +12,68 @@ interface SettingsPageProps {
   orgId?: string;
   onSettingsSaved?: () => void;
 }
+
+interface CustomNumberStepperProps {
+  value: number;
+  onChange: (val: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+  className?: string;
+  inputClassName?: string;
+}
+
+export const CustomNumberStepper: React.FC<CustomNumberStepperProps> = ({
+  value,
+  onChange,
+  step = 1,
+  min,
+  max,
+  className = '',
+  inputClassName = '',
+}) => {
+  const handleIncrement = () => {
+    const next = parseFloat((Number(value || 0) + step).toFixed(6));
+    if (max !== undefined && next > max) return;
+    onChange(next);
+  };
+
+  const handleDecrement = () => {
+    const next = parseFloat((Number(value || 0) - step).toFixed(6));
+    if (min !== undefined && next < min) return;
+    onChange(next);
+  };
+
+  return (
+    <div className={`flex items-center glass-input rounded-xl border border-white/10 px-2 py-1 overflow-hidden shrink-0 ${className}`}>
+      <input
+        type="number"
+        step={step}
+        value={isNaN(value) ? '' : value}
+        onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+        className={`w-full bg-transparent border-0 outline-none text-xs font-black text-white focus:ring-0 p-0 ${inputClassName}`}
+      />
+      <div className="flex flex-col space-y-[2px] shrink-0 ml-1.5 border-l border-white/10 stepper-divider pl-1">
+        <button
+          type="button"
+          onClick={handleIncrement}
+          className="p-0.5 rounded-md stepper-btn transition-all cursor-pointer leading-none active:scale-95 flex items-center justify-center"
+          title="Increase"
+        >
+          <ChevronUp className="w-2.5 h-2.5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleDecrement}
+          className="p-0.5 rounded-md stepper-btn transition-all cursor-pointer leading-none active:scale-95 flex items-center justify-center"
+          title="Decrease"
+        >
+          <ChevronDown className="w-2.5 h-2.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSaved }) => {
   const { user } = useAuth();
@@ -109,27 +171,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
       {/* Header Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
             <Settings className="w-6 h-6 text-emerald-400" />
-            <span>Scoring & Message Settings</span>
+            <span>Settings</span>
           </h2>
-          <p className="text-xs text-slate-400">Configure 100-Point scoring threshold tiers and WhatsApp outreach signatures.</p>
         </div>
 
-        <div className="flex items-center space-x-2">
-          {isLoadingSettings && <Loader2 className="w-4 h-4 text-emerald-400 animate-spin mr-2" />}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          {isLoadingSettings && <Loader2 className="w-4 h-4 text-emerald-400 animate-spin mr-2 self-center sm:self-auto" />}
 
           <button
             onClick={() => setShowResetConfirm(true)}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center space-x-1.5 border border-white/10 transition-all"
+            className="w-full sm:w-auto px-4 py-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm sm:text-xs font-bold flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset to Defaults</span>
+            <RotateCcw className="w-4 h-4 text-amber-400" />
+            <span>Reset Defaults</span>
           </button>
 
           <button
             onClick={handleSave}
-            className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
+            className="w-full sm:w-auto px-5 py-3 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-sm sm:text-xs font-black flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all min-h-[44px] sm:min-h-0"
           >
             {savedSuccess ? <Check className="w-4 h-4 text-slate-950" /> : <Save className="w-4 h-4" />}
             <span>{savedSuccess ? 'Saved to DB!' : 'Save Settings'}</span>
@@ -146,7 +207,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-black text-white">WhatsApp Message Signature</h3>
-              <p className="text-[11px] text-slate-400">Append custom closing signature to outbound WhatsApp messages</p>
+              <p className="text-[11px] text-slate-400">Append custom closing signature to outreach WhatsApp messages</p>
             </div>
           </div>
 
@@ -168,13 +229,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
 
         {enableSignature && (
           <div className="space-y-1.5 pt-1 animate-fadeIn">
-            <label className="text-xs font-bold text-slate-300">Custom Signature Text</label>
-            <input
-              type="text"
+            <label className="text-xs font-bold text-slate-300">Custom Signature Text (Multiline Supported)</label>
+            <textarea
+              rows={4}
               value={signatureText}
               onChange={(e) => setSignatureText(e.target.value)}
-              placeholder="Keep the momentum going! 💪"
-              className="w-full px-4 py-2.5 rounded-xl glass-input text-xs font-semibold text-white border-emerald-500/40"
+              placeholder="Keep the momentum going! 💪&#10;Rahul Singh Matharu&#10;Vice President, BNI Influencers"
+              className="w-full px-4 py-3 rounded-xl glass-input text-xs font-semibold text-white border-emerald-500/40 leading-relaxed resize-y whitespace-pre-wrap min-h-[90px]"
             />
           </div>
         )}
@@ -190,31 +251,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
             <label className="text-xs font-bold text-emerald-400">🟢 Green $\ge$</label>
-            <input
-              type="number"
+            <CustomNumberStepper
               value={config.trafficLight.green}
-              onChange={(e) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, green: Number(e.target.value) } })}
-              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-black text-white"
+              onChange={(val) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, green: val } })}
+              inputClassName="text-sm"
             />
           </div>
 
           <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
             <label className="text-xs font-bold text-amber-400">🟡 Amber $\ge$</label>
-            <input
-              type="number"
+            <CustomNumberStepper
               value={config.trafficLight.amber}
-              onChange={(e) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, amber: Number(e.target.value) } })}
-              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-black text-white"
+              onChange={(val) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, amber: val } })}
+              inputClassName="text-sm"
             />
           </div>
 
           <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-2">
             <label className="text-xs font-bold text-rose-400">🔴 Red $\ge$</label>
-            <input
-              type="number"
+            <CustomNumberStepper
               value={config.trafficLight.red}
-              onChange={(e) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, red: Number(e.target.value) } })}
-              className="w-full px-3 py-2 rounded-lg glass-input text-sm font-black text-white"
+              onChange={(val) => setConfigState({ ...config, trafficLight: { ...config.trafficLight, red: val } })}
+              inputClassName="text-sm"
             />
           </div>
         </div>
@@ -232,19 +290,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             {config.attendance.thresholds.map((tier, idx) => (
               <div key={idx} className="flex items-center space-x-2 text-xs">
                 <span className="text-slate-400 w-24">Min rate:</span>
-                <input
-                  type="number"
-                  step="0.01"
+                <CustomNumberStepper
+                  step={0.01}
                   value={tier.t}
-                  onChange={(e) => updateTier('attendance', idx, 't', Number(e.target.value))}
-                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                  onChange={(val) => updateTier('attendance', idx, 't', val)}
+                  className="w-24"
                 />
                 <span className="text-slate-500">&rarr;</span>
-                <input
-                  type="number"
+                <CustomNumberStepper
                   value={tier.pts}
-                  onChange={(e) => updateTier('attendance', idx, 'pts', Number(e.target.value))}
-                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                  onChange={(val) => updateTier('attendance', idx, 'pts', val)}
+                  className="w-16"
+                  inputClassName="text-emerald-400 font-bold"
                 />
                 <span className="text-slate-400">pts</span>
               </div>
@@ -262,19 +319,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             {config.ceu.thresholds.map((tier, idx) => (
               <div key={idx} className="flex items-center space-x-2 text-xs">
                 <span className="text-slate-400 w-24">Min CEU/wk:</span>
-                <input
-                  type="number"
-                  step="0.000001"
+                <CustomNumberStepper
+                  step={0.1}
                   value={tier.t}
-                  onChange={(e) => updateTier('ceu', idx, 't', Number(e.target.value))}
-                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                  onChange={(val) => updateTier('ceu', idx, 't', val)}
+                  className="w-24"
                 />
                 <span className="text-slate-500">&rarr;</span>
-                <input
-                  type="number"
+                <CustomNumberStepper
                   value={tier.pts}
-                  onChange={(e) => updateTier('ceu', idx, 'pts', Number(e.target.value))}
-                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                  onChange={(val) => updateTier('ceu', idx, 'pts', val)}
+                  className="w-16"
+                  inputClassName="text-emerald-400 font-bold"
                 />
                 <span className="text-slate-400">pts</span>
               </div>
@@ -292,19 +348,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             {config.oneToOnes.thresholds.map((tier, idx) => (
               <div key={idx} className="flex items-center space-x-2 text-xs">
                 <span className="text-slate-400 w-24">Min 1-2-1/wk:</span>
-                <input
-                  type="number"
-                  step="0.05"
+                <CustomNumberStepper
+                  step={0.05}
                   value={tier.t}
-                  onChange={(e) => updateTier('oneToOnes', idx, 't', Number(e.target.value))}
-                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                  onChange={(val) => updateTier('oneToOnes', idx, 't', val)}
+                  className="w-24"
                 />
                 <span className="text-slate-500">&rarr;</span>
-                <input
-                  type="number"
+                <CustomNumberStepper
                   value={tier.pts}
-                  onChange={(e) => updateTier('oneToOnes', idx, 'pts', Number(e.target.value))}
-                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                  onChange={(val) => updateTier('oneToOnes', idx, 'pts', val)}
+                  className="w-16"
+                  inputClassName="text-emerald-400 font-bold"
                 />
                 <span className="text-slate-400">pts</span>
               </div>
@@ -322,19 +377,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             {config.referrals.thresholds.map((tier, idx) => (
               <div key={idx} className="flex items-center space-x-2 text-xs">
                 <span className="text-slate-400 w-24">Min refs/wk:</span>
-                <input
-                  type="number"
-                  step="0.05"
+                <CustomNumberStepper
+                  step={0.05}
                   value={tier.t}
-                  onChange={(e) => updateTier('referrals', idx, 't', Number(e.target.value))}
-                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                  onChange={(val) => updateTier('referrals', idx, 't', val)}
+                  className="w-24"
                 />
                 <span className="text-slate-500">&rarr;</span>
-                <input
-                  type="number"
+                <CustomNumberStepper
                   value={tier.pts}
-                  onChange={(e) => updateTier('referrals', idx, 'pts', Number(e.target.value))}
-                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                  onChange={(val) => updateTier('referrals', idx, 'pts', val)}
+                  className="w-16"
+                  inputClassName="text-emerald-400 font-bold"
                 />
                 <span className="text-slate-400">pts</span>
               </div>
@@ -352,18 +406,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             {config.tyfcb.thresholds.map((tier, idx) => (
               <div key={idx} className="flex items-center space-x-2 text-xs">
                 <span className="text-slate-400 w-24">Min Rs:</span>
-                <input
-                  type="number"
+                <CustomNumberStepper
+                  step={10000}
                   value={tier.t}
-                  onChange={(e) => updateTier('tyfcb', idx, 't', Number(e.target.value))}
-                  className="w-28 px-2 py-1 rounded glass-input font-bold"
+                  onChange={(val) => updateTier('tyfcb', idx, 't', val)}
+                  className="w-28"
                 />
                 <span className="text-slate-500">&rarr;</span>
-                <input
-                  type="number"
+                <CustomNumberStepper
                   value={tier.pts}
-                  onChange={(e) => updateTier('tyfcb', idx, 'pts', Number(e.target.value))}
-                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                  onChange={(val) => updateTier('tyfcb', idx, 'pts', val)}
+                  className="w-16"
+                  inputClassName="text-emerald-400 font-bold"
                 />
                 <span className="text-slate-400">pts</span>
               </div>
@@ -381,18 +435,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             {config.visitors.thresholds.map((tier, idx) => (
               <div key={idx} className="flex items-center space-x-2 text-xs">
                 <span className="text-slate-400 w-24">Min visitors:</span>
-                <input
-                  type="number"
+                <CustomNumberStepper
                   value={tier.t}
-                  onChange={(e) => updateTier('visitors', idx, 't', Number(e.target.value))}
-                  className="w-24 px-2 py-1 rounded glass-input font-bold"
+                  onChange={(val) => updateTier('visitors', idx, 't', val)}
+                  className="w-24"
                 />
                 <span className="text-slate-500">&rarr;</span>
-                <input
-                  type="number"
+                <CustomNumberStepper
                   value={tier.pts}
-                  onChange={(e) => updateTier('visitors', idx, 'pts', Number(e.target.value))}
-                  className="w-16 px-2 py-1 rounded glass-input font-bold text-emerald-400"
+                  onChange={(val) => updateTier('visitors', idx, 'pts', val)}
+                  className="w-16"
+                  inputClassName="text-emerald-400 font-bold"
                 />
                 <span className="text-slate-400">pts</span>
               </div>

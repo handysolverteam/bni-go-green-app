@@ -99,7 +99,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden animate-fadeIn cursor-pointer"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md overflow-hidden animate-fadeIn cursor-pointer"
     >
       <GlassCard className="w-full max-w-xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col relative border-t sm:border border-emerald-500/30 shadow-2xl overflow-hidden rounded-t-3xl sm:rounded-3xl">
         {/* Mobile Drag Handle */}
@@ -151,7 +151,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
           </div>
 
           {/* Member Basic Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-300">Member Full Name *</label>
               <input
@@ -174,6 +174,16 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 value={formData.Phone || ''}
                 onChange={(e) => setFormData({ ...formData, Phone: e.target.value.replace(/[^0-9]/g, '') })}
                 className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-300">Joining Date (Optional)</label>
+              <input
+                type="date"
+                value={formData.JoinDate || (formData as any).join_date || ''}
+                onChange={(e) => setFormData({ ...formData, JoinDate: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold text-white"
               />
             </div>
           </div>

@@ -3,6 +3,7 @@ import { Member } from '../types';
 import { levelUpPlan, formatCurrency } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
 import { getWhatsAppUrl } from '../lib/whatsappUtils';
+import { buildMemberTemplateData, substituteKeywords, UNIVERSAL_DEFAULT_TEMPLATE_TEXT } from '../lib/outreachUtils';
 import { X, Award, CheckCircle2, TrendingUp, Send, ExternalLink, ShieldCheck } from 'lucide-react';
 
 interface MemberDetailModalProps {
@@ -14,7 +15,8 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
   const plan = levelUpPlan(member);
 
   const getWAUrl = () => {
-    const txt = `Hi ${member.Name}, let's review your BNI score (${member.score}/100) and targets!`;
+    const dataDict = buildMemberTemplateData(member);
+    const txt = substituteKeywords(UNIVERSAL_DEFAULT_TEMPLATE_TEXT, dataDict);
     return getWhatsAppUrl(member.Phone || '', txt);
   };
 
@@ -31,7 +33,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden animate-fadeIn cursor-pointer"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md overflow-hidden animate-fadeIn cursor-pointer"
     >
       <GlassCard className="w-full max-w-3xl max-h-[94dvh] sm:max-h-[90vh] flex flex-col relative border-t sm:border border-emerald-500/30 shadow-2xl overflow-hidden rounded-t-3xl sm:rounded-3xl">
         {/* Mobile Drag Handle */}

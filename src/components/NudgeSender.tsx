@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Member, ImportLog, OutreachTemplate } from '../types';
 import { GlassCard } from './GlassCard';
-import { substituteKeywords } from './TemplateManagerPage';
+import { substituteKeywords, buildMemberTemplateData, formatDisplayDateTime } from '../lib/outreachUtils';
 import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { useToast } from '../context/ToastContext';
 import {
   MessageSquare, ExternalLink, Copy, Check, Sparkles, Send, Play, Pause,
-  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, FileText, Edit, X, Tag, Phone, Search
+  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, EyeOff, FileText, Edit, X, Tag, Phone, Search
 } from 'lucide-react';
 import { supabaseService, DEFAULT_OUTREACH_TEMPLATES } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ interface NudgeSenderProps {
   members: Member[];
   importLogs?: ImportLog[];
   initialReportName?: string | null;
+  onSelectReportName?: (name: string | null) => void;
   customSignature?: string;
   orgId?: string;
   onBackToDashboard?: () => void;
@@ -25,6 +26,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   members,
   importLogs = [],
   initialReportName = null,
+  onSelectReportName,
   customSignature,
   orgId,
   onBackToDashboard,
@@ -35,12 +37,19 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<'All' | 'Red' | 'Amber' | 'Grey' | 'Green'>('All');
 
-  // Currently selected report for Outreach Manager view
-  const [activeReportName, setActiveReportName] = useState<string | null>(initialReportName);
+  // Currently selected report for Outreach Manager view synced with parent router
+  const activeReportName = initialReportName || null;
 
-  // Outreach Templates state
+  const setActiveReportName = (name: string | null) => {
+    if (onSelectReportName) {
+      onSelectReportName(name);
+    }
+  };
+
+  // Outreach Templates state (default selected is universal template)
   const [templates, setTemplates] = useState<OutreachTemplate[]>(DEFAULT_OUTREACH_TEMPLATES);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('default_all');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('default_universal');
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
 
   // Inline Quick Edit states for Selected Template preview box
   const [isInlineEditing, setIsInlineEditing] = useState(false);
@@ -55,7 +64,8 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     supabaseService.fetchOutreachTemplates(orgId).then(data => {
       if (data && data.length > 0) {
         setTemplates(data);
-        setSelectedTemplateId(data[0].id);
+        const hasUniversal = data.find(t => t.id === 'default_universal');
+        setSelectedTemplateId(hasUniversal ? 'default_universal' : data[0].id);
       }
     });
 
@@ -166,18 +176,39 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     }
   }, [availableReports.length]);
 
+  const getMemberKey = (m: Member): string => {
+    if (m.id && !m.id.startsWith('temp_')) return m.id;
+    const batch = m.batch_name || 'default';
+    return `${batch}_${m.Name}`;
+  };
+
   // Members scoped by active report or all members
   const scopedMembers = useMemo(() => {
     if (!activeReportName) return members;
     return members.filter(m => (m.batch_name || '') === activeReportName);
   }, [members, activeReportName]);
 
-  // Search filter term
+  // Live Outreach Stats for scoped members
+  const activeTotalCount = scopedMembers.length;
+  const activeSentCount = useMemo(() => {
+    return scopedMembers.filter(m => {
+      return statuses[getMemberKey(m)] === 'sent';
+    }).length;
+  }, [scopedMembers, statuses]);
+
+  const activeLeftCount = Math.max(0, activeTotalCount - activeSentCount);
+  const activeProgressPct = activeTotalCount > 0 ? Math.round((activeSentCount / activeTotalCount) * 100) : 0;
+
+  // Search filter & Quick Hide Sent Cards Toggle States
   const [searchTerm, setSearchTerm] = useState('');
+  const [hideSentMembers, setHideSentMembers] = useState(false);
 
   // Target members needing outreach in scoped members (Sorted by Top Score DESC)
   const targetMembers = useMemo(() => {
     const list = scopedMembers.filter(m => {
+      const isSent = statuses[getMemberKey(m)] === 'sent';
+      if (hideSentMembers && isSent) return false;
+
       const matchesFilter = selectedFilter === 'All' || m.trafficLight?.label === selectedFilter;
       const term = searchTerm.trim().toLowerCase();
       const matchesSearch = !term ||
@@ -193,7 +224,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       if (scoreB !== scoreA) return scoreB - scoreA;
       return (a.Name || '').localeCompare(b.Name || '');
     });
-  }, [scopedMembers, selectedFilter, searchTerm]);
+  }, [scopedMembers, selectedFilter, searchTerm, hideSentMembers, statuses]);
 
   const [dbSignature, setDbSignature] = useState(customSignature || 'Keep the momentum going! 💪');
   const [enableSignature, setEnableSignature] = useState(true);
@@ -211,39 +242,15 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
 
   const generateNudgeMessage = (member: Member): string => {
     const finalSignature = enableSignature ? dbSignature : '';
+    const dataDict = buildMemberTemplateData(member);
 
-    if (activeTemplate && activeTemplate.message_template) {
-      const msg = substituteKeywords(activeTemplate.message_template, {
-        name: member.Name || 'Member',
-        score: String(member.score || 0),
-        traffic_light: member.trafficLight?.label || 'Grey',
-        present: String(member.P || 0),
-        absent: String(member.A || 0),
-        referrals: String(member.RGT || 0),
-        tyfcb: `₹${(member.TYFCB || 0).toLocaleString('en-IN')}`,
-        one_to_ones: String(member.OneToOnes || 0),
-        ceu: String(member.CEU || 0),
-        sponsors: String(member.Sponsors || 0),
-        chapter: member.Chapter || 'Influencers',
-      });
-
-      if (enableSignature && finalSignature) {
-        return `${msg}\n\n${finalSignature}`;
-      }
-      return msg;
-    }
-
-    const nudges = member.nudges || [];
-    const score = member.score || 0;
-    const light = member.trafficLight?.label || 'Grey';
-    const topNudges = nudges.slice(0, 2).map(n => `• ${n.action}`).join('\n');
-
-    const baseMsg = `Hi ${member.Name}! 👋\n\nYour current BNI Traffic Light status is *${light}* with a score of *${score}/100*.\n\nTo reach Green status (70+ points), here are your top recommended actions:\n${topNudges || '• Maintain attendance and submit 1-2-1s!'}`;
+    const templateBody = activeTemplate?.message_template || DEFAULT_OUTREACH_TEMPLATES[0].message_template;
+    const msg = substituteKeywords(templateBody, dataDict);
 
     if (enableSignature && finalSignature) {
-      return `${baseMsg}\n\n${finalSignature}`;
+      return `${msg}\n\n${finalSignature}`;
     }
-    return baseMsg;
+    return msg;
   };
 
   const getWhatsAppLink = (member: Member, message: string): string => {
@@ -262,20 +269,18 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     const cleanPhone = (phoneVal || '').trim();
     const cleanJoinDate = (joinDateVal || '').trim();
 
-    // Scenario A: Both fields empty
-    if (!cleanPhone && !cleanJoinDate) {
-      showToast(`Please fill in at least a Phone Number or Joining Date for ${member.Name}!`, 'error');
+    if (!cleanPhone) {
+      showToast(`Please enter a phone number for ${member.Name}!`, 'error');
       return;
     }
 
-    // Scenario B: Phone entered but invalid format (<10 digits)
     const digitsOnly = cleanPhone.replace(/\D/g, '');
-    if (cleanPhone && digitsOnly.length < 10) {
+    if (digitsOnly.length < 10) {
       showToast(`Phone number for ${member.Name} must contain at least 10 digits!`, 'error');
       return;
     }
 
-    const key = member.id || member.Name;
+    const key = getMemberKey(member);
     setSavingPhoneId(key);
 
     const success = await supabaseService.updateMemberDetails(member.id || '', {
@@ -285,17 +290,12 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
 
     if (success) {
       member.Phone = cleanPhone;
-      member.JoinDate = cleanJoinDate;
-      (member as any).join_date = cleanJoinDate;
-
-      // Toast feedback based on which scenario was saved
-      if (cleanPhone && cleanJoinDate) {
-        showToast(`Phone & Joining Date updated for ${member.Name}`, 'success');
-      } else if (cleanPhone) {
-        showToast(`Phone number updated for ${member.Name}`, 'success');
-      } else {
-        showToast(`Joining Date updated for ${member.Name}`, 'success');
+      if (cleanJoinDate) {
+        member.JoinDate = cleanJoinDate;
+        (member as any).join_date = cleanJoinDate;
       }
+
+      showToast(`Phone number updated for ${member.Name}`, 'success');
 
       setEditingPhoneMap(prev => {
         const next = { ...prev };
@@ -319,9 +319,9 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     setBatchIndex(0);
     const initialStatuses: Record<string, 'pending' | 'sent' | 'failed' | 'skipped'> = {};
     targetMembers.forEach(m => {
-      initialStatuses[m.id || m.Name] = 'pending';
+      initialStatuses[getMemberKey(m)] = 'pending';
     });
-    setStatuses(initialStatuses);
+    setStatuses(prev => ({ ...prev, ...initialStatuses }));
   };
 
   const handlePauseBatch = () => {
@@ -343,19 +343,18 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   useEffect(() => {
     const map: Record<string, 'pending' | 'sent' | 'failed' | 'skipped'> = {};
     members.forEach(m => {
-      const key = m.id || m.Name;
+      const key = getMemberKey(m);
       const rawStatus = (m as any).raw_data?.outreach_status || (m as any).outreach_status;
       if (rawStatus) {
         map[key] = rawStatus;
-        map[m.Name] = rawStatus;
       }
     });
     setStatuses(prev => ({ ...map, ...prev }));
   }, [members]);
 
   const handleMarkStatus = async (member: Member, status: 'sent' | 'failed' | 'skipped') => {
-    const key = member.id || member.Name;
-    setStatuses(prev => ({ ...prev, [key]: status, [member.Name]: status }));
+    const key = getMemberKey(member);
+    setStatuses(prev => ({ ...prev, [key]: status }));
     (member as any).raw_data = { ...((member as any).raw_data || {}), outreach_status: status };
 
     if (member.id && !member.id.startsWith('temp_')) {
@@ -398,25 +397,20 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-2 pb-12">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
             <MessageSquare className="w-6 h-6 text-emerald-400" />
-            <span>{activeReportName ? `Outreach: ${activeReportName}` : `WhatsApp Outreach Messages (${availableReports.length})`}</span>
+            <span>{activeReportName ? `Outreach: ${activeReportName}` : `WhatsApp Outreach (${availableReports.length})`}</span>
           </h2>
-          <p className="text-xs text-slate-400">
-            {activeReportName
-              ? `Sending personalized performance messages for members in "${activeReportName}"`
-              : `Select a report to start automated WhatsApp outreach for your chapter members.`}
-          </p>
         </div>
 
         {activeReportName && (
           <button
             onClick={() => setActiveReportName(null)}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all self-start md:self-auto"
+            className="w-full sm:w-auto px-4 py-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm sm:text-xs flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
           >
             <ArrowLeft className="w-4 h-4 text-emerald-400" />
             <span>Back to Outreach Reports</span>
@@ -453,13 +447,14 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {availableReports.map((report) => {
                 const reportMems = members.filter(m => m.batch_name === report.batch_name);
-                const sentCount = reportMems.filter(m => statuses[m.id || m.Name] === 'sent').length;
+                const sentCount = reportMems.filter(m => statuses[getMemberKey(m)] === 'sent').length;
                 const needsOutreachCount = report.amber + report.red + report.grey;
 
                 return (
                   <GlassCard
                     key={report.batch_name}
-                    className="p-5 space-y-4 border-white/10 hover:border-emerald-500/50 hover:bg-slate-900/80 transition-all group flex flex-col justify-between"
+                    className="p-5 space-y-4 border-white/10 hover:border-emerald-500/50 hover:bg-slate-900/80 transition-all group flex flex-col justify-between cursor-pointer"
+                    onClick={() => setActiveReportName(report.batch_name)}
                   >
                     <div className="space-y-3">
                       <div className="space-y-1">
@@ -468,7 +463,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                         </h4>
                         <p className="text-[11px] text-slate-400 flex items-center gap-1.5 font-medium">
                           <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{report.created_at ? new Date(report.created_at).toLocaleString('en-IN') : 'Uploaded Recently'}</span>
+                          <span>{report.created_at ? formatDisplayDateTime(report.created_at) : 'Uploaded Recently'}</span>
                         </p>
                       </div>
 
@@ -487,8 +482,8 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                     </div>
 
                     <button
-                      onClick={() => setActiveReportName(report.batch_name)}
-                      className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/20 hover:scale-[1.02] transition-all"
+                      onClick={(e) => { e.stopPropagation(); setActiveReportName(report.batch_name); }}
+                      className="w-full py-3 sm:py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm sm:text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/20 hover:scale-[1.02] transition-all min-h-[44px] sm:min-h-0"
                     >
                       <MessageSquare className="w-4 h-4" />
                       <span>Start Outreach for Report</span>
@@ -505,21 +500,20 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       {activeReportName && (
         <div className="space-y-6 animate-fadeIn">
           {/* Top Template Selection & Live Code Preview Section */}
-          <GlassCard className="p-5 space-y-4 border-emerald-500/30 bg-slate-900/90 rounded-2xl">
+          <GlassCard className="p-5 space-y-1 border-emerald-500/30 bg-slate-900/90 rounded-2xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-emerald-400" />
                   <span>Select Outreach Message Template *</span>
                 </label>
-                <p className="text-[11px] text-slate-400">Choose a dynamic template to apply to all member outreach actions below</p>
               </div>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto min-w-0">
                 <select
                   value={selectedTemplateId}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="w-full sm:w-64 max-w-full px-3 py-2 rounded-xl glass-input text-xs font-bold text-white bg-slate-900 border-emerald-500/40 truncate overflow-hidden"
+                  className="w-full sm:w-64 max-w-full px-3 py-2.5 rounded-xl glass-input text-xs font-bold text-white bg-slate-900 border-emerald-500/40 truncate overflow-hidden"
                 >
                   {templates.map(t => (
                     <option key={t.id} value={t.id} className="bg-slate-900 text-white">
@@ -528,10 +522,19 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                   ))}
                 </select>
 
+                <button
+                  type="button"
+                  onClick={() => setShowTemplatePreview(!showTemplatePreview)}
+                  className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-white/10 flex items-center justify-center space-x-1.5 transition-all shrink-0 min-h-[44px] sm:min-h-0"
+                >
+                  {showTemplatePreview ? <EyeOff className="w-4 h-4 text-rose-400" /> : <Eye className="w-4 h-4 text-emerald-400" />}
+                  <span>{showTemplatePreview ? 'Hide Preview' : 'Show Preview'}</span>
+                </button>
+
                 {onOpenTemplateManager && (
                   <button
                     onClick={onOpenTemplateManager}
-                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-extrabold text-xs border border-emerald-500/30 flex items-center justify-center space-x-1.5 whitespace-nowrap transition-all shrink-0"
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-extrabold text-xs border border-emerald-500/30 flex items-center justify-center space-x-1.5 whitespace-nowrap transition-all shrink-0 min-h-[44px] sm:min-h-0"
                   >
                     <FileText className="w-4 h-4" />
                     <span>Manage Templates</span>
@@ -540,8 +543,8 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
               </div>
             </div>
 
-            {/* Live Template Preview & Inline Quick Edit */}
-            {activeTemplate && (
+            {/* Live Template Preview & Inline Quick Edit (Collapsible) */}
+            {showTemplatePreview && activeTemplate && (
               <div className="p-4 rounded-xl bg-slate-950/80 border border-white/10 space-y-3">
                 <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-emerald-400">
                   <span className="flex items-center gap-1.5">
@@ -615,6 +618,56 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
             )}
           </GlassCard>
 
+          {/* Live Outreach Progress Banner */}
+          <GlassCard className="p-4 bg-slate-900/90 border-emerald-500/30 rounded-2xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center space-x-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                <span className="text-xs font-black text-white uppercase tracking-wider">Outreach Progress Tracker</span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 text-xs font-extrabold">
+                <span className="px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  ✅ Sent: {activeSentCount}
+                </span>
+                <span className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  ⏳ Remaining: {activeLeftCount}
+                </span>
+                <span className="px-3 py-1 rounded-xl bg-slate-800 text-slate-300 border border-white/10">
+                  Total: {activeTotalCount}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setHideSentMembers(!hideSentMembers)}
+                  className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center space-x-1.5 border active:scale-95 cursor-pointer ${
+                    hideSentMembers
+                      ? 'bg-amber-500/30 text-amber-300 border-amber-500/50 shadow-md shadow-amber-500/20'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-white/10'
+                  }`}
+                  title={hideSentMembers ? 'Click to show all members (including sent)' : 'Click to hide sent members'}
+                >
+                  {hideSentMembers ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5 text-emerald-400" />}
+                  <span>{hideSentMembers ? 'Showing Unsent Only' : 'Hide Sent Cards'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Visual Progress Bar */}
+            <div className="space-y-1">
+              <div className="w-full h-3 rounded-full bg-slate-800 overflow-hidden p-0.5 border border-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500 shadow-lg shadow-emerald-500/30"
+                  style={{ width: `${activeProgressPct}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 px-0.5">
+                <span>{activeProgressPct}% Completed</span>
+                <span>{activeSentCount} of {activeTotalCount} Members Reached</span>
+              </div>
+            </div>
+          </GlassCard>
+
           {/* Target Status Filter & Search Input */}
           <GlassCard className="p-4 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -667,8 +720,8 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
               </GlassCard>
             ) : (
               targetMembers.map((member) => {
-                const key = member.id || member.Name;
-                const status = statuses[key] || statuses[member.Name] || 'pending';
+                const key = getMemberKey(member);
+                const status = statuses[key] || 'pending';
                 const nudgeMsg = generateNudgeMessage(member);
                 const waLink = getWhatsAppLink(member, nudgeMsg);
                 const isSent = status === 'sent';
@@ -690,15 +743,16 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                         <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full whitespace-nowrap ${
                           member.trafficLight?.label === 'Green' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
                           member.trafficLight?.label === 'Amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                          'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                          member.trafficLight?.label === 'Red' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                          'badge-grey'
                         }`}>
                           {member.trafficLight?.label} ({member.score}/100)
                         </span>
                       </div>
 
-                      {/* Phone & Joining Date section */}
+                      {/* Phone section */}
                       <div>
-                        {(!member.Phone || editingPhoneMap[key] !== undefined || editingJoinDateMap[key] !== undefined) ? (
+                        {(!member.Phone || editingPhoneMap[key] !== undefined) ? (
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full pt-1">
                             <input
                               type="tel"
@@ -710,28 +764,27 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                                 const digits = e.target.value.replace(/[^0-9]/g, '');
                                 setEditingPhoneMap(prev => ({ ...prev, [key]: digits }));
                               }}
-                              className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-40 border-emerald-500/40"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveDetails(
+                                    member,
+                                    editingPhoneMap[key] ?? member.Phone ?? '',
+                                    ''
+                                  );
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-48 border-emerald-500/40"
                             />
-                            <div className="relative w-full sm:w-36">
-                              <input
-                                type={editingJoinDateMap[key] || member.JoinDate || (member as any).join_date ? "date" : "text"}
-                                onFocus={(e) => (e.target.type = "date")}
-                                onBlur={(e) => { if (!e.target.value) e.target.type = "text"; }}
-                                placeholder="📅 Joining Date"
-                                value={editingJoinDateMap[key] ?? (member.JoinDate || (member as any).join_date || '')}
-                                onChange={(e) => setEditingJoinDateMap(prev => ({ ...prev, [key]: e.target.value }))}
-                                className="w-full px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white border-emerald-500/40"
-                              />
-                            </div>
                             <button
                               onClick={() => handleSaveDetails(
                                 member,
                                 editingPhoneMap[key] ?? member.Phone ?? '',
-                                editingJoinDateMap[key] ?? member.JoinDate ?? (member as any).join_date ?? ''
+                                ''
                               )}
                               disabled={savingPhoneId === key}
                               className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md flex items-center justify-center space-x-1 transition-all w-full sm:w-auto shrink-0"
-                              title="Save Phone & Join Date"
+                              title="Save Phone Number"
                             >
                               <Check className="w-3.5 h-3.5" />
                               <span>{savingPhoneId === key ? 'Saving...' : 'Save'}</span>
@@ -743,21 +796,14 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                               <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                               <span>{member.Phone}</span>
                             </p>
-                            {(member.JoinDate || (member as any).join_date) && (
-                              <p className="text-emerald-400 font-mono flex items-center gap-1">
-                                <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
-                                <span>Joined: {member.JoinDate || (member as any).join_date}</span>
-                              </p>
-                            )}
                             <button
                               onClick={() => {
                                 setEditingPhoneMap(prev => ({ ...prev, [key]: member.Phone || '' }));
-                                setEditingJoinDateMap(prev => ({ ...prev, [key]: member.JoinDate || (member as any).join_date || '' }));
                               }}
                               className="p-1 text-slate-400 hover:text-emerald-400 rounded-md transition-colors"
-                              title="Edit Phone & Join Date"
+                              title="Edit Phone Number"
                             >
-                              <Edit className="w-3 h-3" />
+                              <Edit className="w-3.5 h-3" />
                             </button>
                           </div>
                         )}
