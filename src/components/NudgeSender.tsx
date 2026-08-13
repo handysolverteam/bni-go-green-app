@@ -257,10 +257,21 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     return getWhatsAppUrl(member.Phone || '', message);
   };
 
-  const handleCopy = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const [expandedPreviews, setExpandedPreviews] = useState<Record<string, boolean>>({});
+  const [copiedMap, setCopiedMap] = useState<Record<string, boolean>>({});
+
+  const togglePreview = (key: string) => {
+    setExpandedPreviews(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleCopyMessage = (member: Member, msg: string) => {
+    const key = getMemberKey(member);
+    navigator.clipboard.writeText(msg);
+    showToast(`Copied WhatsApp message for ${member.Name}!`, 'info');
+    setCopiedMap(prev => ({ ...prev, [key]: true }));
+    setTimeout(() => {
+      setCopiedMap(prev => ({ ...prev, [key]: false }));
+    }, 2500);
   };
 
   const [editingJoinDateMap, setEditingJoinDateMap] = useState<Record<string, string>>({});
@@ -724,116 +735,169 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                 const status = statuses[key] || 'pending';
                 const nudgeMsg = generateNudgeMessage(member);
                 const waLink = getWhatsAppLink(member, nudgeMsg);
-                const isSent = status === 'sent';
+                const showPreview = expandedPreviews[key] || false;
+                const isCopied = copiedMap[key] || false;
 
                 return (
-                  <GlassCard key={key} className="p-3.5 sm:p-4 border-white/10 hover:border-emerald-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      {/* Name Header with Avatar & Status Badge */}
-                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                        {/* Avatar directly before Name */}
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shrink-0 shadow-md shadow-emerald-500/20">
-                          <div className="w-full h-full bg-[#0a0f1d] rounded-full flex items-center justify-center font-black text-emerald-400 text-xs sm:text-xs">
-                            {member.Name.charAt(0)}
+                  <GlassCard key={key} className="p-3.5 sm:p-4 border-white/10 hover:border-emerald-500/40 transition-all flex flex-col gap-3">
+                    {/* Main Row: Info & Action Buttons */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        {/* Name Header with Avatar & Status Badge */}
+                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                          {/* Avatar directly before Name */}
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shrink-0 shadow-md shadow-emerald-500/20">
+                            <div className="w-full h-full bg-[#0a0f1d] rounded-full flex items-center justify-center font-black text-emerald-400 text-xs sm:text-xs">
+                              {member.Name.charAt(0)}
+                            </div>
                           </div>
+
+                          <h3 className="text-sm sm:text-base font-black text-white truncate max-w-[200px] sm:max-w-none">{member.Name}</h3>
+
+                          <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full whitespace-nowrap ${
+                            member.trafficLight?.label === 'Green' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                            member.trafficLight?.label === 'Amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                            member.trafficLight?.label === 'Red' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                            'badge-grey'
+                          }`}>
+                            {member.trafficLight?.label} ({member.score}/100)
+                          </span>
                         </div>
 
-                        <h3 className="text-sm sm:text-base font-black text-white truncate max-w-[200px] sm:max-w-none">{member.Name}</h3>
-
-                        <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full whitespace-nowrap ${
-                          member.trafficLight?.label === 'Green' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                          member.trafficLight?.label === 'Amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                          member.trafficLight?.label === 'Red' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
-                          'badge-grey'
-                        }`}>
-                          {member.trafficLight?.label} ({member.score}/100)
-                        </span>
-                      </div>
-
-                      {/* Phone section */}
-                      <div>
-                        {(!member.Phone || editingPhoneMap[key] !== undefined) ? (
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full pt-1">
-                            <input
-                              type="tel"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              placeholder="Phone number..."
-                              value={editingPhoneMap[key] ?? (member.Phone || '')}
-                              onChange={(e) => {
-                                const digits = e.target.value.replace(/[^0-9]/g, '');
-                                setEditingPhoneMap(prev => ({ ...prev, [key]: digits }));
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleSaveDetails(
-                                    member,
-                                    editingPhoneMap[key] ?? member.Phone ?? '',
-                                    ''
-                                  );
-                                }
-                              }}
-                              className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-48 border-emerald-500/40"
-                            />
-                            <button
-                              onClick={() => handleSaveDetails(
-                                member,
-                                editingPhoneMap[key] ?? member.Phone ?? '',
-                                ''
+                        {/* Phone section */}
+                        <div>
+                          {(!member.Phone || editingPhoneMap[key] !== undefined) ? (
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full pt-1">
+                              <input
+                                type="tel"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                placeholder="Phone number..."
+                                value={editingPhoneMap[key] ?? (member.Phone || '')}
+                                onChange={(e) => {
+                                  const digits = e.target.value.replace(/[^0-9]/g, '');
+                                  setEditingPhoneMap(prev => ({ ...prev, [key]: digits }));
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveDetails(
+                                      member,
+                                      editingPhoneMap[key] ?? member.Phone ?? '',
+                                      ''
+                                    );
+                                  }
+                                }}
+                                className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-48 border-emerald-500/40"
+                              />
+                              <button
+                                onClick={() => handleSaveDetails(
+                                  member,
+                                  editingPhoneMap[key] ?? member.Phone ?? '',
+                                  ''
+                                )}
+                                disabled={savingPhoneId === key}
+                                className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md flex items-center justify-center space-x-1 transition-all w-full sm:w-auto shrink-0"
+                                title="Save Phone Number"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{savingPhoneId === key ? 'Saving...' : 'Save'}</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-2.5 text-xs pt-0.5 flex-wrap gap-y-1">
+                              {status === 'sent' && (
+                                <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold border border-emerald-500/30 flex items-center justify-center gap-1 shrink-0">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>Sent</span>
+                                </span>
                               )}
-                              disabled={savingPhoneId === key}
-                              className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md flex items-center justify-center space-x-1 transition-all w-full sm:w-auto shrink-0"
-                              title="Save Phone Number"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>{savingPhoneId === key ? 'Saving...' : 'Save'}</span>
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-3 text-xs pt-0.5">
-                            <p className="text-slate-400 font-mono flex items-center gap-1">
-                              <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span>{member.Phone}</span>
-                            </p>
-                            <button
-                              onClick={() => {
-                                setEditingPhoneMap(prev => ({ ...prev, [key]: member.Phone || '' }));
-                              }}
-                              className="p-1 text-slate-400 hover:text-emerald-400 rounded-md transition-colors"
-                              title="Edit Phone Number"
-                            >
-                              <Edit className="w-3.5 h-3" />
-                            </button>
-                          </div>
-                        )}
+                              <p className="text-slate-400 font-mono flex items-center gap-1">
+                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{member.Phone}</span>
+                              </p>
+                              <button
+                                onClick={() => {
+                                  setEditingPhoneMap(prev => ({ ...prev, [key]: member.Phone || '' }));
+                                }}
+                                className="p-1 text-slate-400 hover:text-emerald-400 rounded-md transition-colors"
+                                title="Edit Phone Number"
+                              >
+                                <Edit className="w-3.5 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons Section */}
+                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-t-0">
+                        {/* Top Row on Mobile: 50/50 Split for Copy & Preview */}
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          {/* Copy Message Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMessage(member, nudgeMsg)}
+                            className={`flex-1 sm:flex-none px-3 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border active:scale-95 cursor-pointer whitespace-nowrap ${
+                              isCopied
+                                ? 'bg-emerald-500/30 text-emerald-300 border-emerald-500/50 shadow-md shadow-emerald-500/20'
+                                : 'bg-slate-800/80 hover:bg-slate-700 text-emerald-400 border-emerald-500/30'
+                            }`}
+                            title="Copy WhatsApp message text to clipboard"
+                          >
+                            {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <Copy className="w-3.5 h-3.5 shrink-0" />}
+                            <span>{isCopied ? 'Copied!' : 'Copy'}</span>
+                          </button>
+
+                          {/* Preview Message Toggle Button */}
+                          <button
+                            type="button"
+                            onClick={() => togglePreview(key)}
+                            className={`flex-1 sm:flex-none px-3 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border active:scale-95 cursor-pointer whitespace-nowrap ${
+                              showPreview
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
+                                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-white/10'
+                            }`}
+                            title={showPreview ? 'Hide Message Preview' : 'Show Message Preview'}
+                          >
+                            {showPreview ? <EyeOff className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <Eye className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+                            <span>{showPreview ? 'Hide' : 'Preview'}</span>
+                          </button>
+                        </div>
+
+                        {/* Bottom Row on Mobile: Full Width Send Button */}
+                        <a
+                          href={waLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => handleSendWhatsAppClick(e, member, nudgeMsg)}
+                          className={`w-full sm:w-auto px-4 py-2 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg transition-all hover:scale-[1.01] whitespace-nowrap ${
+                            status === 'sent'
+                              ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 shadow-emerald-500/10'
+                              : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
+                          }`}
+                        >
+                          {status === 'sent' ? <RotateCcw className="w-3.5 h-3.5 shrink-0" /> : <Send className="w-3.5 h-3.5 shrink-0" />}
+                          <span>{status === 'sent' ? 'Resend' : 'Send'}</span>
+                        </a>
                       </div>
                     </div>
 
-                    {/* Action Button Section */}
-                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-t-0">
-                      {status === 'sent' && (
-                        <span className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 text-xs font-extrabold border border-emerald-500/30 flex items-center justify-center gap-1 shrink-0">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Sent</span>
-                        </span>
-                      )}
+                    {/* Bottom Row: Collapsible Message Preview Section (Hidden by Default) */}
+                    {showPreview && (
+                      <div className="w-full pt-3 border-t border-white/10 space-y-2 animate-fadeIn">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>Preview ({member.Name})</span>
+                          </span>
+                        </div>
 
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => handleSendWhatsAppClick(e, member, nudgeMsg)}
-                        className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg transition-all hover:scale-[1.01] ${
-                          status === 'sent'
-                            ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 shadow-emerald-500/10'
-                            : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
-                        }`}
-                      >
-                        {status === 'sent' ? <RotateCcw className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-                        <span>{status === 'sent' ? 'Resend' : 'Send'}</span>
-                      </a>
-                    </div>
+                        <div className="p-3.5 rounded-xl preview-box text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto select-all shadow-inner">
+                          {nudgeMsg}
+                        </div>
+                      </div>
+                    )}
                   </GlassCard>
                 );
               })
