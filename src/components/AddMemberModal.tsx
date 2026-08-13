@@ -105,7 +105,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         {/* Mobile Drag Handle */}
         <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto mt-2.5 sm:hidden shrink-0" />
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-white/10 shrink-0">
+        <div className="flex items-center justify-between p-2.5 sm:p-3 border-b border-white/10 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               {memberToEdit ? <UserCheck className="w-6 h-6" /> : <UserPlus className="w-6 h-6" />}
@@ -114,9 +114,9 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               <h2 className="text-lg sm:text-xl font-black text-white">
                 {memberToEdit ? `Edit ${memberToEdit.Name}` : 'Add New Member'}
               </h2>
-              <p className="text-xs text-slate-400">
+              {/* <p className="text-xs text-slate-400">
                 Enter metrics to calculate score & sync to Supabase database.
-              </p>
+              </p> */}
             </div>
           </div>
 
@@ -130,23 +130,37 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
           {/* Live Score Preview Bar */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-xs font-bold text-slate-300">
-              <Calculator className="w-4 h-4 text-emerald-400" />
-              <span>Calculated Traffic Light Score:</span>
+          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center space-x-2 text-xs font-bold text-slate-300">
+                <Calculator className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Calculated Traffic Light Score</span>
+              </div>
+
+              <div className="flex items-center justify-between sm:justify-end gap-2">
+                <span className="text-lg font-black text-white">
+                  {currentScored.score || 0} <span className="text-xs text-slate-400 font-normal">/ 100</span>
+                </span>
+                <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
+                  currentScored.trafficLight?.label === 'Green' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                  currentScored.trafficLight?.label === 'Amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                  'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                }`}>
+                  {currentScored.trafficLight?.emoji} {currentScored.trafficLight?.label}
+                </span>
+              </div>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <span className="text-lg font-black text-white">{currentScored.score || 0} / 100</span>
-              <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
-                currentScored.trafficLight?.label === 'Green' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                currentScored.trafficLight?.label === 'Amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-              }`}>
-                {currentScored.trafficLight?.emoji} {currentScored.trafficLight?.label}
-              </span>
+            <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min(100, Math.max(0, currentScored.score || 0))}%`,
+                  backgroundColor: currentScored.trafficLight?.color || '#94a3b8',
+                }}
+              />
             </div>
           </div>
 
@@ -295,7 +309,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
           </div>
 
           {/* Form Actions */}
-          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-white/10">
+          <div className="flex items-center justify-end space-x-3 pt-2.5 border-t border-white/10">
             <button
               type="button"
               onClick={onClose}

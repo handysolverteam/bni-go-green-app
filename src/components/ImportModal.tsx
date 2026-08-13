@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { GlassCard } from './GlassCard';
-import { Upload, FileSpreadsheet, Download, X, AlertCircle, CheckCircle2, Loader2, Tag } from 'lucide-react';
-import { parsePalmsExcel, generateSampleExcelBuffer } from '../lib/excelParser';
+import { Upload, FileSpreadsheet, X, AlertCircle, Loader2, Tag } from 'lucide-react';
+import { parsePalmsExcel } from '../lib/excelParser';
 import { Member } from '../types';
 import { useToast } from '../context/ToastContext';
 
@@ -20,7 +20,6 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
   const [rawFileData, setRawFileData] = useState<string>('');
   const [parsedMembers, setParsedMembers] = useState<Member[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const isDuplicateBatchName = batchName.trim().length > 0 && existingBatchNames.some(
     existing => existing.trim().toLowerCase() === batchName.trim().toLowerCase()
@@ -44,7 +43,6 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
     setBatchName(defaultBatch);
     setIsProcessing(true);
     setErrors([]);
-    setSuccessMsg(null);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -72,7 +70,6 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
         } else {
           setParsedMembers(result.members);
           const msg = `Parsed ${result.members.length} members from "${rawFileName}"!`;
-          setSuccessMsg(msg);
           showToast(msg, 'success');
         }
       } catch (err: any) {
@@ -94,17 +91,29 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
     }
   };
 
-  const handleDownloadSample = () => {
-    const buffer = generateSampleExcelBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'BNI_Traffic_Lights_Sample.xlsx';
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('Downloaded 17-header sample Excel file', 'info');
+  const triggerFilePicker = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx, .xls, .csv';
+    input.onchange = (e: any) => {
+      if (e.target.files && e.target.files[0]) {
+        handleFile(e.target.files[0]);
+      }
+    };
+    input.click();
   };
+
+  // const handleDownloadSample = () => {
+  //   const buffer = generateSampleExcelBuffer();
+  //   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  //   const url = URL.createObjectURL(blob);
+  //   const a = document.createElement('a');
+  //   a.href = url;
+  //   a.download = 'BNI_Traffic_Lights_Sample.xlsx';
+  //   a.click();
+  //   URL.revokeObjectURL(url);
+  //   showToast('Downloaded 17-header sample Excel file', 'info');
+  // };
 
   const handleConfirmImport = () => {
     if (parsedMembers.length > 0 && fileName) {
@@ -123,14 +132,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
         <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto mt-2.5 sm:hidden shrink-0" />
         
         {/* Header with Close Button */}
-        <div className="flex items-center justify-between p-3.5 sm:p-6 border-b border-white/10 shrink-0">
+        <div className="flex items-center justify-between p-2.5 sm:p-3 border-b border-white/10 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="p-2 sm:p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h2 className="text-base sm:text-xl font-black text-white">Upload Member Report</h2>
-              <p className="text-[11px] sm:text-xs text-slate-400">Import BNI Chapter Excel/CSV file to calculate scores</p>
+              <h2 className="text-base sm:text-xl font-black text-white">Upload Report</h2>
+              {/* <p className="text-[11px] sm:text-xs text-slate-400">Import BNI Chapter Excel/CSV file to calculate scores</p> */}
             </div>
           </div>
 
@@ -143,44 +152,55 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
         </div>
 
         {/* Scrollable Content Body */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-5">
-          {/* File Dropzone */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center transition-all cursor-pointer ${
-              isDragging
-                ? 'border-emerald-400 bg-emerald-500/10'
-                : 'border-white/15 bg-slate-900/40 hover:border-emerald-500/50 hover:bg-slate-900/60'
-            }`}
-            onClick={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = '.xlsx, .xls, .csv';
-              input.onchange = (e: any) => {
-                if (e.target.files && e.target.files[0]) {
-                  handleFile(e.target.files[0]);
-                }
-              };
-              input.click();
-            }}
-          >
-            {isProcessing ? (
-              <div className="flex flex-col items-center space-y-2 py-4">
-                <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-                <p className="text-xs font-bold text-slate-300">Parsing 17 metrics from Excel sheet...</p>
-              </div>
-            ) : (
-              <>
-                <Upload className="w-9 h-9 text-emerald-400 mx-auto mb-2 animate-bounce" />
-                <p className="text-xs sm:text-sm font-bold text-white mb-1">
-                  {fileName ? fileName : 'Click to select or drop Excel file (.xlsx / .csv)'}
-                </p>
-                <p className="text-[11px] text-slate-400">Supports standard BNI Traffic Light 17-column format</p>
-              </>
-            )}
-          </div>
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
+          {/* File Dropzone / Small Re-upload Button + Info Capsules */}
+          {fileName ? (
+            <div className="flex flex-wrap items-center gap-2 pt-1 animate-fadeIn">
+              <button
+                onClick={triggerFilePicker}
+                disabled={isProcessing}
+                className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-bold border border-emerald-500/30 flex items-center space-x-1.5 transition-all disabled:opacity-40"
+                title="Choose a different file"
+              >
+                <Upload className="w-3 h-3" />
+                <span>Re-upload</span>
+              </button>
+              <span className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold truncate max-w-[45vw] sm:max-w-[220px]">
+                📄 {fileName}
+              </span>
+              {parsedMembers.length > 0 && (
+                <span className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200 border border-white/10 text-[11px] font-bold">
+                  {parsedMembers.length} members found
+                </span>
+              )}
+            </div>
+          ) : (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-2xl p-4 sm:p-5 text-center transition-all cursor-pointer ${
+                isDragging
+                  ? 'border-emerald-400 bg-emerald-500/10'
+                  : 'border-white/15 bg-slate-900/40 hover:border-emerald-500/50 hover:bg-slate-900/60'
+              }`}
+              onClick={triggerFilePicker}
+            >
+              {isProcessing ? (
+                <div className="flex flex-col items-center space-y-2 py-4">
+                  <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+                  <p className="text-xs font-bold text-slate-300">Parsing file...</p>
+                </div>
+              ) : (
+                <>
+                  <Upload className="w-9 h-9 text-emerald-400 mx-auto mb-2 animate-bounce" />
+                  <p className="text-xs sm:text-sm font-bold text-white mb-1">
+                    Traffic Lights with TYFCB Excel file (.xlsx / .csv)
+                  </p>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Report / Batch Name Option */}
           {parsedMembers.length > 0 && (
@@ -190,7 +210,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                   <Tag className="w-4 h-4 text-emerald-400" />
-                  <span>Give This Report / Batch A Name *</span>
+                  <span>Name *</span>
                 </label>
                 {isDuplicateBatchName && (
                   <span className="text-[10px] font-extrabold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
@@ -214,7 +234,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
                 </p>
               ) : (
                 <p className="text-[11px] text-slate-400">
-                  This report batch name will create a separate card on your Dashboard.
+                  
                 </p>
               )}
             </div>
@@ -232,24 +252,16 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
               ))}
             </div>
           )}
-
-          {successMsg && (
-            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>{successMsg}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="p-5 sm:p-6 border-t border-white/10 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <button
+        </div>        {/* Footer Actions */}
+        <div className="p-2.5 sm:p-3 border-t border-white/10 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Sample download option disabled/removed */}
+          {/* <button
             onClick={handleDownloadSample}
             className="flex items-center space-x-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
           >
             <Download className="w-4 h-4" />
             <span>Download 17-Header Sample Excel</span>
-          </button>
+          </button> */}
 
           <div className="flex items-center space-x-2 w-full sm:w-auto">
             <button

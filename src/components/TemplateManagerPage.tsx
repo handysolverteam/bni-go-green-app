@@ -11,6 +11,7 @@ import {
 interface TemplateManagerPageProps {
   orgId?: string;
   onSelectTemplate?: (template: OutreachTemplate) => void;
+  embedded?: boolean;
 }
 
 const DYNAMIC_KEYWORDS = [
@@ -79,7 +80,7 @@ const SAMPLE_MEMBER = {
   chapter: 'Influencers',
 };
 
-export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId, onSelectTemplate }) => {
+export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId, onSelectTemplate, embedded = false }) => {
   const { showToast } = useToast();
   const [templates, setTemplates] = useState<OutreachTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -169,14 +170,21 @@ export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId,
   const previewRendered = substituteKeywords(messageTemplate || 'Select or type a template...', SAMPLE_MEMBER);
 
   return (
-    <div className="space-y-2 pb-12">
+    <div className={embedded ? 'space-y-3' : 'space-y-2 pb-12'}>
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <FileText className="w-6 h-6 text-emerald-400" />
-            <span>WhatsApp Templates</span>
-          </h2>
+          {embedded ? (
+            <h3 className="text-sm font-black text-white flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-400" />
+              <span>WhatsApp Message Templates</span>
+            </h3>
+          ) : (
+            <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+              <FileText className="w-6 h-6 text-emerald-400" />
+              <span>WhatsApp Templates</span>
+            </h2>
+          )}
         </div>
 
         <button
@@ -193,9 +201,9 @@ export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId,
           onClick={(e) => { if (e.target === e.currentTarget) setIsEditing(false); }}
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md animate-fadeIn cursor-pointer"
         >
-          <GlassCard className="w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/40 bg-slate-900/95 shadow-2xl rounded-t-3xl sm:rounded-3xl cursor-default">
+          <GlassCard className="w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 border-t sm:border border-emerald-500/40 bg-slate-900/95 shadow-2xl rounded-t-3xl sm:rounded-3xl cursor-default">
             <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-1 sm:hidden shrink-0" />
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="text-base font-black text-white flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-emerald-400" />
                 <span>{editingId ? 'Edit Outreach Template' : 'Create New Outreach Template'}</span>

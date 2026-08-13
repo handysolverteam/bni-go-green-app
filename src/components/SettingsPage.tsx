@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { supabaseService } from '../services/supabaseService';
 import { ScoringConfig } from '../types';
+import { PageHeader } from './PageHeader';
 
 interface SettingsPageProps {
   orgId?: string;
@@ -169,34 +170,31 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
   return (
     <div className="space-y-6 w-full pb-12">
       {/* Header Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <Settings className="w-6 h-6 text-emerald-400" />
-            <span>Settings</span>
-          </h2>
-        </div>
+      <PageHeader
+        icon={<Settings className="w-5 h-5" />}
+        title="Settings"
+        right={
+          <>
+            {isLoadingSettings && <Loader2 className="w-4 h-4 text-emerald-400 animate-spin mr-2 self-center sm:self-auto" />}
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          {isLoadingSettings && <Loader2 className="w-4 h-4 text-emerald-400 animate-spin mr-2 self-center sm:self-auto" />}
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm sm:text-xs font-bold flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
+            >
+              <RotateCcw className="w-4 h-4 text-amber-400" />
+              <span>Reset Defaults</span>
+            </button>
 
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="w-full sm:w-auto px-4 py-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm sm:text-xs font-bold flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
-          >
-            <RotateCcw className="w-4 h-4 text-amber-400" />
-            <span>Reset Defaults</span>
-          </button>
-
-          <button
-            onClick={handleSave}
-            className="w-full sm:w-auto px-5 py-3 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-sm sm:text-xs font-black flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all min-h-[44px] sm:min-h-0"
-          >
-            {savedSuccess ? <Check className="w-4 h-4 text-slate-950" /> : <Save className="w-4 h-4" />}
-            <span>{savedSuccess ? 'Saved to DB!' : 'Save Settings'}</span>
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={handleSave}
+              className="w-full sm:w-auto px-5 py-3 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-sm sm:text-xs font-black flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all min-h-[44px] sm:min-h-0"
+            >
+              {savedSuccess ? <Check className="w-4 h-4 text-slate-950" /> : <Save className="w-4 h-4" />}
+              <span>{savedSuccess ? 'Saved to DB!' : 'Save Settings'}</span>
+            </button>
+          </>
+        }
+      />
 
       {/* 1. WhatsApp Signature Card with Toggle Switch */}
       <GlassCard className="p-5 sm:p-6 space-y-4 border-white/10">
@@ -206,8 +204,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
               <MessageSquare className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-black text-white">WhatsApp Message Signature</h3>
-              <p className="text-[11px] text-slate-400">Append custom closing signature to outreach WhatsApp messages</p>
+              <h3 className="text-sm sm:text-base font-black text-white">WhatsApp Outreach Messages</h3>
+              <p className="text-[11px] text-slate-400">Custom signature &amp; auto-generated dynamic messages based on member data</p>
             </div>
           </div>
 
@@ -239,6 +237,34 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             />
           </div>
         )}
+
+        {/* How Messages Are Auto-Generated */}
+        {/* <div className="pt-3 border-t border-white/10 space-y-2.5">
+          <h4 className="text-xs font-black text-slate-300 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            <span>How Messages Are Generated</span>
+          </h4>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            No manual templates needed — every message is auto-built per member from their live scoring data. The structure is fixed; only the values change.
+          </p>
+          <div className="space-y-1.5">
+            {[
+              ['Greeting', 'Uses the member first name only (titles & surnames skipped).'],
+              ['Score header', 'Current PALMS score /100 with their traffic light tier & emoji.'],
+              ['Action plan', 'Tier-based — Green: keep improving; Amber/Red: points needed to move up, shown as "just do this", "pick any one", or "do all steps".'],
+              ['Extra opportunities', 'Other ways to increase points, listed with the gain per action.'],
+              ['Scoring snapshot', 'Current vs target for Attendance, CEU, 1-2-1s, Referrals, Visitors, TYFCB and Sponsors.'],
+              ['Signature', 'Appends your custom signature text above the Handysolver credit.'],
+            ].map(([k, v]) => (
+              <div key={k} className="flex items-start gap-2 p-2 rounded-xl bg-slate-900/40 border border-white/5">
+                <span className="text-[10px] font-black uppercase tracking-wide text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2 py-1 shrink-0 w-32 text-center">
+                  {k}
+                </span>
+                <span className="text-[11px] text-slate-300 leading-relaxed pt-0.5">{v}</span>
+              </div>
+            ))}
+          </div>
+        </div> */}
       </GlassCard>
 
       {/* 2. Traffic Light Thresholds */}

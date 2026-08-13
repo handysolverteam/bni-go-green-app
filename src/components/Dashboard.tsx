@@ -3,6 +3,7 @@ import { Member, ImportLog } from '../types';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
 import { AddMemberModal } from './AddMemberModal';
+import { PageHeader } from './PageHeader';
 import {
   Search, Filter, MessageSquare, Award, ArrowUpDown, Download, Users, TrendingUp,
   Trash2, Edit, UserPlus, Calendar, Layers, X, Eye, FileSpreadsheet, ArrowLeft, Loader2, FileDown, BarChart3
@@ -10,6 +11,34 @@ import {
 import { generateSampleExcelBuffer } from '../lib/excelParser';
 import { useToast } from '../context/ToastContext';
 import { formatDisplayDate, formatDisplayDateTime } from '../lib/outreachUtils';
+
+export const STATUS_PILL_STYLES: Record<string, { active: string; idle: string; label: string }> = {
+  All: {
+    active: 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md',
+    idle: 'bg-slate-900/60 hover:bg-slate-800 text-slate-400 border border-white/10',
+    label: '🌐 All Members',
+  },
+  Green: {
+    active: 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 border border-emerald-500',
+    idle: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+    label: '🟢 Green Zone',
+  },
+  Amber: {
+    active: 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30 border border-amber-500',
+    idle: 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30',
+    label: '🟡 Amber Zone',
+  },
+  Red: {
+    active: 'bg-rose-500 text-white shadow-md shadow-rose-500/30 border border-rose-500',
+    idle: 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30',
+    label: '🔴 Red Zone',
+  },
+  Grey: {
+    active: 'bg-slate-600 text-white shadow-md shadow-slate-600/30 border border-slate-600',
+    idle: 'bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 border border-slate-500/30',
+    label: '⚪ Grey Zone',
+  },
+};
 
 interface DashboardProps {
   members: Member[];
@@ -262,22 +291,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-2 pb-12">
       {/* --- DASHBOARD HEADER --- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-emerald-400 shrink-0" />
-            <span>{activeReportName ? `Report: ${activeReportName}` : 'Reports Dashboard'}</span>
-            {isSyncing && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-            )}
-          </h1>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          {activeReportName ? (
+      <PageHeader
+        icon={<BarChart3 className="w-5 h-5" />}
+        title={
+          <span className="flex items-center gap-2">
+            {activeReportName ? `Report: ${activeReportName}` : 'Reports Dashboard'}
+            {isSyncing && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />}
+          </span>
+        }
+        right={
+          activeReportName ? (
             <button
               onClick={() => setActiveReportName(null)}
-              className="w-full sm:w-auto px-4 py-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm sm:text-xs flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
+              className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm sm:text-xs flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
             >
               <ArrowLeft className="w-4 h-4 text-emerald-400" />
               <span>Back to Reports</span>
@@ -290,25 +316,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <FileSpreadsheet className="w-4 h-4" />
               <span>Import New Report</span>
             </button>
-          )}
-
-          {/* <button
-            onClick={() => { setMemberToEdit(null); setIsAddModalOpen(true); }}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
-          >
-            <UserPlus className="w-4 h-4 text-emerald-400" />
-            <span>Add Member</span>
-          </button>
-
-          <button
-            onClick={onOpenNudges}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
-          >
-            <MessageSquare className="w-4 h-4 text-teal-400" />
-            <span>Send Nudges</span>
-          </button> */}
-        </div>
-      </div>
+          )
+        }
+      />
 
       {/* --- TOP SUMMARY CARDS (SHOWN ONLY WHEN VIEWING SPECIFIC ACTIVE REPORT) --- */}
       {Boolean(activeReportName) && (
@@ -502,20 +512,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="space-y-5 animate-fadeIn">
           {/* Active Report Header Bar */}
           <div className="p-4 rounded-2xl bg-slate-900/90 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center space-x-3">
-              {/* <button
+            {/* <div className="flex items-center space-x-3">
+              <button
                 onClick={() => setActiveReportName(null)}
                 className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-white/10"
               >
                 <ArrowLeft className="w-4 h-4" />
-              </button> */}
+              </button>
               <div>
                 <h3 className="text-base font-black text-white">{activeReportName}</h3>
                 <p className="text-xs text-slate-400">
                   {reportMembers.length} members loaded from this Excel report file
                 </p>
               </div>
-            </div>
+            </div> */}
 
             <div className="flex flex-wrap items-center gap-2">
               {currentReportLog && (
@@ -541,7 +551,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
               >
                 <MessageSquare className="w-4 h-4 text-teal-400" />
-                <span>Send Messages</span>
+                <span>Start Outreach</span>
               </button>
 
               {/* <button
@@ -575,23 +585,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     key={status}
                     onClick={() => setStatusFilter(status)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all ${
-                      statusFilter === status
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md'
-                        : 'bg-slate-900/60 hover:bg-slate-800 text-slate-400 border border-white/10'
+                      statusFilter === status ? STATUS_PILL_STYLES[status].active : STATUS_PILL_STYLES[status].idle
                     }`}
                   >
-                    {status === 'All' ? 'All Members' : status}
+                    {STATUS_PILL_STYLES[status].label}
                   </button>
                 ))}
               </div>
             </div>
           </GlassCard>
 
-          {/* Member Data Table & Mobile Cards */}
-          <GlassCard className="overflow-hidden border-white/10 p-0 sm:p-0">
-            {/* Mobile Cards View (<768px) with reduced side padding */}
-            <div className="md:hidden p-1 sm:p-3 space-y-2">
-              {filteredMembers.length === 0 ? (
+          {/* Mobile Cards View (<768px) — direct cards, no parent section */}
+          <div className="md:hidden space-y-2.5">
+            {filteredMembers.length === 0 ? (
                 <div className="py-8 text-center text-slate-400 space-y-2">
                   <Users className="w-8 h-8 text-slate-600 mx-auto" />
                   <p className="text-xs font-bold text-slate-300">No members found matching filter criteria</p>
@@ -631,7 +637,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
 
                     {/* Metrics Badges Row */}
-                    <div className="flex items-center justify-between text-[11px] text-slate-300 pt-2 border-t border-white/5 bg-slate-950/40 px-2.5 py-1.5 rounded-xl">
+                    <div
+                      onClick={() => onSelectMember(member)}
+                      className="flex items-center justify-between text-[11px] text-slate-300 pt-2 border-t border-white/5 bg-slate-900/40 px-2.5 py-1.5 rounded-xl cursor-pointer active:scale-[0.98] transition-all"
+                      title="View details"
+                    >
                       <div>Att: <strong className="text-white">{((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%</strong></div>
                       <div>1-2-1s: <strong className="text-white">{member.breakdown?.oneToOnes?.value ? Number(member.breakdown.oneToOnes.value).toFixed(1) : 0}</strong></div>
                       <div>Refs: <strong className="text-white">{member.breakdown?.referrals?.value ? Number(member.breakdown.referrals.value).toFixed(1) : 0}</strong></div>
@@ -667,10 +677,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 ))
               )}
-            </div>
+          </div>
 
-            {/* Desktop Table View (>=768px) */}
-            <div className="hidden md:block overflow-x-auto">
+          {/* Desktop Table View (>=768px) */}
+          <GlassCard className="hidden md:block overflow-hidden border-white/10 p-0">
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-900/90 text-slate-400 font-bold border-b border-white/10 text-[11px] uppercase tracking-wider">

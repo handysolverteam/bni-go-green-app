@@ -1,9 +1,9 @@
 import React from 'react';
 import { Member } from '../types';
-import { levelUpPlan, formatCurrency } from '../lib/scoringEngine';
+import { levelUpPlan, formatCurrency, trafficLight } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
 import { getWhatsAppUrl } from '../lib/whatsappUtils';
-import { buildMemberTemplateData, substituteKeywords, UNIVERSAL_DEFAULT_TEMPLATE_TEXT } from '../lib/outreachUtils';
+import { buildMemberTemplateData, substituteKeywords, UNIVERSAL_DEFAULT_TEMPLATE_TEXT, CAT_LABELS } from '../lib/outreachUtils';
 import { X, Award, CheckCircle2, TrendingUp, Send, ExternalLink, ShieldCheck } from 'lucide-react';
 
 interface MemberDetailModalProps {
@@ -21,14 +21,16 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
   };
 
   const categories = [
-    { key: 'attendance', label: 'Attendance Rate', value: `${((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%` },
-    { key: 'ceu', label: 'CEU (Trainings/wk)', value: (member.breakdown?.ceu?.value || 0).toFixed(2) },
-    { key: 'oneToOnes', label: '1-2-1 Meetings/wk', value: (member.breakdown?.oneToOnes?.value || 0).toFixed(2) },
-    { key: 'referrals', label: 'Referrals Given/wk', value: (member.breakdown?.referrals?.value || 0).toFixed(2) },
-    { key: 'tyfcb', label: 'TYFCB Closed', value: formatCurrency(member.TYFCB || 0) },
-    { key: 'visitors', label: 'Visitors Brought', value: member.V || 0 },
-    { key: 'sponsors', label: 'Members Sponsored', value: member.Sponsors || 0 },
+    { key: 'attendance', label: 'Attendance Rate', value: `${((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%`, targetKey: 'attendance_target' },
+    { key: 'ceu', label: 'CEU (Trainings/wk)', value: (member.breakdown?.ceu?.value || 0).toFixed(2), targetKey: 'ceu_target' },
+    { key: 'oneToOnes', label: '1-2-1 Meetings/wk', value: (member.breakdown?.oneToOnes?.value || 0).toFixed(2), targetKey: 'one_to_ones_target' },
+    { key: 'referrals', label: 'Referrals Given/wk', value: (member.breakdown?.referrals?.value || 0).toFixed(2), targetKey: 'referrals_target' },
+    { key: 'tyfcb', label: 'TYFCB Closed', value: formatCurrency(member.TYFCB || 0), targetKey: 'tyfcb_target' },
+    { key: 'visitors', label: 'Visitors Brought', value: member.V || 0, targetKey: 'visitors_target' },
+    { key: 'sponsors', label: 'Members Sponsored', value: member.Sponsors || 0, targetKey: 'sponsors_target' },
   ];
+
+  const dataDict = buildMemberTemplateData(member);
 
   return (
     <div
@@ -40,7 +42,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
         <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto mt-2.5 sm:hidden shrink-0" />
         
         {/* Header */}
-        <div className="flex items-center justify-between p-3.5 sm:p-6 border-b border-white/10 shrink-0">
+        <div className="flex items-center justify-between p-2.5 sm:p-3 border-b border-white/10 shrink-0">
           <div className="flex items-center space-x-3 sm:space-x-3.5">
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
               <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center text-base sm:text-lg font-black text-emerald-400">
@@ -85,24 +87,24 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
           {/* Level Up Plan */}
-          <GlassCard glow className="p-5 space-y-3 border-emerald-500/30">
-            <div className="flex items-center justify-between">
+          <GlassCard glow className="p-3.5 sm:p-4 space-y-3 border-emerald-500/30">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Level-Up Goal Plan</span>
               </h3>
               {plan.to && (
-                <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                <span className="self-start sm:self-auto text-[11px] sm:text-xs font-black text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20 whitespace-normal">
                   Target: {plan.to} (+{plan.pointsNeeded} pts needed)
                 </span>
               )}
             </div>
 
             {plan.stayGreen ? (
-              <div className="flex items-center space-x-2 text-emerald-400 text-xs font-semibold">
-                <CheckCircle2 className="w-4 h-4" />
+              <div className="flex items-start space-x-2 text-emerald-400 text-xs font-semibold">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>Member is in GREEN zone! Recommended maintenance actions below:</span>
               </div>
             ) : (
@@ -112,14 +114,31 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
             )}
 
             <div className="space-y-2 pt-1">
-              {plan.nudgesForLevel.map((nudge, idx) => (
-                <div key={idx} className="p-3 rounded-xl bg-slate-900/80 border border-white/10 flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-200">{nudge.action}</span>
-                  <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 shrink-0">
-                    +{nudge.gain} pts
-                  </span>
-                </div>
-              ))}
+              {plan.nudgesForLevel.map((nudge, idx) => {
+                const newTotal = (member.score ?? 0) + nudge.gain;
+                const newLight = trafficLight(newTotal);
+                const current = member.breakdown?.[nudge.category]?.points;
+                const max = member.breakdown?.[nudge.category]?.max;
+                const hasPts = Number.isFinite(current) && Number.isFinite(max);
+
+                return (
+                  <div key={idx} className="p-3 rounded-xl bg-slate-900/80 border border-white/10 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-emerald-400">
+                        {CAT_LABELS[nudge.category] || nudge.category}
+                        {hasPts && ` · ${current}/${max} pts`}
+                      </span>
+                      <span className="text-[11px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 shrink-0">
+                        +{nudge.gain} pts
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-200 leading-relaxed">{nudge.action}</p>
+                    <div className="text-[11px] font-mono text-slate-400">
+                      New total: <strong className="text-white">{newTotal}/100</strong> {newLight.emoji} {newLight.label}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </GlassCard>
 
@@ -152,7 +171,10 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, on
                     </div>
 
                     <div className="text-[11px] font-mono text-emerald-400">
-                      Actual: {cat.value}
+                      Current: {cat.value}
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400 truncate" title={dataDict[cat.targetKey]}>
+                      Target: {dataDict[cat.targetKey]}
                     </div>
                   </div>
                 );

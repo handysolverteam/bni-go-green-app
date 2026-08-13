@@ -1,15 +1,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Member, ImportLog, OutreachTemplate } from '../types';
+import { Member, ImportLog } from '../types';
 import { GlassCard } from './GlassCard';
-import { substituteKeywords, buildMemberTemplateData, formatDisplayDateTime } from '../lib/outreachUtils';
+import { buildMemberMessage, formatDisplayDateTime } from '../lib/outreachUtils';
 import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { useToast } from '../context/ToastContext';
 import {
-  MessageSquare, ExternalLink, Copy, Check, Sparkles, Send, Play, Pause,
-  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, EyeOff, FileText, Edit, X, Tag, Phone, Search
+  MessageSquare, Copy, Check, Send, Play, Pause,
+  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, EyeOff, FileText, Edit, X, Tag, Phone, Search, RefreshCw
 } from 'lucide-react';
-import { supabaseService, DEFAULT_OUTREACH_TEMPLATES } from '../services/supabaseService';
+import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
+import { STATUS_PILL_STYLES } from './Dashboard';
+import { PageHeader } from './PageHeader';
 
 interface NudgeSenderProps {
   members: Member[];
@@ -19,7 +21,6 @@ interface NudgeSenderProps {
   customSignature?: string;
   orgId?: string;
   onBackToDashboard?: () => void;
-  onOpenTemplateManager?: () => void;
 }
 
 export const NudgeSender: React.FC<NudgeSenderProps> = ({
@@ -30,12 +31,11 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   customSignature,
   orgId,
   onBackToDashboard,
-  onOpenTemplateManager,
 }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [selectedFilter, setSelectedFilter] = useState<'All' | 'Red' | 'Amber' | 'Grey' | 'Green'>('All');
+  const [selectedFilter, setSelectedFilter] = useState<'All' | 'Green' | 'Amber' | 'Red' | 'Grey'>('All');
 
   // Currently selected report for Outreach Manager view synced with parent router
   const activeReportName = initialReportName || null;
@@ -46,29 +46,16 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     }
   };
 
-  // Outreach Templates state (default selected is universal template)
-  const [templates, setTemplates] = useState<OutreachTemplate[]>(DEFAULT_OUTREACH_TEMPLATES);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('default_universal');
-  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
-
-  // Inline Quick Edit states for Selected Template preview box
-  const [isInlineEditing, setIsInlineEditing] = useState(false);
-  const [inlineTemplateText, setInlineTemplateText] = useState('');
-  const [isSavingInline, setIsSavingInline] = useState(false);
+  // Per-member editable messages. Custom message overrides auto-generated one.
+  const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
+  const [editingPreviewKey, setEditingPreviewKey] = useState<string | null>(null);
+  const [draftMessage, setDraftMessage] = useState('');
 
   // Inline member phone edit states
   const [editingPhoneMap, setEditingPhoneMap] = useState<Record<string, string>>({});
   const [savingPhoneId, setSavingPhoneId] = useState<string | null>(null);
 
   useEffect(() => {
-    supabaseService.fetchOutreachTemplates(orgId).then(data => {
-      if (data && data.length > 0) {
-        setTemplates(data);
-        const hasUniversal = data.find(t => t.id === 'default_universal');
-        setSelectedTemplateId(hasUniversal ? 'default_universal' : data[0].id);
-      }
-    });
-
     supabaseService.fetchOutreachLogs(orgId).then(logs => {
       if (logs && logs.length > 0) {
         const loadedStatuses: Record<string, 'pending' | 'sent' | 'failed' | 'skipped'> = {};
@@ -82,37 +69,29 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     });
   }, [orgId]);
 
-  const activeTemplate = useMemo(() => {
-    return templates.find(t => t.id === selectedTemplateId) || templates[0] || null;
-  }, [templates, selectedTemplateId]);
-
-  const handleStartQuickEdit = () => {
-    if (activeTemplate) {
-      setInlineTemplateText(activeTemplate.message_template);
-      setIsInlineEditing(true);
-    }
+  const startEditingMessage = (key: string, member: Member) => {
+    const current = customMessages[key] || buildMemberMessage(member, { signature: dbSignature });
+    setDraftMessage(current);
+    setEditingPreviewKey(key);
   };
 
-  const handleSaveInlineEdit = async () => {
-    if (!activeTemplate || !inlineTemplateText.trim()) return;
-    setIsSavingInline(true);
-
-    const success = await supabaseService.saveOutreachTemplate({
-      id: activeTemplate.id,
-      org_id: orgId,
-      name: activeTemplate.name,
-      status_target: activeTemplate.status_target,
-      message_template: inlineTemplateText.trim(),
-    });
-
-    if (success) {
-      setTemplates(prev => prev.map(t => t.id === activeTemplate.id ? { ...t, message_template: inlineTemplateText.trim() } : t));
-      showToast(`Template updated successfully!`, 'success');
-      setIsInlineEditing(false);
-    } else {
-      showToast('Failed to save template changes', 'error');
+  const handleSaveCustomMessage = (key: string) => {
+    if (draftMessage.trim()) {
+      setCustomMessages(prev => ({ ...prev, [key]: draftMessage.trim() }));
+      showToast('Custom message saved for this member', 'success');
     }
-    setIsSavingInline(false);
+    setEditingPreviewKey(null);
+  };
+
+  const handleRegenerateMessage = (key: string, member: Member) => {
+    setCustomMessages(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setDraftMessage(buildMemberMessage(member, { signature: dbSignature }));
+    setEditingPreviewKey(null);
+    showToast('Message regenerated from member data', 'info');
   };
 
   // Batch queue states
@@ -241,16 +220,12 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   }, [orgId, user]);
 
   const generateNudgeMessage = (member: Member): string => {
-    const finalSignature = enableSignature ? dbSignature : '';
-    const dataDict = buildMemberTemplateData(member);
-
-    const templateBody = activeTemplate?.message_template || DEFAULT_OUTREACH_TEMPLATES[0].message_template;
-    const msg = substituteKeywords(templateBody, dataDict);
-
-    if (enableSignature && finalSignature) {
-      return `${msg}\n\n${finalSignature}`;
+    const key = getMemberKey(member);
+    if (customMessages[key]) {
+      return customMessages[key];
     }
-    return msg;
+    const finalSignature = enableSignature ? dbSignature : '';
+    return buildMemberMessage(member, { signature: finalSignature });
   };
 
   const getWhatsAppLink = (member: Member, message: string): string => {
@@ -410,24 +385,21 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   return (
     <div className="space-y-2 pb-12">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <MessageSquare className="w-6 h-6 text-emerald-400" />
-            <span>{activeReportName ? `Outreach: ${activeReportName}` : `WhatsApp Outreach (${availableReports.length})`}</span>
-          </h2>
-        </div>
-
-        {activeReportName && (
-          <button
-            onClick={() => setActiveReportName(null)}
-            className="w-full sm:w-auto px-4 py-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm sm:text-xs flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
-          >
-            <ArrowLeft className="w-4 h-4 text-emerald-400" />
-            <span>Back to Outreach Reports</span>
-          </button>
-        )}
-      </div>
+      <PageHeader
+        icon={<MessageSquare className="w-5 h-5" />}
+        title={activeReportName ? `Outreach: ${activeReportName}` : `WhatsApp Outreach (${availableReports.length})`}
+        right={
+          activeReportName ? (
+            <button
+              onClick={() => setActiveReportName(null)}
+              className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm sm:text-xs flex items-center justify-center space-x-1.5 border border-white/10 transition-all min-h-[44px] sm:min-h-0"
+            >
+              <ArrowLeft className="w-4 h-4 text-emerald-400" />
+              <span>Back to Outreach Reports</span>
+            </button>
+          ) : undefined
+        }
+      />
 
       {/* --- VIEW 1: OUTREACH REPORT CARDS (DEFAULT WHEN NO REPORT SELECTED) --- */}
       {!activeReportName && (
@@ -510,125 +482,6 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       {/* --- VIEW 2: ACTIVE REPORT OUTREACH MANAGER (WHEN A REPORT CARD IS CLICKED) --- */}
       {activeReportName && (
         <div className="space-y-6 animate-fadeIn">
-          {/* Top Template Selection & Live Code Preview Section */}
-          <GlassCard className="p-5 space-y-1 border-emerald-500/30 bg-slate-900/90 rounded-2xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-emerald-400" />
-                  <span>Select Outreach Message Template *</span>
-                </label>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto min-w-0">
-                <select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="w-full sm:w-64 max-w-full px-3 py-2.5 rounded-xl glass-input text-xs font-bold text-white bg-slate-900 border-emerald-500/40 truncate overflow-hidden"
-                >
-                  {templates.map(t => (
-                    <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                      {t.name} ({t.status_target} Tier)
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() => setShowTemplatePreview(!showTemplatePreview)}
-                  className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-white/10 flex items-center justify-center space-x-1.5 transition-all shrink-0 min-h-[44px] sm:min-h-0"
-                >
-                  {showTemplatePreview ? <EyeOff className="w-4 h-4 text-rose-400" /> : <Eye className="w-4 h-4 text-emerald-400" />}
-                  <span>{showTemplatePreview ? 'Hide Preview' : 'Show Preview'}</span>
-                </button>
-
-                {onOpenTemplateManager && (
-                  <button
-                    onClick={onOpenTemplateManager}
-                    className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-extrabold text-xs border border-emerald-500/30 flex items-center justify-center space-x-1.5 whitespace-nowrap transition-all shrink-0 min-h-[44px] sm:min-h-0"
-                  >
-                    <FileText className="w-4 h-4" />
-                    <span>Manage Templates</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Live Template Preview & Inline Quick Edit (Collapsible) */}
-            {showTemplatePreview && activeTemplate && (
-              <div className="p-4 rounded-xl bg-slate-950/80 border border-white/10 space-y-3">
-                <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-emerald-400">
-                  <span className="flex items-center gap-1.5">
-                    {isInlineEditing ? <Edit className="w-3.5 h-3.5 text-emerald-400" /> : <Eye className="w-3.5 h-3.5 text-emerald-400" />}
-                    <span>{isInlineEditing ? `Editing: ${activeTemplate.name}` : 'Selected Template Preview & Dynamic Formatting'}</span>
-                  </span>
-
-                  {!isInlineEditing ? (
-                    <button
-                      onClick={handleStartQuickEdit}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[11px] font-bold border border-emerald-500/30 flex items-center space-x-1.5 transition-all"
-                      title="Edit Template directly here"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                      <span>Edit</span>
-                    </button>
-                  ) : (
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsInlineEditing(false)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveInlineEdit}
-                        disabled={isSavingInline}
-                        className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-black flex items-center space-x-1 shadow-md shadow-emerald-500/20 transition-all"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>{isSavingInline ? 'Saving...' : 'Save'}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {isInlineEditing ? (
-                  <div className="space-y-2 pt-1 animate-fadeIn">
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        '{{name}}', '{{score}}', '{{traffic_light}}', '{{present}}',
-                        '{{referrals}}', '{{tyfcb}}', '{{one_to_ones}}', '{{chapter}}'
-                      ].map(kw => (
-                        <button
-                          key={kw}
-                          type="button"
-                          onClick={() => setInlineTemplateText(prev => prev + ' ' + kw)}
-                          className="px-2 py-0.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold border border-emerald-500/30"
-                        >
-                          + {kw}
-                        </button>
-                      ))}
-                    </div>
-
-                    <textarea
-                      rows={6}
-                      value={inlineTemplateText}
-                      onChange={(e) => setInlineTemplateText(e.target.value)}
-                      className="w-full p-3.5 rounded-xl glass-input text-xs font-sans text-white leading-relaxed whitespace-pre-wrap border-emerald-500/40"
-                      placeholder="Edit your WhatsApp message template here..."
-                    />
-                  </div>
-                ) : (
-                  <p className="text-xs font-sans text-slate-200 bg-emerald-500/5 p-3.5 rounded-xl border border-emerald-500/20 whitespace-pre-wrap leading-relaxed">
-                    {activeTemplate.message_template}
-                  </p>
-                )}
-              </div>
-            )}
-          </GlassCard>
-
           {/* Live Outreach Progress Banner */}
           <GlassCard className="p-4 bg-slate-900/90 border-emerald-500/30 rounded-2xl space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -704,17 +557,15 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
 
               {/* Status Filter Pills */}
               <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar w-full md:w-auto pb-1 md:pb-0">
-                {(['All', 'Red', 'Amber', 'Grey', 'Green'] as const).map((filter) => (
+                {(['All', 'Green', 'Amber', 'Red', 'Grey'] as const).map((filter) => (
                   <button
                     key={filter}
                     onClick={() => setSelectedFilter(filter)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all ${
-                      selectedFilter === filter
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md'
-                        : 'bg-slate-900/60 hover:bg-slate-800 text-slate-400 border border-white/10'
+                      selectedFilter === filter ? STATUS_PILL_STYLES[filter].active : STATUS_PILL_STYLES[filter].idle
                     }`}
                   >
-                    {filter === 'All' ? '🌐 All Members' : filter === 'Green' ? '🟢 Green Zone' : filter === 'Amber' ? '🟡 Amber Zone' : filter === 'Red' ? '🔴 Red Zone' : '⚪ Grey Zone'}
+                    {STATUS_PILL_STYLES[filter].label}
                   </button>
                 ))}
               </div>
@@ -886,16 +737,79 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                     {/* Bottom Row: Collapsible Message Preview Section (Hidden by Default) */}
                     {showPreview && (
                       <div className="w-full pt-3 border-t border-white/10 space-y-2 animate-fadeIn">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                             <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                             <span>Preview ({member.Name})</span>
                           </span>
+
+                          <div className="flex items-center sm:justify-end">
+                          {editingPreviewKey === key ? (
+                            <div className="flex items-center space-x-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleRegenerateMessage(key, member)}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-bold border border-emerald-500/30 flex items-center space-x-1 transition-all"
+                                title="Regenerate message from member data"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>Regenerate</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingPreviewKey(null)}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition-all"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveCustomMessage(key)}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-black flex items-center space-x-1 shadow-md shadow-emerald-500/20 transition-all"
+                                title="Save custom message"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Save</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleRegenerateMessage(key, member)}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-bold border border-emerald-500/30 flex items-center space-x-1 transition-all"
+                                title="Regenerate message from member data"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>Regenerate</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => startEditingMessage(key, member)}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-bold border border-emerald-500/30 flex items-center space-x-1 transition-all"
+                                title="Edit message for this member"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                <span>Edit</span>
+                              </button>
+                            </div>
+                          )}
+                          </div>
                         </div>
 
-                        <div className="p-3.5 rounded-xl preview-box text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto select-all shadow-inner">
-                          {nudgeMsg}
-                        </div>
+                        {editingPreviewKey === key ? (
+                          <textarea
+                            rows={8}
+                            value={draftMessage}
+                            onChange={(e) => setDraftMessage(e.target.value)}
+                            className="w-full p-3.5 rounded-xl glass-input text-xs font-mono text-white leading-relaxed whitespace-pre-wrap border-emerald-500/40 resize-y"
+                            placeholder="Edit this WhatsApp message..."
+                          />
+                        ) : (
+                          <div className="p-3.5 rounded-xl preview-box text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto select-all shadow-inner">
+                            {nudgeMsg}
+                          </div>
+                        )}
                       </div>
                     )}
                   </GlassCard>

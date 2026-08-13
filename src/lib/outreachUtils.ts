@@ -1,4 +1,15 @@
-import { Member } from '../types';
+import { Member, Nudge } from '../types';
+import { levelUpPlan, trafficLight } from './scoringEngine';
+
+export const CAT_LABELS: Record<string, string> = {
+  attendance: 'Attendance',
+  ceu: 'CEU',
+  oneToOnes: '1-2-1s',
+  referrals: 'Referrals',
+  visitors: 'Visitors',
+  tyfcb: 'TYFCB',
+  sponsors: 'Sponsors',
+};
 
 /**
  * Universal date formatter for the application frontend.
@@ -94,6 +105,26 @@ export const substituteKeywords = (templateText: string, data: Record<string, st
   return result;
 };
 
+const TITLE_WORDS = new Set(['mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'prof', 'sir', 'rev', 'hon', 'shri', 'smt', 'sri', 'smt']);
+const SHORT_WORDS = new Set(['de', 'di', 'da', 'du', 'del', 'la', 'le', 'el', 'al', 'van', 'von', 'o', 'mac', 'mc', 'ibn', 'bin', 'abu']);
+
+export const getFirstName = (name?: string | null): string => {
+  if (!name) return 'Member';
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 'Member';
+  if (words.length === 1) return words[0];
+
+  const first = words[0].replace(/\.+$/, '');
+  const firstLower = first.toLowerCase();
+  const isTitle = TITLE_WORDS.has(firstLower);
+  const isShort = SHORT_WORDS.has(firstLower) || firstLower.length <= 2;
+
+  if ((isTitle || isShort) && words.length >= 2) {
+    return `${first} ${words[1]}`;
+  }
+  return first;
+};
+
 export const buildMemberTemplateData = (member: Member): Record<string, string> => {
   const score = member.score ?? 0;
   const label = member.trafficLight?.label || 'Grey';
@@ -172,7 +203,7 @@ export const buildMemberTemplateData = (member: Member): Record<string, string> 
   }
 
   return {
-    name: member.Name || 'Member',
+    name: getFirstName(member.Name) || 'Member',
     score: String(score),
     traffic_light: `${emoji} ${label}`,
     pts_to_green: String(ptsToGreen),
@@ -217,6 +248,126 @@ export const buildMemberTemplateData = (member: Member): Record<string, string> 
     chapter: member.Chapter || 'Chapter',
   };
 };
+
+export function buildSnapshotLines(member: Member): string[] {
+  const d = buildMemberTemplateData(member);
+
+  const line = (label: string, currentText: string, ptsKey: string, target: string, cat: string) => {
+    const b = member.breakdown?.[cat];
+    const pts = b ? `${b.points}/${b.max} pts` : d[ptsKey];
+    return `- *${label}*\n  Current: ${currentText}\n  Points: ${pts}\n  Target: ${target}`;
+  };
+
+  return [
+    line('Attendance', `rate: ${d.attendance_rate}%`, 'attendance_pts', d.attendance_target, 'attendance'),
+    line('CEU', `per week: ${d.ceu_current}`, 'ceu_pts', d.ceu_target, 'ceu'),
+    line('1-2-1s', `per week: ${d.one_to_ones_current}`, 'one_to_ones_pts', d.one_to_ones_target, 'oneToOnes'),
+    line('Referrals', `given per week: ${d.referrals_current}`, 'referrals_pts', d.referrals_target, 'referrals'),
+    line('Visitors', `brought: ${d.visitors_current}`, 'visitors_pts', d.visitors_target, 'visitors'),
+    line('TYFCB', `closed business: ${d.tyfcb_current}`, 'tyfcb_pts', d.tyfcb_target, 'tyfcb'),
+    line('Sponsors', `sponsored: ${d.sponsors_current}`, 'sponsors_pts', d.sponsors_target, 'sponsors'),
+  ];
+}
+
+export function buildMemberMessage(member: Member, options?: { signature?: string }): string {
+  const firstName = getFirstName(member.Name);
+  const score = member.score ?? 0;
+  const light = member.trafficLight || { label: 'Grey', emoji: '⚪', color: '#9ca3af' };
+  const plan = levelUpPlan(member);
+  const allOpportunities = member.nudges || [];
+
+  const ptsOf = (cat: string) => member.breakdown?.[cat]?.points;
+  const maxOf = (cat: string) => member.breakdown?.[cat]?.max;
+
+  const labelOf = (n: Nudge) => CAT_LABELS[n.category] || n.category;
+
+  const optionLine = (n: Nudge) => {
+    const current = ptsOf(n.category);
+    const max = maxOf(n.category);
+    const newTotal = score + n.gain;
+    const newLight = trafficLight(newTotal);
+    let line = '';
+    if (Number.isFinite(current) && Number.isFinite(max)) line += `📊 *${labelOf(n)}*: ${current}/${max} pts\n`;
+    line += `  → ${n.action}\n`;
+    line += `  ✅ New total: *${newTotal}/100* ${newLight.emoji} ${newLight.label}\n`;
+    return line;
+  };
+
+  const stepLine = (n: Nudge) => {
+    const current = ptsOf(n.category);
+    const max = maxOf(n.category);
+    let line = '';
+    if (Number.isFinite(current) && Number.isFinite(max)) line += `📊 *${labelOf(n)}*: ${current}/${max} pts\n`;
+    line += `  → ${n.action} → *+${n.gain} pts*\n`;
+    return line;
+  };
+
+  const compactOpportunityLine = (n: Nudge) => {
+    const current = ptsOf(n.category);
+    const max = maxOf(n.category);
+    const pts = Number.isFinite(current) && Number.isFinite(max) ? ` (${current}/${max} pts)` : '';
+    return `• *${labelOf(n)}*${pts}: ${n.action} → *+${n.gain} pts*`;
+  };
+
+  let msg = `Hi ${firstName}! 👋\n\n`;
+  msg += `Your BNI Go Green Score: *${score}/100* ${light.emoji} ${light.label}\n\n`;
+
+  if (plan.stayGreen) {
+    if (plan.nudgesForLevel.length === 0) {
+      msg += `🏆 Perfect score! You're the BNI champion — keep leading the way!\n`;
+    } else {
+      msg += `✅ You're in the Green! Keep improving with any of these:\n\n`;
+      plan.nudgesForLevel.forEach((n, i) => {
+        msg += `*Option ${i + 1}*\n` + optionLine(n) + '\n';
+      });
+    }
+  } else {
+    const eachCoversGap = plan.nudgesForLevel.every(n => n.gain >= plan.pointsNeeded);
+
+    if (plan.nudgesForLevel.length === 0) {
+      msg += `Keep improving your weekly activity to move up from ${plan.from}.\n`;
+    } else if (eachCoversGap && plan.nudgesForLevel.length === 1) {
+      msg += `🎯 To reach *${plan.to}* (need *+${plan.pointsNeeded} pts*), just do this:\n\n`;
+      msg += optionLine(plan.nudgesForLevel[0]) + '\n';
+    } else if (eachCoversGap) {
+      msg += `🎯 To reach *${plan.to}* (need *+${plan.pointsNeeded} pts*), pick *any one*:\n\n`;
+      plan.nudgesForLevel.forEach((n, i) => {
+        msg += `*Option ${i + 1}*\n` + optionLine(n) + '\n';
+      });
+    } else {
+      msg += `🎯 To reach *${plan.to}* (need *+${plan.pointsNeeded} pts*), do *all* of these:\n\n`;
+      plan.nudgesForLevel.forEach((n, i) => {
+        msg += `*Step ${i + 1}*\n` + stepLine(n) + '\n';
+      });
+      const newTotal = score + plan.nudgesForLevel.reduce((s, n) => s + n.gain, 0);
+      const newLight = trafficLight(newTotal);
+      msg += `✅ Combined new total: *${newTotal}/100* ${newLight.emoji} ${newLight.label}\n`;
+    }
+  }
+
+  const primaryCategories = new Set(plan.nudgesForLevel.map(n => n.category));
+  const extraOpportunities = allOpportunities.filter(n => !primaryCategories.has(n.category));
+  if (extraOpportunities.length > 0) {
+    msg += `\n📈 ${plan.stayGreen ? 'All available ways to improve:' : 'Other ways to increase points:'}\n`;
+    extraOpportunities.forEach(n => {
+      msg += `${compactOpportunityLine(n)}\n`;
+    });
+  }
+
+  const snapshotLines = buildSnapshotLines(member);
+  if (snapshotLines.length > 0) {
+    msg += `\n📋 Current scoring snapshot:\n`;
+    snapshotLines.forEach(l => {
+      msg += `${l}\n`;
+    });
+  }
+
+  const signature = String(options?.signature || '').trim();
+  msg += signature
+    ? `\n${signature}\n\nMade with 🧡 by Handysolver`
+    : `\nMade with 🧡 by Handysolver`;
+  return msg;
+}
 
 export const UNIVERSAL_DEFAULT_TEMPLATE_TEXT = `Hi {{name}}!
 

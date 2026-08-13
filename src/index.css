@@ -192,9 +192,24 @@
     background-color: #e2e8f0 !important;
   }
 
+  /* File dropzone container overrides for light mode */
+  body.light-mode .bg-slate-900\/40 {
+    background-color: rgba(255, 255, 255, 0.85) !important;
+  }
+
+  body.light-mode .hover\:bg-slate-900\/60:hover {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+  }
+
+  body.light-mode .hover\:bg-emerald-500\/10:hover,
+  body.light-mode .bg-emerald-500\/10 {
+    background-color: rgba(34, 197, 94, 0.08) !important;
+  }
+
   /* Border overrides for light mode */
   body.light-mode .border-white\/10,
-  body.light-mode .border-white\/5 {
+  body.light-mode .border-white\/5,
+  body.light-mode .border-white\/15 {
     border-color: rgba(0, 0, 0, 0.08) !important;
   }
 

@@ -8,7 +8,6 @@ import { SidebarLayout, NavigationTab } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { ImportModal } from './components/ImportModal';
 import { NudgeSender } from './components/NudgeSender';
-import { TemplateManagerPage } from './components/TemplateManagerPage';
 import { OrganizationTab } from './components/OrganizationTab';
 import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
@@ -29,7 +28,7 @@ const parseHash = () => {
     reportName = subReport.startsWith('report/') ? subReport.replace('report/', '') : subReport;
   }
 
-  const validTabs: NavigationTab[] = ['dashboard', 'import', 'nudges', 'templates', 'org', 'profile', 'settings'];
+  const validTabs: NavigationTab[] = ['dashboard', 'import', 'nudges', 'org', 'profile', 'settings'];
   if (validTabs.includes(mainTab)) {
     return { tab: mainTab, report: ['dashboard', 'nudges'].includes(mainTab) ? (reportName || null) : null };
   }
@@ -460,14 +459,6 @@ export const AppContent: React.FC = () => {
           onSelectReportName={(repName) => navigateTo('nudges', repName)}
           customSignature={org.custom_signature}
           orgId={org.id}
-          onOpenTemplateManager={() => navigateTo('templates')}
-        />
-      )}
-
-      {activeTab === 'templates' && (
-        <TemplateManagerPage
-          orgId={org.id}
-          onSelectTemplate={() => setActiveTab('nudges')}
         />
       )}
 

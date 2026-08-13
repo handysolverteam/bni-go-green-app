@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, FileText, Sun, Moon } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
 
-export type NavigationTab = 'dashboard' | 'import' | 'nudges' | 'templates' | 'org' | 'profile' | 'settings';
+export type NavigationTab = 'dashboard' | 'import' | 'nudges' | 'org' | 'profile' | 'settings';
 
 interface SidebarProps {
   activeTab: NavigationTab;
@@ -74,7 +74,6 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
     { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare },
-    { id: 'templates' as NavigationTab, label: 'Templates', icon: FileText },
     { id: 'org' as NavigationTab, label: 'Chapter', icon: Building2 },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
   ];
@@ -224,25 +223,35 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* Profile Photo Avatar Button replaces Hamburger Icon */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="relative p-0.5 rounded-full ring-2 ring-emerald-500/50 hover:ring-emerald-400 transition-all active:scale-95"
-            title="Account Menu"
-          >
-            {user ? (
-              <img
-                src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                alt="Profile Avatar"
-                referrerPolicy="no-referrer"
-                className="w-9 h-9 rounded-full object-cover"
-              />
-            ) : (
-              <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-emerald-400 font-bold text-sm">
-                U
-              </div>
-            )}
-          </button>
+          {/* Theme Toggle + Profile Photo Avatar Button */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => toggleTheme(themeMode === 'dark' ? 'light' : 'dark')}
+              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-amber-400 border border-white/10 transition-all shrink-0 cursor-pointer"
+              title={themeMode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {themeMode === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-400" />}
+            </button>
+
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="relative p-0.5 rounded-full ring-2 ring-emerald-500/50 hover:ring-emerald-400 transition-all active:scale-95"
+              title="Account Menu"
+            >
+              {user ? (
+                <img
+                  src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                  alt="Profile Avatar"
+                  referrerPolicy="no-referrer"
+                  className="w-9 h-9 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-emerald-400 font-bold text-sm">
+                  U
+                </div>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Profile & Logout Menu Drawer */}
@@ -273,18 +282,6 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
                     </div>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleTheme(themeMode === 'dark' ? 'light' : 'dark');
-                  }}
-                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-white/10 transition-all shrink-0 ml-2 cursor-pointer"
-                  title={themeMode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                >
-                  {themeMode === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-400" />}
-                </button>
               </div>
             )}
 
@@ -338,7 +335,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
           onClick={(e) => { if (e.target === e.currentTarget) setShowModeModal(false); }}
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md animate-fadeIn cursor-pointer"
         >
-          <div className="glass-panel w-full max-w-sm p-5 sm:p-6 rounded-t-3xl sm:rounded-2xl space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/30">
+          <div className="glass-panel w-full max-w-sm p-4 sm:p-5 rounded-t-3xl sm:rounded-2xl space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/30">
             {/* Mobile Drag Handle */}
             <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-2 sm:hidden shrink-0" />
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
