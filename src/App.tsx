@@ -388,7 +388,7 @@ export const AppContent: React.FC = () => {
             <div className={`w-full h-full rounded-[14px] flex items-center justify-center ${
               isLight ? 'bg-white' : 'bg-[#080d19]'
             }`}>
-              <img src="/icons/icon.svg" alt="BNI Go Green Logo" className="w-10 h-10 rounded-xl object-cover" />
+              <img src="/icons/icon.svg" alt="Handychapter Logo" className="w-10 h-10 rounded-xl object-cover" />
             </div>
           </div>
           <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping absolute -top-1 -right-1" />

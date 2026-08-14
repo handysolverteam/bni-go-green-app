@@ -310,7 +310,7 @@ export function buildMemberMessage(member: Member, options?: { signature?: strin
   };
 
   let msg = `Hi ${firstName}! 👋\n\n`;
-  msg += `Your BNI Go Green Score: *${score}/100* ${light.emoji} ${light.label}\n\n`;
+  msg += `Your Handychapter Score: *${score}/100* ${light.emoji} ${light.label}\n\n`;
 
   if (plan.stayGreen) {
     if (plan.nudgesForLevel.length === 0) {
@@ -371,7 +371,7 @@ export function buildMemberMessage(member: Member, options?: { signature?: strin
 
 export const UNIVERSAL_DEFAULT_TEMPLATE_TEXT = `Hi {{name}}!
 
-Your BNI Go Green Score: {{score}}/100 {{traffic_light}}
+Your Handychapter Score: {{score}}/100 {{traffic_light}}
 
 To reach Green, you need +{{pts_to_green}} pts.
 Do these steps:

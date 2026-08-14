@@ -35,7 +35,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         return {
           icon: <LogOut className="w-6 h-6 text-amber-400" />,
           title: title || 'Sign Out Confirmation',
-          message: message || 'Are you sure you want to sign out of BNI Go Green?',
+          message: message || 'Are you sure you want to sign out of Handychapter?',
           confirmText: confirmText || 'Sign Out',
           confirmBtnClass: 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 hover:from-amber-400 hover:to-orange-400',
         };

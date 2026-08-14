@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { GlassCard } from './GlassCard';
-import { ShieldCheck, Lock, ArrowRight, Zap, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Lock, ArrowRight, Zap, CheckCircle2, Heart } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { loginWithGoogle, loading } = useAuth();
@@ -37,7 +37,7 @@ export const LoginPage: React.FC = () => {
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-            BNI <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">Go Green</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">Handychapter</span>
           </h1>
           <p className="text-xs text-slate-400 max-w-xs mx-auto">
             100-Point Score Engine & WhatsApp Direct Outreach
@@ -48,7 +48,7 @@ export const LoginPage: React.FC = () => {
         <GlassCard glow className="p-6 sm:p-8 space-y-6 text-center border-white/10 shadow-2xl">
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-white">Director Portal</h2>
-            <p className="text-xs text-slate-400">Secure single sign-on via Google OAuth 2.0</p>
+            <p className="text-xs text-slate-400">Secure single sign-on via Google</p>
           </div>
 
           {errorMsg && (
@@ -91,15 +91,21 @@ export const LoginPage: React.FC = () => {
           </div>
 
           {/* Security Banner */}
-          <div className="pt-4 border-t border-white/10 flex items-center justify-center space-x-2 text-[11px] text-slate-400">
+          {/* <div className="pt-4 border-t border-white/10 flex items-center justify-center space-x-2 text-[11px] text-slate-400">
             <Lock className="w-3.5 h-3.5 text-emerald-400" />
             <span>256-bit SSL Encrypted &bull; Direct Google OAuth</span>
-          </div>
+          </div> */}
         </GlassCard>
 
         {/* Footer */}
         <div className="text-center space-y-1">
-          <p className="text-xs text-slate-500">HandySolver Team &bull; BNI Chapter Operations</p>
+          {/* <p className="text-xs text-slate-500">HandySolver Team &bull; BNI Chapter Operations</p> */}
+          <div className="text-xs sm:text-sm font-medium text-slate-300 flex items-center justify-center gap-1.5 flex-wrap">
+            <span>Made with</span>
+            <Heart className="w-4 h-4 text-rose-500 fill-current animate-pulse shrink-0" />
+            <span>by</span>
+            <strong className="text-white font-black text-sm sm:text-base">Handysolver</strong>
+          </div>
         </div>
       </div>
     </div>

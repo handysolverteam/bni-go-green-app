@@ -34,7 +34,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, memberC
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-base font-extrabold text-white tracking-wide">Go Green</h1>
+                <h1 className="text-base font-extrabold text-white tracking-wide">Handychapter</h1>
                 <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                   v1.0
                 </span>

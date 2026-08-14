@@ -96,12 +96,12 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <img
               src="/icons/icon.svg"
-              alt="BNI Go Green Logo"
+              alt="Handychapter Logo"
               className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-emerald-500/20 shrink-0"
             />
             {!isCompact && (
               <div className="overflow-hidden">
-                <h1 className="text-base font-extrabold text-white tracking-wide truncate">Go Green</h1>
+                <h1 className="text-base font-extrabold text-white tracking-wide truncate">Handychapter</h1>
                 <p className="text-[11px] text-emerald-400 font-semibold truncate">{org?.name || 'Chapter Portal'}</p>
               </div>
             )}
@@ -214,11 +214,11 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <img
               src="/icons/icon.svg"
-              alt="BNI Go Green Logo"
+              alt="Handychapter Logo"
               className="w-9 h-9 rounded-xl object-cover shadow-lg shadow-emerald-500/20 shrink-0"
             />
             <div>
-              <h1 className="text-sm font-extrabold text-white">Go Green</h1>
+              <h1 className="text-sm font-extrabold text-white">Handychapter</h1>
               <p className="text-[10px] text-emerald-400 font-semibold">{org?.name || 'Chapter'}</p>
             </div>
           </div>

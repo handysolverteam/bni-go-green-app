@@ -1,11 +1,11 @@
-# BNI Go Green — PALMS Score Tracker & WhatsApp Outreach Web App
+# Handychapter — PALMS Score Tracker & WhatsApp Outreach Web App
 
-![BNI Go Green Web App](https://img.shields.io/badge/BNI-Go_Green-22c55e?style=for-the-badge&logo=react)
+![Handychapter Web App](https://img.shields.io/badge/Handychapter-Chapter_Ops-22c55e?style=for-the-badge&logo=react)
 ![Supabase](https://img.shields.io/badge/Supabase-Database_&_Realtime-3ECF8E?style=for-the-badge&logo=supabase)
 ![Vite](https://img.shields.io/badge/Vite-Web_Framework-646CFF?style=for-the-badge&logo=vite)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript)
 
-BNI Go Green is a multi-tenant, role-based web application designed for BNI Chapter Directors, Owners, Admins, and Members to track weekly **PALMS** (Present, Absent, Substitute, Medical, Referrals, Visitors, TYFCB) statistics, compute 100-point Traffic Light scores, and manage organization team permissions. 
+Handychapter is a multi-tenant, role-based web application designed for BNI Chapter Directors, Owners, Admins, and Members to track weekly **PALMS** (Present, Absent, Substitute, Medical, Referrals, Visitors, TYFCB) statistics, compute 100-point Traffic Light scores, and manage organization team permissions. 
 
 ---
 

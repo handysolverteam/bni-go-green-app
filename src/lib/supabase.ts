@@ -12,7 +12,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 export async function signInWithGoogleSupabase() {
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://bni-go-green.vercel.app';
+  const currentOrigin = typeof window !== 'undefined' && window.location.origin
+    ? window.location.origin
+    : 'https://www.handychapter.com';
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {

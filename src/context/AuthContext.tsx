@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { UserProfile } from '../types';
 import { signInWithGoogleFirebase, signOutFirebase, firebaseAuth } from '../lib/firebase';
 import { supabase, signInWithGoogleSupabase, signOutSupabase } from '../lib/supabase';
@@ -21,6 +21,7 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const loggingOutRef = useRef(false);
 
   useEffect(() => {
     // 1. Check Firebase Auth State
@@ -34,9 +35,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           provider: 'google',
         });
         setLoading(false);
-      } else {
-        // 2. Check Supabase Auth State if Firebase is null
+      } else if (!loggingOutRef.current) {
+        // 2. Check Supabase Auth State if Firebase is null (skip while logging out)
         supabase.auth.getSession().then(({ data: { session } }) => {
+          if (loggingOutRef.current) {
+            setUser(null);
+            setLoading(false);
+            return;
+          }
           if (session?.user) {
             const googleAvatar =
               session.user.user_metadata?.avatar_url ||
@@ -57,10 +63,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           setLoading(false);
         });
+      } else {
+        setUser(null);
+        setLoading(false);
       }
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (loggingOutRef.current) return;
       if (session?.user && !firebaseAuth.currentUser) {
         const googleAvatar =
           session.user.user_metadata?.avatar_url ||
@@ -99,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     setLoading(true);
+    loggingOutRef.current = true;
     try {
       localStorage.removeItem('bni_cached_org');
       localStorage.removeItem('bni_cached_org_member');
@@ -113,8 +124,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
     } catch (err) {
       console.error('Logout error:', err);
+      setUser(null);
     } finally {
       setLoading(false);
+      loggingOutRef.current = false;
     }
   };
 
