@@ -38,7 +38,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
   const handleShareInviteCode = () => {
     if (!org?.code) return;
     const orgName = org.name || 'our organization';
-    const siteUrl = window.location.origin;
+    const siteUrl = 'https://www.handychapter.com';
     const inviteMsg = `Hi! Join ${orgName} on HandyChapter!\n\nWebsite: ${siteUrl}\nOrganization Join Code: ${org.code}\n\nEnter this 6-digit code after logging in to connect with our team!`;
 
     if (navigator.share) {
