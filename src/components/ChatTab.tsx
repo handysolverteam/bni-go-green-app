@@ -202,16 +202,16 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const aPct = reportMembers.length > 0 ? formatDecimal((a / reportMembers.length) * 100, 1) : 0;
           const rPct = reportMembers.length > 0 ? formatDecimal((r / reportMembers.length) * 100, 1) : 0;
 
-          replyText = `📄 Executive Report Audit: ${reportName}\n\n` +
-            `📊 Key Report Summary:\n` +
-            `• Tracked Member Count: ${reportMembers.length} members\n` +
-            `• Chapter PALMS Score Average: ${formatDecimal(avg, 1)} / 100 pts\n\n` +
-            `🚦 Traffic Light Zone Distribution for ${reportName}:\n` +
-            `🟢 Green Zone (High Performers): ${g} members (${gPct}%)\n` +
-            `🟡 Amber Zone (Growth Candidates): ${a} members (${aPct}%)\n` +
-            `🔴 Red Zone (Needs Immediate Support): ${r} members (${rPct}%)\n\n` +
-            `💡 AI Leadership Recommendation:\n` +
-            `Focus leadership outreach on elevating the ${a} Amber zone members to Green status this week.`;
+          replyText = `📄 *Executive Report Audit: ${reportName}*\n\n` +
+            `📊 *Key Summary:*\n` +
+            `• Tracked Members: ${reportMembers.length} members\n` +
+            `• PALMS Average: ${formatDecimal(avg, 1)} / 100 pts\n\n` +
+            `🚦 *Zone Distribution:*\n` +
+            `🟢 *Green Zone:* ${g} members (${gPct}%)\n` +
+            `🟡 *Amber Zone:* ${a} members (${aPct}%)\n` +
+            `🔴 *Red Zone:* ${r} members (${rPct}%)\n\n` +
+            `💡 *AI Leadership Focus:*\n` +
+            `Prioritize 1-to-1 support for Amber members to elevate them to Green status this week.`;
 
           replyOptions = getReportMenuOptions(reportName);
           break;
@@ -222,16 +222,19 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const rMembers = members.filter(m => m.batch_name === rName && m.trafficLight?.label === 'Green');
 
           if (rMembers.length === 0) {
-            replyText = `🟢 Green Zone Audit for ${rName}\n\nCurrently, no members are listed in the Green Zone for this report period.`;
+            replyText = `🟢 *Green Zone Audit (${rName})*\n\nCurrently, no members are listed in the Green Zone for this report period.`;
           } else {
-            replyText = `🟢 Green Zone Leaders in ${rName} (${rMembers.length} Members Total):\n\n` +
-              `These high-performing members are currently maintaining Green status with top PALMS scores:\n\n`;
+            replyText = `🟢 *Green Zone Leaders (${rMembers.length} Members)*\n` +
+              `*Report:* ${rName}\n\n`;
 
-            rMembers.slice(0, 10).forEach((m, idx) => {
-              replyText += `${idx + 1}. ${m.Name} — ${m.score} pts (Phone: ${m.Phone || 'N/A'})\n`;
+            rMembers.forEach((m, idx) => {
+              const refs = m.ReferralsGivenRate ?? m.RGT ?? 0;
+              replyText += `${idx + 1}. *${m.Name}* — ${m.score} pts (📱 ${m.Phone || 'N/A'})\n` +
+                `   • 1-to-1s: ${formatDecimal(m.OneToOnes || 0, 1)}/wk | CEU: ${formatDecimal(m.CEU || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
+                `   • TYFCB: ${formatCurrency(m.TYFCB || 0)}\n\n`;
             });
 
-            replyText += `\n💡 AI Leadership Note:\nAcknowledge these top contributors during your next chapter meeting to maintain chapter momentum!`;
+            replyText += `💡 *Leadership Action:*\nAcknowledge these top contributors in your next meeting!`;
           }
 
           replyOptions = [
@@ -247,21 +250,22 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const rMembers = members.filter(m => m.batch_name === rName && m.trafficLight?.label === 'Red');
 
           if (rMembers.length === 0) {
-            replyText = `🎉 Red Zone Alert Audit for ${rName}\n\nGreat news! 0 members are in the Red Zone for this report period. All chapter members are performing at Amber or Green level!`;
+            replyText = `🎉 *Red Zone Alert (${rName})*\n\nGreat news! 0 members are in the Red Zone for this report period. All members are Amber or Green!`;
           } else {
-            replyText = `🔴 Red Zone Support List for ${rName} (${rMembers.length} Members Requiring Outreach):\n\n` +
-              `The following members need immediate 1-to-1 support and mentorship from chapter leadership:\n\n`;
+            replyText = `🔴 *Red Zone Support List (${rMembers.length} Members)*\n` +
+              `*Report:* ${rName}\n\n`;
 
-            rMembers.slice(0, 10).forEach((m, idx) => {
-              replyText += `${idx + 1}. ${m.Name} — ${m.score}/100 pts\n` +
-                `   • Phone: ${m.Phone || 'N/A'}\n` +
-                `   • 1-to-1 Meetings: ${m.OneToOnes || 0} | CEU Credits: ${m.CEU || 0}\n\n`;
+            rMembers.forEach((m, idx) => {
+              const refs = m.ReferralsGivenRate ?? m.RGT ?? 0;
+              replyText += `${idx + 1}. *${m.Name}* — ${m.score}/100 pts (📱 ${m.Phone || 'N/A'})\n` +
+                `   • 1-to-1s: ${formatDecimal(m.OneToOnes || 0, 1)}/wk | CEU: ${formatDecimal(m.CEU || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
+                `   • TYFCB: ${formatCurrency(m.TYFCB || 0)}\n\n`;
             });
 
-            replyText += `💡 AI Action Plan:\n` +
-              `1. Schedule a friendly 1-to-1 catch-up call with each member this week.\n` +
-              `2. Pair them with a strong Green zone member for joint networking.\n` +
-              `3. Review feature presentation scheduling to boost referral visibility.`;
+            replyText += `💡 *Action Plan:*\n` +
+              `1. Schedule 1-to-1 catch-up calls this week.\n` +
+              `2. Pair with a Green zone mentor for joint networking.\n` +
+              `3. Review feature presentation scheduling.`;
           }
 
           replyOptions = [
@@ -277,16 +281,19 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const rMembers = members.filter(m => m.batch_name === rName && m.trafficLight?.label === 'Amber');
 
           if (rMembers.length === 0) {
-            replyText = `🟡 Amber Zone Audit for ${rName}\n\n0 members are currently in the Amber Zone for this report period.`;
+            replyText = `🟡 *Amber Zone Audit (${rName})*\n\n0 members are currently in the Amber Zone for this report period.`;
           } else {
-            replyText = `🟡 Amber Zone Growth Candidates in ${rName} (${rMembers.length} Members Total):\n\n` +
-              `These members are just a few points away from elevating into the Green Zone:\n\n`;
+            replyText = `🟡 *Amber Zone Candidates (${rMembers.length} Members)*\n` +
+              `*Report:* ${rName}\n\n`;
 
-            rMembers.slice(0, 10).forEach((m, idx) => {
-              replyText += `${idx + 1}. ${m.Name} — ${m.score}/100 pts (Phone: ${m.Phone || 'N/A'})\n`;
+            rMembers.forEach((m, idx) => {
+              const refs = m.ReferralsGivenRate ?? m.RGT ?? 0;
+              replyText += `${idx + 1}. *${m.Name}* — ${m.score}/100 pts (📱 ${m.Phone || 'N/A'})\n` +
+                `   • 1-to-1s: ${formatDecimal(m.OneToOnes || 0, 1)}/wk | CEU: ${formatDecimal(m.CEU || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
+                `   • TYFCB: ${formatCurrency(m.TYFCB || 0)}\n\n`;
             });
 
-            replyText += `\n💡 AI Action Item:\nEncourage completing 1 CEU training module or booking 1 additional 1-to-1 meeting to reach Green status.`;
+            replyText += `💡 *Action:* 1 additional CEU module or 1-to-1 meeting elevates them to Green!`;
           }
 
           replyOptions = [
@@ -302,15 +309,16 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const rMembers = members.filter(m => m.batch_name === rName && (m.OneToOnes || 0) < 2);
 
           if (rMembers.length === 0) {
-            replyText = `🤝 1-to-1 Meetings Audit for ${rName}\n\nAll members in this report period have completed 2 or more 1-to-1 meetings! Outstanding collaboration!`;
+            replyText = `🤝 *1-to-1 Meetings Audit (${rName})*\n\nAll members in this report period have completed 2 or more 1-to-1 meetings! Outstanding collaboration!`;
           } else {
-            replyText = `🤝 Members Needing 1-to-1 Meetings in ${rName} (${rMembers.length} Members):\n\n`;
+            replyText = `🤝 *1-to-1 Meetings Needed (${rMembers.length} Members)*\n` +
+              `*Report:* ${rName}\n\n`;
 
-            rMembers.slice(0, 10).forEach((m, idx) => {
-              replyText += `${idx + 1}. ${m.Name} — ${m.OneToOnes || 0} meetings completed\n`;
+            rMembers.forEach((m, idx) => {
+              replyText += `${idx + 1}. *${m.Name}* — ${formatDecimal(m.OneToOnes || 0, 1)} meetings/wk (📱 ${m.Phone || 'N/A'})\n`;
             });
 
-            replyText += `\n💡 AI Recommendation:\nPair these members during feature presentations to facilitate high-value 1-to-1 sessions!`;
+            replyText += `\n💡 *Action:* Pair these members during feature presentations!`;
           }
 
           replyOptions = [
@@ -323,16 +331,17 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
         case 'QUERY_TYFCB_REPORT': {
           const rName = option.payload?.reportName;
           const rMembers = members.filter(m => m.batch_name === rName);
-          const topTYFCB = [...rMembers].sort((a, b) => (b.TYFCB || 0) - (a.TYFCB || 0)).slice(0, 5);
+          const sortedTYFCB = [...rMembers].sort((a, b) => (b.TYFCB || 0) - (a.TYFCB || 0));
           const totalTYFCB = rMembers.reduce((sum, m) => sum + (m.TYFCB || 0), 0);
 
-          replyText = `💰 Top Business Generators (TYFCB) in ${rName}:\n\n`;
+          replyText = `💰 *TYFCB Business Breakdown (${sortedTYFCB.length} Members)*\n` +
+            `*Report:* ${rName}\n\n`;
 
-          topTYFCB.forEach((m, idx) => {
-            replyText += `${idx + 1}. ${m.Name} — ${formatCurrency(m.TYFCB || 0)}\n`;
+          sortedTYFCB.forEach((m, idx) => {
+            replyText += `${idx + 1}. *${m.Name}* — ${formatCurrency(m.TYFCB || 0)}\n`;
           });
 
-          replyText += `\n📈 Total TYFCB Closed in ${rName}: ${formatCurrency(totalTYFCB)}`;
+          replyText += `\n📈 *Total Closed in ${rName}:* ${formatCurrency(totalTYFCB)}`;
 
           replyOptions = [
             { id: 'opt_rep_back', label: `📄 Back to ${rName}`, action: 'VIEW_SINGLE_REPORT', payload: { reportName: rName } },
@@ -346,19 +355,19 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const zone = option.payload?.zone || 'Amber';
 
           if (zone === 'Green') {
-            replyText = `💬 Dynamic WhatsApp Message for ${zone} Zone Members:\n\n` +
+            replyText = `💬 *Dynamic WhatsApp Message for ${zone} Zone Members*\n\n` +
               `Hi {{member_name}} 🌟\n\n` +
-              `Congratulations! You are leading in the GREEN Zone with {{score}}/100 points in our ${rName} report! 🟢\n\n` +
+              `Congratulations! You are leading in the *GREEN Zone* with *{{score}}/100* points in our ${rName} report! 🟢\n\n` +
               `Thank you for your outstanding contribution to our chapter! Keep up the momentum! 🚀`;
           } else if (zone === 'Red') {
-            replyText = `💬 Dynamic WhatsApp Support Message for ${zone} Zone Members:\n\n` +
+            replyText = `💬 *Dynamic WhatsApp Support Message for ${zone} Zone Members*\n\n` +
               `Hi {{member_name}} 👋\n\n` +
-              `We noticed you are currently at {{score}}/100 points in our ${rName} report.\n\n` +
+              `We noticed you are currently at *{{score}}/100* points in our ${rName} report.\n\n` +
               `We are here to support your business growth! Let us schedule a quick 1-to-1 call this week to get you back into the Green Zone. 💪`;
           } else {
-            replyText = `💬 Dynamic WhatsApp Nudge for ${zone} Zone Members:\n\n` +
+            replyText = `💬 *Dynamic WhatsApp Nudge for ${zone} Zone Members*\n\n` +
               `Hi {{member_name}} 👋\n\n` +
-              `Great effort! You are currently in the Amber Zone with {{score}}/100 points in our ${rName} report.\n\n` +
+              `Great effort! You are currently in the *Amber Zone* with *{{score}}/100* points in our ${rName} report.\n\n` +
               `You are just a few points away from Green! 🚀 Completing 1 CEU module or booking 1 One-to-One meeting this week will elevate you to Green status. Let us reach Green together! 💪`;
           }
 
@@ -371,10 +380,10 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
 
         case 'COMPARE_STEP_1':
           if (availableReportNames.length < 2) {
-            replyText = `📈 Side-by-Side Report Trend Comparison\n\nYou need at least 2 uploaded reports in your organization database to compare trends! Currently available: ${availableReportNames.length} report.`;
+            replyText = `📈 *Report Comparison*\n\nYou need at least 2 uploaded reports in your organization database to compare trends! Currently available: ${availableReportNames.length} report.`;
             replyOptions = [{ id: 'opt_main', label: '🏠 Main Menu', action: 'MAIN_MENU' }];
           } else {
-            replyText = `📈 Side-by-Side Report Trend Comparison (Step 1 of 2)\n\nI will audit score deltas, Green zone growth, and Red zone shifts between two reports.\n\nPlease select Report A (Base Report) below:`;
+            replyText = `📈 *Report Comparison (Step 1 of 2)*\n\nI will audit score deltas, Green zone growth, and Red zone shifts between two reports.\n\nPlease select *Report A (Base Report)* below:`;
             replyOptions = [
               ...availableReportNames.map((name, i) => ({
                 id: `cmp_a_${i}`,
@@ -391,7 +400,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const repA = option.payload?.reportA;
           const remainingReports = availableReportNames.filter(n => n !== repA);
 
-          replyText = `📈 Side-by-Side Report Trend Comparison (Step 2 of 2)\n\nBase Report A Selected: ${repA}\n\nNow select Report B (Target Report) to compare against ${repA}:`;
+          replyText = `📈 *Report Comparison (Step 2 of 2)*\n\n*Base Report A Selected:* ${repA}\n\nNow select *Report B (Target Report)* to compare against ${repA}:`;
           replyOptions = [
             ...remainingReports.map((name, i) => ({
               id: `cmp_b_${i}`,
@@ -425,16 +434,16 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const tyfcbA = mAList.reduce((sum, m) => sum + (m.TYFCB || 0), 0);
           const tyfcbB = mBList.reduce((sum, m) => sum + (m.TYFCB || 0), 0);
 
-          replyText = `📈 Comparative Trend Audit: ${rA} ➔ ${rB}\n\n` +
-            `📊 Key Chapter Movement Metrics:\n` +
-            `• Average PALMS Score: ${formatDecimal(avgA, 1)} pts ➔ ${formatDecimal(avgB, 1)} pts (Net Change: ${delta >= 0 ? '+' : ''}${formatDecimal(delta, 1)} pts)\n` +
-            `• Green Zone Shift: ${greenA} ➔ ${greenB} members (Net Change: ${greenB - greenA >= 0 ? '+' : ''}${greenB - greenA})\n` +
-            `• Red Zone Reduction: ${redA} ➔ ${redB} members (Net Change: ${redB - redA <= 0 ? '' : '+'}${redB - redA})\n` +
-            `• Total TYFCB Closed Business: ${formatCurrency(tyfcbA)} ➔ ${formatCurrency(tyfcbB)}\n\n` +
-            `💡 AI Trend Assessment:\n` +
+          replyText = `📈 *Report Comparison: ${rA} ➔ ${rB}*\n\n` +
+            `📊 *Chapter Movement:*\n` +
+            `• *Avg Score:* ${formatDecimal(avgA, 1)} ➔ ${formatDecimal(avgB, 1)} pts (*${delta >= 0 ? '+' : ''}${formatDecimal(delta, 1)} pts*)\n` +
+            `• *🟢 Green Zone:* ${greenA} ➔ ${greenB} members (*${greenB - greenA >= 0 ? '+' : ''}${greenB - greenA}*)\n` +
+            `• *🔴 Red Zone:* ${redA} ➔ ${redB} members (*${redB - redA <= 0 ? '' : '+'}${redB - redA}*)\n` +
+            `• *💰 Total TYFCB:* ${formatCurrency(tyfcbA)} ➔ ${formatCurrency(tyfcbB)}\n\n` +
+            `💡 *AI Assessment:*\n` +
             (delta >= 0
-              ? `Overall chapter performance has improved by +${formatDecimal(delta, 1)} points from ${rA} to ${rB}. Excellent leadership momentum!`
-              : `Chapter average score declined by ${formatDecimal(delta, 1)} points from ${rA} to ${rB}. Review Amber member nudges to restore scores.`);
+              ? `Performance improved by +${formatDecimal(delta, 1)} pts from ${rA} to ${rB}. Excellent momentum!`
+              : `Chapter average declined by ${formatDecimal(delta, 1)} pts from ${rA} to ${rB}. Review Amber nudges.`);
 
           replyOptions = [
             { id: 'opt_swap', label: `⇄ Swap ${rA} & ${rB}`, action: 'EXECUTE_COMPARISON', payload: { reportA: rB, reportB: rA } },
@@ -452,12 +461,12 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
           const avg = total > 0 ? members.reduce((sum, m) => sum + (m.score || 0), 0) / total : 0;
           const tyfcb = members.reduce((sum, m) => sum + (m.TYFCB || 0), 0);
 
-          replyText = `📋 Chapter Executive Overview\n\n` +
-            `• Total Active Reports Stored: ${availableReportNames.length} reports\n` +
-            `• Total Active Members Tracked: ${total} members\n` +
-            `• Overall PALMS Score Average: ${formatDecimal(avg, 1)} pts\n` +
-            `• Zone Breakdown: 🟢 ${g} Green | 🟡 ${a} Amber | 🔴 ${r} Red\n` +
-            `• Cumulative TYFCB Business Closed: ${formatCurrency(tyfcb)}`;
+          replyText = `📋 *Chapter Executive Overview*\n\n` +
+            `• *Total Reports:* ${availableReportNames.length} reports\n` +
+            `• *Tracked Members:* ${total} members\n` +
+            `• *Overall PALMS Average:* ${formatDecimal(avg, 1)} pts\n` +
+            `• *Zone Breakdown:* 🟢 ${g} Green | 🟡 ${a} Amber | 🔴 ${r} Red\n` +
+            `• *Total TYFCB Closed:* ${formatCurrency(tyfcb)}`;
 
           replyOptions = [
             { id: 'opt_reports', label: '📊 View Reports & Breakdown', action: 'LIST_REPORTS' },
