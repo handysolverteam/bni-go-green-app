@@ -13,6 +13,7 @@ export interface Organization {
   red_threshold: number;
   custom_signature: string;
   custom_scoring?: Partial<ScoringConfig>;
+  default_country_code?: string;
   created_at?: string;
 }
 

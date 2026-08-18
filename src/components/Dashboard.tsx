@@ -166,16 +166,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const availableReports = useMemo(() => {
     const reportMap = new Map<string, ImportLog>();
 
-    // 1. Map logs
+    // 1. Map logs (excluding any log named Master Roster)
     importLogs.forEach(l => {
-      if (l.batch_name) {
+      if (l.batch_name && l.batch_name !== 'Master Roster') {
         reportMap.set(l.batch_name, l);
       }
     });
 
-    // 2. Synthesize logs for any members with batch_name not in import_logs
+    // 2. Synthesize logs for any actual report batches (ignoring Master Roster)
     members.forEach(m => {
-      if (m.batch_name && !reportMap.has(m.batch_name)) {
+      if (m.batch_name && m.batch_name !== 'Master Roster' && !reportMap.has(m.batch_name)) {
         const batchMembers = members.filter(bm => bm.batch_name === m.batch_name);
         const greenCount = batchMembers.filter(bm => bm.trafficLight?.label === 'Green').length;
         const amberCount = batchMembers.filter(bm => bm.trafficLight?.label === 'Amber').length;
@@ -245,10 +245,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Filtered & Sorted Members for Active Report Table View
   const filteredMembers = useMemo(() => {
+    const cleanSearchDigits = searchTerm.replace(/\D/g, '');
     return reportMembers
       .filter(m => {
+        const matchesPhone = (m.Phone && m.Phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                             (cleanSearchDigits.length >= 3 && (m.Phone || '').replace(/\D/g, '').includes(cleanSearchDigits));
         const matchesSearch = m.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              (m.Phone && m.Phone.includes(searchTerm)) ||
+                              matchesPhone ||
                               (m.Chapter && m.Chapter.toLowerCase().includes(searchTerm.toLowerCase()));
         const matchesStatus = statusFilter === 'All' || m.trafficLight?.label === statusFilter;
         return matchesSearch && matchesStatus;
@@ -1006,6 +1009,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
           memberToEdit={memberToEdit}
           onSave={onSaveMember}
           onClose={() => { setIsAddModalOpen(false); setMemberToEdit(null); }}
+          rosterMembers={members}
+          currentReportMembers={reportMembers}
         />
       )}
 

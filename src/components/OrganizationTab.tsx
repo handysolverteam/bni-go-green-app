@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Organization, OrgMember, UserRole, Member, UserProfileExtended } from '../types';
 import { GlassCard } from './GlassCard';
-import { Building2, Copy, Check, Users, ShieldCheck, Crown, Shield, Loader2, UserCheck, Search, Phone, Calendar, Edit3, Save, X, FileSpreadsheet, Upload, CheckCircle2, Share2 } from 'lucide-react';
+import { Building2, Copy, Check, Users, ShieldCheck, Crown, Shield, Loader2, UserCheck, Search, Phone, Calendar, Edit3, Save, X, FileSpreadsheet, Upload, CheckCircle2, Share2, Trash2, UserPlus } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { findBestMatchingMember } from '../lib/nameMatcher';
 import { arePhoneNumbersMatching, formatPhoneWithCountryCode, getWhatsAppUrl } from '../lib/whatsappUtils';
 import { UniversalModal } from './UniversalModal';
+import { AddMemberModal } from './AddMemberModal';
+import { scoreMember } from '../lib/scoringEngine';
 import * as XLSX from 'xlsx';
 
 interface OrganizationTabProps {
@@ -37,6 +39,9 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
   const [rosterList, setRosterList] = useState<Member[]>(rosterMembers);
   const [rosterSearch, setRosterSearch] = useState('');
   const [selectedEditMember, setSelectedEditMember] = useState<Member | null>(null);
+  const [deleteConfirmMember, setDeleteConfirmMember] = useState<Member | null>(null);
+  const [isDeletingRosterMember, setIsDeletingRosterMember] = useState(false);
+  const [isAddMasterMemberOpen, setIsAddMasterMemberOpen] = useState(false);
   const [editPhone, setEditPhone] = useState('');
   const [editJoinDate, setEditJoinDate] = useState('');
   const [editUserId, setEditUserId] = useState('');
@@ -190,6 +195,61 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
     setEditAvatarUrl('');
   };
 
+  // Delete Roster Member
+  const handleDeleteRosterMember = async () => {
+    if (!deleteConfirmMember || !org?.id) return;
+    setIsDeletingRosterMember(true);
+    try {
+      const mem = deleteConfirmMember;
+      const normName = mem.Name.trim().toLowerCase();
+
+      if (mem.id) {
+        await supabaseService.deleteMember(mem.id, org.id);
+      }
+
+      const updatedList = rosterList.filter(
+        m => m.id !== mem.id && m.Name.trim().toLowerCase() !== normName
+      );
+      setRosterList(updatedList);
+      if (onUpdateMembers) {
+        onUpdateMembers(prev => prev.filter(m => m.id !== mem.id && (m.Name || '').trim().toLowerCase() !== normName));
+      }
+      showToast(`Deleted member "${mem.Name}" from Chapter Master Roster!`, 'info');
+      setDeleteConfirmMember(null);
+    } catch (e: any) {
+      showToast(e.message || 'Error deleting member.', 'error');
+    } finally {
+      setIsDeletingRosterMember(false);
+    }
+  };
+
+  // Add Member manually to Chapter Master Roster
+  const handleAddMasterMemberSave = async (newMem: Member) => {
+    if (!org?.id || !user?.uid) return;
+    try {
+      const scored = scoreMember({
+        ...newMem,
+        batch_name: 'Master Roster',
+        org_id: org.id,
+      });
+
+      const saved = await supabaseService.saveSingleMember(scored, org.id, user.uid);
+      if (saved) {
+        const updatedList = [saved, ...rosterList.filter(m => m.Name.trim().toLowerCase() !== saved.Name.trim().toLowerCase())];
+        setRosterList(updatedList);
+        if (onUpdateMembers) {
+          onUpdateMembers(prev => [saved, ...prev.filter(m => m.Name.trim().toLowerCase() !== saved.Name.trim().toLowerCase())]);
+        }
+        showToast(`Added member "${saved.Name}" to Chapter Master Roster!`, 'success');
+        setIsAddMasterMemberOpen(false);
+      } else {
+        showToast('Failed to save member to database.', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Error adding member to roster.', 'error');
+    }
+  };
+
   // Reset all member links for this org to Automatic Matching
   const handleResetAllUserLinks = async () => {
     if (!org?.id) return;
@@ -252,9 +312,20 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
         );
         setRosterList(updatedList);
         if (onUpdateMembers) {
-          onUpdateMembers(updatedList);
+          onUpdateMembers(prev =>
+            prev.map(m =>
+              m.id === memberId || (m.Name && m.Name.trim().toLowerCase() === memberName.trim().toLowerCase())
+                ? {
+                    ...m,
+                    Phone: formattedPhone,
+                    JoinDate: editJoinDate.trim(),
+                    user_id: savingUserId ? savingUserId : undefined,
+                  }
+                : m
+            )
+          );
         }
-        showToast(`Updated details for ${memberName}!`, 'success');
+        showToast(`Updated details for ${memberName} across all reports!`, 'success');
         handleCloseEditModal();
       } else {
         showToast(`Failed to update details for ${memberName}.`, 'error');
@@ -366,9 +437,12 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
     .filter(m => {
       const q = rosterSearch.toLowerCase().trim();
       if (!q) return true;
+      const cleanDigits = q.replace(/\D/g, '');
+      const phoneDigits = (m.Phone || '').replace(/\D/g, '');
       return (
         m.Name.toLowerCase().includes(q) ||
         (m.Phone || '').toLowerCase().includes(q) ||
+        (cleanDigits.length >= 3 && phoneDigits.includes(cleanDigits)) ||
         (m.JoinDate || '').toLowerCase().includes(q)
       );
     })
@@ -449,18 +523,15 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
       </GlassCard>
 
       {/* Card 2: Organization Team & Role Permissions (100% USER & MOBILE FRIENDLY) */}
-      <GlassCard glow className="p-4 sm:p-6 space-y-4 border-white/10 shadow-2xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+      <GlassCard glow className="p-4 sm:p-6 space-y-4 border-slate-200/70 dark:border-white/10 shadow-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70 dark:border-white/10">
           <div className="flex items-center space-x-2.5">
-            <Users className="w-5 h-5 text-emerald-400 shrink-0" />
+            <Users className="w-5 h-5 text-emerald-500 dark:text-emerald-400 shrink-0" />
             <div>
-              <h3 className="text-base sm:text-lg font-extrabold text-white">Organization Permissions</h3>
-              {/* <p className="text-xs text-slate-400">
-                Manage account access and administrative role permissions.
-              </p> */}
+              <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">Organization Permissions</h3>
             </div>
           </div>
-          <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-black border border-emerald-500/30 self-start sm:self-auto shrink-0">
+          <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-xs font-black border border-emerald-500/30 self-start sm:self-auto shrink-0">
             {members.length} Users
           </span>
         </div>
@@ -488,36 +559,36 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                   className={`p-3.5 rounded-2xl border transition-all ${
                     isSelfUser
                       ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5'
-                      : 'bg-slate-900/60 border-white/10 hover:border-white/20'
+                      : 'bg-white/70 dark:bg-slate-900/60 border-slate-200/70 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 shadow-sm'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center space-x-2 min-w-0">
-                      {isOwner ? <Crown className="w-4.5 h-4.5 text-amber-400 shrink-0" /> :
-                       isAdmin ? <ShieldCheck className="w-4.5 h-4.5 text-emerald-400 shrink-0" /> :
+                      {isOwner ? <Crown className="w-4.5 h-4.5 text-amber-500 dark:text-amber-400 shrink-0" /> :
+                       isAdmin ? <ShieldCheck className="w-4.5 h-4.5 text-emerald-500 dark:text-emerald-400 shrink-0" /> :
                        <Shield className="w-4.5 h-4.5 text-slate-400 shrink-0" />}
-                      <span className="text-xs font-bold text-white truncate">{mem.user_email || mem.user_id}</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{mem.user_email || mem.user_id}</span>
                       {isSelfUser && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase shrink-0">
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase shrink-0">
                           You
                         </span>
                       )}
                     </div>
 
                     <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full capitalize shrink-0 ${
-                      isOwner ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                      isAdmin ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                      'bg-slate-700/50 text-slate-400 border border-slate-600/30'
+                      isOwner ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30' :
+                      isAdmin ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' :
+                      'bg-slate-200 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-600/30'
                     }`}>
                       {mem.role}
                     </span>
                   </div>
 
                   {isAdminOrOwner && !isOwner && (
-                    <div className="pt-2.5 mt-2 border-t border-white/5">
+                    <div className="pt-2.5 mt-2 border-t border-slate-200/60 dark:border-white/5">
                       <button
                         onClick={() => handleRoleChange(mem.user_id, mem.role === 'admin' ? 'member' : 'admin')}
-                        className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-xs font-bold text-center border border-white/10 transition-all active:scale-98"
+                        className="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold text-center border border-slate-200/80 dark:border-white/10 transition-all active:scale-98"
                       >
                         {mem.role === 'admin' ? 'Demote to Member' : 'Promote to Admin'}
                       </button>
@@ -530,22 +601,22 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
         </div>
 
         {/* 2. DESKTOP TEAM TABLE VIEW (>=640px) */}
-        <div className="hidden sm:block overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-900/80 uppercase text-slate-400 border-b border-white/10 font-black">
+        <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200/70 dark:border-white/10">
+          <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+            <thead className="bg-slate-100/90 dark:bg-slate-900/80 uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-white/10 font-black">
               <tr>
                 <th className="px-4 py-3">Member Email</th>
                 <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3 text-right">Role Access Control</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 bg-slate-950/40">
+            <tbody className="divide-y divide-slate-200/50 dark:divide-white/5 bg-white/40 dark:bg-slate-950/40">
               {isLoading ? (
                 Array.from({ length: 3 }).map((_, idx) => (
-                  <tr key={idx} className="animate-pulse border-b border-white/5">
-                    <td className="px-4 py-3.5"><div className="h-4 bg-slate-800/80 rounded-md w-48" /></td>
+                  <tr key={idx} className="animate-pulse border-b border-slate-200/50 dark:border-white/5">
+                    <td className="px-4 py-3.5"><div className="h-4 bg-slate-200 dark:bg-slate-800/80 rounded-md w-48" /></td>
                     <td className="px-4 py-3.5"><div className="h-5 bg-emerald-500/20 rounded-full w-16" /></td>
-                    <td className="px-4 py-3.5 text-right"><div className="h-7 bg-slate-800/60 rounded-xl w-24 ml-auto" /></td>
+                    <td className="px-4 py-3.5 text-right"><div className="h-7 bg-slate-200 dark:bg-slate-800/60 rounded-xl w-24 ml-auto" /></td>
                   </tr>
                 ))
               ) : members.length === 0 ? (
@@ -558,14 +629,14 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                 members.map((m) => {
                   const isSelf = m.user_id === orgMember?.user_id || (currentUserEmail && m.user_email === currentUserEmail);
                   return (
-                    <tr key={m.id} className={`hover:bg-slate-800/40 ${isSelf ? 'bg-emerald-500/5' : ''}`}>
-                      <td className="px-4 py-3 font-bold text-white flex items-center space-x-2">
-                        {m.role === 'owner' ? <Crown className="w-4 h-4 text-amber-400" /> :
-                         m.role === 'admin' ? <ShieldCheck className="w-4 h-4 text-emerald-400" /> :
+                    <tr key={m.id} className={`hover:bg-slate-100/60 dark:hover:bg-slate-800/40 ${isSelf ? 'bg-emerald-500/5' : ''}`}>
+                      <td className="px-4 py-3 font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                        {m.role === 'owner' ? <Crown className="w-4 h-4 text-amber-500 dark:text-amber-400" /> :
+                         m.role === 'admin' ? <ShieldCheck className="w-4 h-4 text-emerald-500 dark:text-emerald-400" /> :
                          <Shield className="w-4 h-4 text-slate-400" />}
                         <span>{m.user_email || m.user_id}</span>
                         {isSelf && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase">
+                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase">
                             You
                           </span>
                         )}
@@ -573,9 +644,9 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
 
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full capitalize ${
-                          m.role === 'owner' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                          m.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                          'bg-slate-700/50 text-slate-400 border border-slate-600/30'
+                          m.role === 'owner' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30' :
+                          m.role === 'admin' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' :
+                          'bg-slate-200 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-600/30'
                         }`}>
                           {m.role}
                         </span>
@@ -586,7 +657,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                           <select
                             value={m.role}
                             onChange={(e) => handleRoleChange(m.user_id, e.target.value as UserRole)}
-                            className="px-2 py-1 rounded-lg glass-input text-xs font-bold text-white bg-slate-900 cursor-pointer"
+                            className="px-2 py-1 rounded-lg text-xs font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/15 cursor-pointer"
                           >
                             <option value="member">Member</option>
                             <option value="admin">Admin</option>
@@ -605,15 +676,12 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
       </GlassCard>
 
       {/* Card 3: Chapter Master Roster & Mobile-Friendly Views */}
-      <GlassCard glow className="p-4 sm:p-6 space-y-4 border-white/10 shadow-2xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+      <GlassCard glow className="p-4 sm:p-6 space-y-4 border-slate-200/70 dark:border-white/10 shadow-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70 dark:border-white/10">
           <div className="flex items-center space-x-2.5">
-            <UserCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+            <UserCheck className="w-5 h-5 text-emerald-500 dark:text-emerald-400 shrink-0" />
             <div>
-              <h3 className="text-base sm:text-lg font-extrabold text-white">Chapter Master Roster</h3>
-              {/* <p className="text-xs text-slate-400">
-                Single master record per member across all reports.
-              </p> */}
+              <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">Chapter Master Roster</h3>
             </div>
           </div>
 
@@ -626,6 +694,14 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
               accept=".xlsx,.xls,.csv"
               className="hidden"
             />
+
+            <button
+              onClick={() => setIsAddMasterMemberOpen(true)}
+              className="flex-1 sm:flex-initial px-3.5 py-2 sm:py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center space-x-1.5 border border-slate-200/80 dark:border-white/10 transition-all active:scale-95 shrink-0"
+            >
+              <UserPlus className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+              <span>Add Member</span>
+            </button>
 
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -645,7 +721,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
               )}
             </button>
 
-            <span className="px-3 py-1.5 sm:py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-black border border-emerald-500/30 shrink-0">
+            <span className="px-3 py-1.5 sm:py-1 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-xs font-black border border-emerald-500/30 shrink-0">
               {filteredRoster.length} Members
             </span>
           </div>
@@ -701,13 +777,22 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleOpenEditModal(mem)}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-slate-200/80 dark:border-white/10 flex items-center space-x-1.5 shrink-0 active:scale-95"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>Edit</span>
-                    </button>
+                    <div className="flex items-center space-x-1.5 shrink-0">
+                      <button
+                        onClick={() => handleOpenEditModal(mem)}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-slate-200/80 dark:border-white/10 flex items-center space-x-1 active:scale-95"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmMember(mem)}
+                        title="Delete Member"
+                        className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 active:scale-95 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-2.5 pt-2 border-t border-slate-200/50 dark:border-white/5 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
@@ -782,15 +867,24 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                         </div>
                       </td>
 
-                      {/* Actions (Opens Edit Modal) */}
+                      {/* Actions (Edit & Delete) */}
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleOpenEditModal(mem)}
-                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 text-xs font-bold transition-all border border-white/10 flex items-center space-x-1.5 ml-auto active:scale-95"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>Edit</span>
-                        </button>
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => handleOpenEditModal(mem)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all border border-slate-200/80 dark:border-white/10 flex items-center space-x-1.5 active:scale-95"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmMember(mem)}
+                            title="Delete Member"
+                            className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 active:scale-95 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -959,6 +1053,58 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
             </div>
           </div>
         </UniversalModal>
+      )}
+
+      {/* MODAL 3: DELETE MEMBER CONFIRMATION MODAL */}
+      {deleteConfirmMember && (
+        <UniversalModal
+          isOpen={!!deleteConfirmMember}
+          onClose={() => setDeleteConfirmMember(null)}
+          title={`Delete ${deleteConfirmMember.Name}`}
+          icon={<Trash2 className="w-5 h-5 text-rose-500" />}
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+              Are you sure you want to remove <strong className="text-slate-900 dark:text-white">{deleteConfirmMember.Name}</strong> from the Chapter Master Roster?
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
+              This action will remove the member record from the master roster database.
+            </p>
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setDeleteConfirmMember(null)}
+                disabled={isDeletingRosterMember}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteRosterMember}
+                disabled={isDeletingRosterMember}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center space-x-1.5 active:scale-95 transition-all"
+              >
+                {isDeletingRosterMember ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                <span>Delete Member</span>
+              </button>
+            </div>
+          </div>
+        </UniversalModal>
+      )}
+
+      {/* MODAL 4: ADD MEMBER TO CHAPTER MASTER ROSTER MODAL */}
+      {isAddMasterMemberOpen && (
+        <AddMemberModal
+          isOpen={isAddMasterMemberOpen}
+          isRosterOnly={true}
+          onClose={() => setIsAddMasterMemberOpen(false)}
+          onSave={handleAddMasterMemberSave}
+          chapters={[org?.chapter_name || org?.name || 'Handychapter']}
+        />
       )}
     </>
   );

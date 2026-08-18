@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Member, Organization, OrgMember, UserProfileExtended, OutreachTemplate } from '../types';
 import { scoreMember } from '../lib/scoringEngine';
 import { UNIVERSAL_DEFAULT_TEMPLATE_TEXT } from '../lib/outreachUtils';
+import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://oleckbfrkpmoikpkjcpa.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
@@ -379,13 +380,18 @@ export const supabaseService = {
     try {
       const scored = scoreMember(member);
 
+      const isValidUUID = (id?: string) => {
+        if (!id) return false;
+        return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
+      };
+
       const row = {
-        ...(scored.id && !scored.id.startsWith('temp_') ? { id: scored.id } : {}),
+        ...(scored.id && isValidUUID(scored.id) ? { id: scored.id } : {}),
         org_id: orgId,
         user_id: scored.user_id || null,
         name: scored.Name,
-        chapter: scored.Chapter || 'Influencers',
-        phone: scored.Phone || '',
+        chapter: scored.Chapter || 'Handychapter',
+        phone: scored.Phone ? formatPhoneWithCountryCode(scored.Phone) : '',
         email: scored.Email || '',
         join_date: scored.JoinDate || (scored as any).join_date || '',
         present: scored.P || 0,
@@ -400,20 +406,41 @@ export const supabaseService = {
         sponsors: scored.Sponsors || 0,
         score: scored.score || 0,
         traffic_light: scored.trafficLight?.label || 'Grey',
-        batch_name: scored.batch_name || '',
+        batch_name: scored.batch_name || 'Master Roster',
         raw_data: scored.raw_data || {},
         updated_at: new Date().toISOString(),
       };
 
-      const { data: upsertData } = await supabase.from('members').upsert(row).select().single();
+      const { data: upsertData, error } = await supabase.from('members').upsert(row).select().single();
+      if (error) {
+        console.error('Error saving member to Supabase:', error);
+      }
       if (upsertData) {
+        // Bi-directional propagation: update all other records of this member in org with latest phone & details
+        if (scored.Name) {
+          const detailUpdates: Record<string, any> = { updated_at: new Date().toISOString() };
+          if (scored.Phone) detailUpdates.phone = formatPhoneWithCountryCode(scored.Phone);
+          if (scored.JoinDate) detailUpdates.join_date = scored.JoinDate.trim();
+          if (scored.user_id) detailUpdates.user_id = scored.user_id;
+
+          if (Object.keys(detailUpdates).length > 1) {
+            await supabase
+              .from('members')
+              .update(detailUpdates)
+              .eq('org_id', orgId)
+              .eq('name', scored.Name);
+          }
+        }
+
         return scoreMember({
           ...scored,
           id: upsertData.id,
+          batch_name: upsertData.batch_name || scored.batch_name || 'Master Roster',
         });
       }
       return scored;
     } catch (e) {
+      console.error('saveSingleMember exception:', e);
       return scoreMember(member);
     }
   },
@@ -565,40 +592,58 @@ export const supabaseService = {
         });
       }
 
-      // Auto-map existing phone numbers AND join_dates from existing members into the new report
+      // Bi-directional (Vice-Versa) Sync:
+      // Merge all available phone numbers and join_dates across all DB records & new report rows
       try {
-        const { data: existingMap } = await supabase
+        const { data: allOrgMembers } = await supabase
           .from('members')
-          .select('name, phone, join_date')
+          .select('name, phone, join_date, user_id')
           .eq('org_id', orgId);
 
-        if (existingMap && existingMap.length > 0) {
+        if (allOrgMembers && allOrgMembers.length > 0) {
           const phoneLookup: Record<string, string> = {};
           const joinDateLookup: Record<string, string> = {};
-          existingMap.forEach(m => {
-            if (m.name && m.phone) phoneLookup[m.name] = m.phone;
-            if (m.name && m.join_date) joinDateLookup[m.name] = m.join_date;
+          const userIdLookup: Record<string, string> = {};
+
+          allOrgMembers.forEach(m => {
+            const nameKey = (m.name || '').trim().toLowerCase();
+            if (nameKey) {
+              if (m.phone && m.phone.trim()) phoneLookup[nameKey] = m.phone.trim();
+              if (m.join_date && m.join_date.trim()) joinDateLookup[nameKey] = m.join_date.trim();
+              if (m.user_id && m.user_id.trim()) userIdLookup[nameKey] = m.user_id.trim();
+            }
           });
 
-          for (const name of Object.keys({ ...phoneLookup, ...joinDateLookup })) {
-            const phone = phoneLookup[name];
-            const joinDate = joinDateLookup[name];
-            const updates: Record<string, string> = {};
+          for (const nameKey of Object.keys({ ...phoneLookup, ...joinDateLookup, ...userIdLookup })) {
+            const phone = phoneLookup[nameKey];
+            const joinDate = joinDateLookup[nameKey];
+            const uid = userIdLookup[nameKey];
+
+            const updates: Record<string, any> = { updated_at: new Date().toISOString() };
             if (phone) updates.phone = phone;
             if (joinDate) updates.join_date = joinDate;
+            if (uid) updates.user_id = uid;
 
-            if (Object.keys(updates).length > 0) {
-              await supabase
+            if (Object.keys(updates).length > 1) {
+              // Update all member records for this name in the org (both Roster & all Reports)
+              const { data: matchingNames } = await supabase
                 .from('members')
-                .update(updates)
-                .eq('org_id', orgId)
-                .eq('batch_name', finalBatchName)
-                .eq('name', name);
+                .select('name')
+                .eq('org_id', orgId);
+
+              const exactNameMatch = (matchingNames || []).find(m => (m.name || '').trim().toLowerCase() === nameKey);
+              if (exactNameMatch?.name) {
+                await supabase
+                  .from('members')
+                  .update(updates)
+                  .eq('org_id', orgId)
+                  .eq('name', exactNameMatch.name);
+              }
             }
           }
         }
       } catch (mapErr) {
-        console.warn('Auto-map existing details warning:', mapErr);
+        console.warn('Bi-directional auto-sync warning:', mapErr);
       }
 
       return true;
@@ -610,16 +655,63 @@ export const supabaseService = {
 
   async purgeAllMembers(orgId: string): Promise<boolean> {
     try {
-      const { error } = await supabase.rpc('purge_all_bni_chapter_data', {
-        p_org_id: orgId,
-      });
+      // 1. Fetch all members in org to preserve unique member entries in Master Roster before deleting report batches
+      const { data: allMembers } = await supabase
+        .from('members')
+        .select('*')
+        .eq('org_id', orgId);
 
-      if (error) {
-        await supabase.from('members').delete().eq('org_id', orgId);
-        await supabase.from('import_logs').delete().eq('org_id', orgId);
+      if (allMembers && allMembers.length > 0) {
+        const rosterNames = new Set(
+          allMembers.filter(m => m.batch_name === 'Master Roster').map(m => (m.name || '').trim().toLowerCase())
+        );
+
+        const masterRowsToInsert: any[] = [];
+        const seenNames = new Set<string>();
+
+        for (const bm of allMembers) {
+          const normName = (bm.name || '').trim().toLowerCase();
+          if (normName && !rosterNames.has(normName) && !seenNames.has(normName)) {
+            seenNames.add(normName);
+            masterRowsToInsert.push({
+              org_id: orgId,
+              user_id: bm.user_id || null,
+              name: bm.name,
+              chapter: bm.chapter || 'Handychapter',
+              phone: bm.phone || '',
+              email: bm.email || '',
+              join_date: bm.join_date || '',
+              present: 0,
+              absent: 0,
+              substitute: 0,
+              medical: 0,
+              referrals_given: 0,
+              visitors: 0,
+              tyfcb: 0,
+              ceu: 0,
+              one_to_ones: 0,
+              sponsors: 0,
+              score: 0,
+              traffic_light: 'Grey',
+              batch_name: 'Master Roster',
+              raw_data: {},
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
+
+        if (masterRowsToInsert.length > 0) {
+          await supabase.from('members').insert(masterRowsToInsert);
+        }
       }
+
+      // 2. Delete ONLY report batch rows (neq batch_name 'Master Roster') and all import_logs
+      await supabase.from('members').delete().eq('org_id', orgId).neq('batch_name', 'Master Roster');
+      await supabase.from('import_logs').delete().eq('org_id', orgId);
       return true;
     } catch (e) {
+      console.error('purgeAllMembers exception:', e);
       return false;
     }
   },
@@ -681,7 +773,7 @@ export const supabaseService = {
         ...existingSettings,
         enable_signature: settingsPayload.enableSignature !== undefined ? settingsPayload.enableSignature : true,
         score_term: settingsPayload.scoreTerm || 'Go Green',
-        default_country_code: settingsPayload.defaultCountryCode || '+91',
+        defaultCountryCode: settingsPayload.defaultCountryCode || '+91',
       };
 
       const { error: orgError } = await supabase
@@ -797,6 +889,68 @@ export const supabaseService = {
 
   async deleteImportBatch(orgId: string, batchName: string, logId?: string): Promise<boolean> {
     try {
+      if (!batchName || batchName === 'Master Roster') {
+        return false; // Cannot delete Master Roster
+      }
+
+      // 1. Fetch all members in this batch to preserve them in Master Roster if they don't exist elsewhere
+      const { data: batchMembers } = await supabase
+        .from('members')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('batch_name', batchName);
+
+      if (batchMembers && batchMembers.length > 0) {
+        const { data: otherMembers } = await supabase
+          .from('members')
+          .select('name')
+          .eq('org_id', orgId)
+          .neq('batch_name', batchName);
+
+        const otherNames = new Set((otherMembers || []).map(m => (m.name || '').trim().toLowerCase()));
+
+        // For members only in this batch, insert a baseline Master Roster entry so they are not lost
+        const masterRowsToInsert: any[] = [];
+        const seenNames = new Set<string>();
+
+        for (const bm of batchMembers) {
+          const normName = (bm.name || '').trim().toLowerCase();
+          if (normName && !otherNames.has(normName) && !seenNames.has(normName)) {
+            seenNames.add(normName);
+            masterRowsToInsert.push({
+              org_id: orgId,
+              user_id: bm.user_id || null,
+              name: bm.name,
+              chapter: bm.chapter || 'Handychapter',
+              phone: bm.phone || '',
+              email: bm.email || '',
+              join_date: bm.join_date || '',
+              present: 0,
+              absent: 0,
+              substitute: 0,
+              medical: 0,
+              referrals_given: 0,
+              visitors: 0,
+              tyfcb: 0,
+              ceu: 0,
+              one_to_ones: 0,
+              sponsors: 0,
+              score: 0,
+              traffic_light: 'Grey',
+              batch_name: 'Master Roster',
+              raw_data: {},
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
+
+        if (masterRowsToInsert.length > 0) {
+          await supabase.from('members').insert(masterRowsToInsert);
+        }
+      }
+
+      // 2. Delete the report batch records & log
       const { error } = await supabase.rpc('delete_bni_report_batch', {
         p_org_id: orgId,
         p_batch_name: batchName,
@@ -911,9 +1065,13 @@ export const supabaseService = {
     }
   },
 
-  async deleteOutreachTemplate(templateId: string): Promise<boolean> {
+  async deleteOutreachTemplate(templateId: string, orgId?: string): Promise<boolean> {
     try {
-      const { error } = await supabase.from('outreach_templates').delete().eq('id', templateId);
+      let query = supabase.from('outreach_templates').delete().eq('id', templateId);
+      if (orgId) {
+        query = query.eq('org_id', orgId);
+      }
+      const { error } = await query;
       return !error;
     } catch (e) {
       return false;
@@ -944,10 +1102,11 @@ export const supabaseService = {
         .eq('id', memberId)
         .maybeSingle();
 
-      const { error } = await supabase
-        .from('members')
-        .update(payload)
-        .eq('id', memberId);
+      let query = supabase.from('members').update(payload).eq('id', memberId);
+      if (memberData?.org_id) {
+        query = query.eq('org_id', memberData.org_id);
+      }
+      const { error } = await query;
 
       if (!error && memberData?.name) {
         let mapQuery = supabase

@@ -4,7 +4,7 @@ import { GlassCard } from './GlassCard';
 import { User, ShieldCheck, Building2, Save, Check, Copy, Camera, Upload, Link, Share2 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useToast } from '../context/ToastContext';
-import { getWhatsAppUrl } from '../lib/whatsappUtils';
+import { getWhatsAppUrl, formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 
 interface ProfilePageProps {
   profile: UserProfileExtended | null;
@@ -107,10 +107,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
     }
 
     setIsLoading(true);
+    const formattedPhone = formatPhoneWithCountryCode(phone.trim(), org?.default_country_code || '+91');
     const updated: UserProfileExtended = {
       ...profile,
       full_name: fullName.trim(),
-      phone: phone.trim(),
+      phone: formattedPhone,
       avatar_url: avatarUrl,
       business_category: category.trim(),
       bio: bio.trim(),

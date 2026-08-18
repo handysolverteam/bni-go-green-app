@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { UserProfileExtended } from '../types';
 
+import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
+
 interface ProfileOnboardingScreenProps {
   onProfileCompleted: (profile: UserProfileExtended) => void;
 }
@@ -64,10 +66,11 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
     setIsLoading(true);
     setErrorMsg(null);
 
+    const formattedPhone = formatPhoneWithCountryCode(phone.trim(), '+91');
     const profileData: UserProfileExtended = {
       user_id: user.uid,
       full_name: fullName.trim(),
-      phone: phone.trim(),
+      phone: formattedPhone,
       avatar_url: avatarUrl,
       business_category: category.trim(),
       bio: bio.trim(),

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Member, ImportLog } from '../types';
 import { GlassCard } from './GlassCard';
 import { buildMemberMessage, formatDisplayDateTime } from '../lib/outreachUtils';
-import { getWhatsAppUrl } from '../lib/whatsappUtils';
+import { getWhatsAppUrl, formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 import { useToast } from '../context/ToastContext';
 import {
   MessageSquare, Copy, Check, Send, Play, Pause,
@@ -271,16 +271,17 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       return;
     }
 
+    const formattedPhone = formatPhoneWithCountryCode(cleanPhone, dbCountryCode);
     const key = getMemberKey(member);
     setSavingPhoneId(key);
 
     const success = await supabaseService.updateMemberDetails(member.id || '', {
-      phone: cleanPhone,
+      phone: formattedPhone,
       joinDate: cleanJoinDate,
     });
 
     if (success) {
-      member.Phone = cleanPhone;
+      member.Phone = formattedPhone;
       if (cleanJoinDate) {
         member.JoinDate = cleanJoinDate;
         (member as any).join_date = cleanJoinDate;
