@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, Sparkles } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, Sparkles, Bot } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { UniversalModal } from './UniversalModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
@@ -76,7 +76,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
     { id: 'trends' as NavigationTab, label: 'Trends', icon: TrendingUp },
     { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare },
-    { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Sparkles },
+    { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Bot },
     { id: 'org' as NavigationTab, label: 'Chapter', icon: Building2 },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
   ];
