@@ -26,6 +26,20 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    const urlCode = new URLSearchParams(window.location.search).get('join') ||
+                    new URLSearchParams(window.location.search).get('join_code') ||
+                    new URLSearchParams(window.location.search).get('code');
+    const pendingCode = urlCode || localStorage.getItem('pending_join_code');
+
+    if (pendingCode && pendingCode.trim()) {
+      const cleanCode = pendingCode.trim().toUpperCase();
+      setMode('join');
+      setCode(cleanCode);
+      showToast(`Auto-filled invite code "${cleanCode}"! Click Join to connect.`, 'info');
+    }
+  }, []);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.uid) return;

@@ -678,14 +678,20 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
       {/* Card 3: Chapter Master Roster & Mobile-Friendly Views */}
       <GlassCard glow className="p-4 sm:p-6 space-y-4 border-slate-200/70 dark:border-white/10 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70 dark:border-white/10">
-          <div className="flex items-center space-x-2.5">
-            <UserCheck className="w-5 h-5 text-emerald-500 dark:text-emerald-400 shrink-0" />
-            <div>
-              <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">Chapter Master Roster</h3>
+          <div className="flex items-center justify-between w-full sm:w-auto">
+            <div className="flex items-center space-x-2.5">
+              <UserCheck className="w-5 h-5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+              <div>
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">Chapter Master Roster</h3>
+              </div>
             </div>
+            {/* Count Badge on Mobile */}
+            <span className="sm:hidden px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-xs font-black border border-emerald-500/30 shrink-0">
+              {filteredRoster.length} Members
+            </span>
           </div>
 
-          <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto shrink-0">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto shrink-0">
             {/* Hidden File Input */}
             <input
               type="file"
@@ -697,31 +703,32 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
 
             <button
               onClick={() => setIsAddMasterMemberOpen(true)}
-              className="flex-1 sm:flex-initial px-3.5 py-2 sm:py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center space-x-1.5 border border-slate-200/80 dark:border-white/10 transition-all active:scale-95 shrink-0"
+              className="w-full sm:w-auto px-3 sm:px-3.5 py-2.5 sm:py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center space-x-1 border border-slate-200/80 dark:border-white/10 transition-all active:scale-95 cursor-pointer"
             >
-              <UserPlus className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-              <span>Add Member</span>
+              <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 dark:text-emerald-400 shrink-0" />
+              <span className="truncate">Add Member</span>
             </button>
 
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isProcessingExcel}
-              className="flex-1 sm:flex-initial px-3.5 py-2 sm:py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-75"
+              className="w-full sm:w-auto px-3 sm:px-3.5 py-2.5 sm:py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-1 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-75 cursor-pointer"
             >
               {isProcessingExcel ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Matching...</span>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  <span className="truncate">Matching...</span>
                 </>
               ) : (
                 <>
-                  <Upload className="w-4 h-4" />
-                  <span>Update via File</span>
+                  <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                  <span className="truncate">Update File</span>
                 </>
               )}
             </button>
 
-            <span className="px-3 py-1.5 sm:py-1 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-xs font-black border border-emerald-500/30 shrink-0">
+            {/* Count Badge on Desktop */}
+            <span className="hidden sm:inline-flex px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-xs font-black border border-emerald-500/30 shrink-0">
               {filteredRoster.length} Members
             </span>
           </div>

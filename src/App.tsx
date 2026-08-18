@@ -12,6 +12,8 @@ import { OrganizationTab } from './components/OrganizationTab';
 import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
+import { TrendsTab } from './components/TrendsTab';
+import { ChatTab } from './components/ChatTab';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
@@ -28,7 +30,7 @@ const parseHash = () => {
     reportName = subReport.startsWith('report/') ? subReport.replace('report/', '') : subReport;
   }
 
-  const validTabs: NavigationTab[] = ['dashboard', 'import', 'nudges', 'org', 'profile', 'settings'];
+  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'import', 'nudges', 'chat', 'org', 'profile', 'settings'];
   if (validTabs.includes(mainTab)) {
     return { tab: mainTab, report: ['dashboard', 'nudges'].includes(mainTab) ? (reportName || null) : null };
   }
@@ -452,6 +454,14 @@ export const AppContent: React.FC = () => {
         />
       )}
 
+      {activeTab === 'trends' && (
+        <TrendsTab
+          members={members}
+          importLogs={importLogs}
+          onNavigateToDashboard={(reportName) => navigateTo('dashboard', reportName)}
+        />
+      )}
+
       {activeTab === 'nudges' && (
         <NudgeSender
           members={members}
@@ -460,6 +470,15 @@ export const AppContent: React.FC = () => {
           onSelectReportName={(repName) => navigateTo('nudges', repName)}
           customSignature={org.custom_signature}
           orgId={org.id}
+        />
+      )}
+
+      {activeTab === 'chat' && (
+        <ChatTab
+          members={members}
+          org={org}
+          importLogs={importLogs}
+          userProfile={userProfile}
         />
       )}
 

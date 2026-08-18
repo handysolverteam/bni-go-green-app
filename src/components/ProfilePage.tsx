@@ -37,15 +37,19 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
 
   const handleShareInviteCode = () => {
     if (!org?.code) return;
-    const orgName = org.name || 'our organization';
-    const siteUrl = 'https://www.handychapter.com';
-    const inviteMsg = `Hi! Join ${orgName} on HandyChapter!\n\nWebsite: ${siteUrl}\nOrganization Join Code: ${org.code}\n\nEnter this 6-digit code after logging in to connect with our team!`;
+    const orgName = org.name || 'our chapter';
+    const joinUrl = `https://www.handychapter.com/?join=${encodeURIComponent(org.code)}`;
+    const inviteMsg = `🤝 *Join ${orgName} on HandyChapter!*
+
+Connect with our chapter to view performance reports, scores, and outreach tracking.
+
+Tap the link below to automatically join:
+${joinUrl}`;
 
     if (navigator.share) {
       navigator.share({
         title: `Join ${orgName} on HandyChapter`,
         text: inviteMsg,
-        url: siteUrl,
       }).catch(() => {
         const url = getWhatsAppUrl('', inviteMsg);
         window.open(url, '_blank');
@@ -54,7 +58,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
       const url = getWhatsAppUrl('', inviteMsg);
       window.open(url, '_blank');
     }
-    showToast('Sharing invite code!', 'info');
+    showToast('Sharing invite link!', 'info');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

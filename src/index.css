@@ -382,6 +382,32 @@
   background: rgba(34, 197, 94, 0.5);
 }
 
+/* Utility to hide horizontal & vertical scrollbars while preserving touch scroll */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Globally hide horizontal scrollbars on mobile devices while maintaining smooth swipe scrolling */
+@media (max-width: 768px) {
+  .overflow-x-auto::-webkit-scrollbar,
+  ::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+  .overflow-x-auto,
+  body {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+}
+
 .modal-card-shadow {
   box-shadow: rgba(0, 0, 0, 0.3) 0px 19px 38px, rgba(0, 0, 0, 0.22) 0px 15px 12px !important;
 }
@@ -392,4 +418,66 @@
   margin-top: 0 !important;
 }
 
+/* AI Chat Theme Adaptation Rules */
+.ai-chat-ai-bubble {
+  background-color: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #f8fafc;
+}
 
+body.light-mode .ai-chat-ai-bubble {
+  background-color: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+body.light-mode .ai-chat-ai-bubble div {
+  color: #0f172a !important;
+}
+
+.ai-chat-user-bubble {
+  background: linear-gradient(to top right, #059669, #0d9488);
+  color: #ffffff;
+}
+
+body.light-mode .ai-chat-user-bubble {
+  background: linear-gradient(to top right, #059669, #0d9488) !important;
+  color: #ffffff !important;
+}
+
+.ai-chat-option-btn {
+  background-color: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+}
+
+.ai-chat-option-btn:hover {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #6ee7b7;
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+body.light-mode .ai-chat-option-btn {
+  background-color: #f1f5f9 !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  color: #0f172a !important;
+}
+
+body.light-mode .ai-chat-option-btn:hover {
+  background-color: #ecfdf5 !important;
+  border-color: #10b981 !important;
+  color: #047857 !important;
+}
+
+.ai-chat-action-btn {
+  background-color: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+}
+
+body.light-mode .ai-chat-action-btn {
+  background-color: #e2e8f0 !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  color: #334155 !important;
+}

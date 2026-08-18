@@ -35,6 +35,67 @@ export const supabaseService = {
     return Math.floor(100000 + Math.random() * 900000).toString();
   },
 
+  async queryChapterAI(orgId: string, queryText: string): Promise<{ response_text: string; stats?: any } | null> {
+    try {
+      const { data, error } = await supabase.rpc('query_chapter_ai', {
+        p_org_id: orgId,
+        p_query: queryText,
+      });
+
+      if (error) {
+        console.warn('query_chapter_ai RPC error:', error.message);
+        return null;
+      }
+      return data;
+    } catch (e) {
+      console.error('queryChapterAI exception:', e);
+      return null;
+    }
+  },
+
+  async getAIChatHistory(orgId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('ai_chat_history')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true })
+        .limit(60);
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async saveAIChatMessage(orgId: string, sender: 'user' | 'ai', text: string, options: any[] = []): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('ai_chat_history')
+        .insert([{
+          org_id: orgId,
+          sender,
+          text,
+          options: JSON.stringify(options),
+        }]);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async clearAIChatHistory(orgId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('ai_chat_history')
+        .delete()
+        .eq('org_id', orgId);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
   async createOrganization(name: string, chapterName: string, city: string, userId: string, userEmail?: string): Promise<{ org: Organization; member: OrgMember } | null> {
     try {
       const code = await this.generateUnique6DigitCode();

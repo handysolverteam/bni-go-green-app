@@ -7,6 +7,8 @@ import { buildMemberTemplateData, substituteKeywords, UNIVERSAL_DEFAULT_TEMPLATE
 import { X, Award, CheckCircle2, TrendingUp, Send, ExternalLink, ShieldCheck, User } from 'lucide-react';
 import { UniversalModal } from './UniversalModal';
 
+import { formatDecimal } from '../lib/numberUtils';
+
 interface MemberDetailModalProps {
   isOpen: boolean;
   member: Member;
@@ -21,11 +23,12 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ isOpen, me
     const txt = substituteKeywords(UNIVERSAL_DEFAULT_TEMPLATE_TEXT, dataDict);
     return getWhatsAppUrl(member.Phone || '', txt);
   };
+
   const categories = [
-    { key: 'attendance', label: 'Attendance Rate', value: `${((member.breakdown?.attendance?.value || 0) * 100).toFixed(0)}%`, targetKey: 'attendance_target' },
-    { key: 'ceu', label: 'CEU (Trainings/wk)', value: (member.breakdown?.ceu?.value || 0).toFixed(2), targetKey: 'ceu_target' },
-    { key: 'oneToOnes', label: '1-2-1 Meetings/wk', value: (member.breakdown?.oneToOnes?.value || 0).toFixed(2), targetKey: 'one_to_ones_target' },
-    { key: 'referrals', label: 'Referrals Given/wk', value: (member.breakdown?.referrals?.value || 0).toFixed(2), targetKey: 'referrals_target' },
+    { key: 'attendance', label: 'Attendance Rate', value: `${formatDecimal((member.breakdown?.attendance?.value || 0) * 100, 1)}%`, targetKey: 'attendance_target' },
+    { key: 'ceu', label: 'CEU (Trainings/wk)', value: formatDecimal(member.breakdown?.ceu?.value || 0, 1), targetKey: 'ceu_target' },
+    { key: 'oneToOnes', label: '1-2-1 Meetings/wk', value: formatDecimal(member.breakdown?.oneToOnes?.value || 0, 1), targetKey: 'one_to_ones_target' },
+    { key: 'referrals', label: 'Referrals Given/wk', value: formatDecimal(member.breakdown?.referrals?.value || 0, 1), targetKey: 'referrals_target' },
     { key: 'tyfcb', label: 'TYFCB Closed', value: formatCurrency(member.TYFCB || 0), targetKey: 'tyfcb_target' },
     { key: 'visitors', label: 'Visitors Brought', value: member.V || 0, targetKey: 'visitors_target' },
     { key: 'sponsors', label: 'Members Sponsored', value: member.Sponsors || 0, targetKey: 'sponsors_target' },

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, Sparkles } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { UniversalModal } from './UniversalModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
 
-export type NavigationTab = 'dashboard' | 'import' | 'nudges' | 'org' | 'profile' | 'settings';
+export type NavigationTab = 'dashboard' | 'trends' | 'nudges' | 'chat' | 'org' | 'profile' | 'settings' | 'import';
 
 interface SidebarProps {
   activeTab: NavigationTab;
@@ -74,7 +74,9 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
   const navItems = [
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
+    { id: 'trends' as NavigationTab, label: 'Trends', icon: TrendingUp },
     { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare },
+    { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Sparkles },
     { id: 'org' as NavigationTab, label: 'Chapter', icon: Building2 },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
   ];
@@ -314,16 +316,14 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-300 active:scale-90 ${
+                title={item.label}
+                className={`flex-1 flex items-center justify-center py-2.5 px-1 rounded-full transition-all duration-300 active:scale-90 ${
                   isActive
                     ? 'text-emerald-400 bg-gradient-to-tr from-emerald-500/25 to-teal-400/25 border border-emerald-500/50 font-black shadow-lg shadow-emerald-500/20 -translate-y-0.5'
                     : 'text-slate-400 hover:text-slate-200 font-medium'
                 }`}
               >
-                <Icon className={`w-5 h-5 transition-all duration-300 ${isActive ? 'text-emerald-400 scale-110 -translate-y-0.5' : 'text-slate-400'}`} />
-                <span className={`text-[9px] sm:text-[10px] mt-0.5 truncate max-w-[60px] tracking-tight ${isActive ? 'text-emerald-300 font-black' : 'text-slate-400'}`}>
-                  {item.label}
-                </span>
+                <Icon className={`w-5 h-5 transition-all duration-300 ${isActive ? 'text-emerald-400 scale-110' : 'text-slate-400'}`} />
               </button>
             );
           })}
