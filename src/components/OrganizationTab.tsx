@@ -1,32 +1,122 @@
-import React, { useState, useEffect } from 'react';
-import { Organization, OrgMember, UserRole } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { Organization, OrgMember, UserRole, Member, UserProfileExtended } from '../types';
 import { GlassCard } from './GlassCard';
-import { Building2, Copy, Check, Users, ShieldCheck, Crown, Shield, Loader2 } from 'lucide-react';
+import { Building2, Copy, Check, Users, ShieldCheck, Crown, Shield, Loader2, UserCheck, Search, Phone, Calendar, Edit3, Save, X, FileSpreadsheet, Upload, CheckCircle2, Share2 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { findBestMatchingMember } from '../lib/nameMatcher';
+import { arePhoneNumbersMatching, formatPhoneWithCountryCode } from '../lib/whatsappUtils';
+import * as XLSX from 'xlsx';
 
 interface OrganizationTabProps {
   org: Organization | null;
   orgMember: OrgMember | null;
+  rosterMembers?: Member[];
+  onUpdateMembers?: (updated: Member[] | ((prev: Member[]) => Member[])) => void;
+  userProfile?: UserProfileExtended | null;
+  currentUserEmail?: string | null;
 }
 
-export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember }) => {
+export const OrganizationTab: React.FC<OrganizationTabProps> = ({
+  org,
+  orgMember,
+  rosterMembers = [],
+  onUpdateMembers,
+  userProfile,
+  currentUserEmail,
+}) => {
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [copiedCode, setCopiedCode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Roster Members State & Modal Editing
+  const [rosterList, setRosterList] = useState<Member[]>(rosterMembers);
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [selectedEditMember, setSelectedEditMember] = useState<Member | null>(null);
+  const [editPhone, setEditPhone] = useState('');
+  const [editJoinDate, setEditJoinDate] = useState('');
+  const [editUserId, setEditUserId] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [isSavingMember, setIsSavingMember] = useState(false);
+
+  // File Upload Roster Update State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isProcessingExcel, setIsProcessingExcel] = useState(false);
+  const [importSummaryModal, setImportSummaryModal] = useState<{
+    visible: boolean;
+    totalRows: number;
+    updatedCount: number;
+    matches: Array<{ excelName: string; matchedName: string; score: number; phone?: string; joinDate?: string }>;
+  } | null>(null);
+
   const isAdminOrOwner = orgMember?.role === 'owner' || orgMember?.role === 'admin';
+
+  // Helper to check if a roster member is the logged-in user (by phone or email or user_id)
+  const isUserSelf = (mem: Member): boolean => {
+    const currentUserId = (user && user.uid) ? user.uid : '';
+    if (currentUserId && mem.user_id && mem.user_id === currentUserId) {
+      return true;
+    }
+
+    if (userProfile?.phone && mem.Phone && arePhoneNumbersMatching(userProfile.phone, mem.Phone)) {
+      return true;
+    }
+
+    const userEmailClean = (currentUserEmail || orgMember?.user_email || '').toLowerCase().trim();
+    if (userEmailClean && mem.Email && mem.Email.toLowerCase().trim() === userEmailClean) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Helper to get member avatar ONLY if phone matches logged-in user OR manually mapped to org user
+  const getMemberAvatar = (mem: Member): string | null => {
+    // 1. Manually linked user account (if user_id is explicitly set & non-empty)
+    if (mem.user_id && mem.user_id.trim() !== '') {
+      const match = members.find(m => m.user_id === mem.user_id || m.id === mem.user_id);
+      if (match?.profile?.avatar_url) return match.profile.avatar_url;
+    }
+    // 2. Phone match with logged-in user
+    if (isUserSelf(mem) && userProfile?.avatar_url) {
+      return userProfile.avatar_url;
+    }
+    // 3. Default: NO avatar
+    return null;
+  };
+
+  // Sync prop changes or fetch roster if not passed
+  useEffect(() => {
+    setRosterList(rosterMembers);
+  }, [rosterMembers]);
 
   useEffect(() => {
     if (!org?.id) return;
-    const loadMembers = async () => {
+    const loadData = async () => {
       setIsLoading(true);
       const res = await supabaseService.fetchOrgMembers(org.id);
       setMembers(res);
+      if (!rosterMembers || rosterMembers.length === 0) {
+        const fetchedRoster = await supabaseService.fetchMembers(org.id);
+        setRosterList(fetchedRoster);
+      }
       setIsLoading(false);
     };
-    loadMembers();
+    loadData();
+
+    // Subscribe to real-time changes on members table for this org
+    const unsubscribe = supabaseService.subscribeToMembers(org.id, async () => {
+      const freshRoster = await supabaseService.fetchMembers(org.id);
+      setRosterList(freshRoster);
+      if (onUpdateMembers) onUpdateMembers(freshRoster);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [org]);
 
   const handleCopyCode = () => {
@@ -36,6 +126,16 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
       showToast('6-digit organization code copied to clipboard!', 'info');
       setTimeout(() => setCopiedCode(false), 2000);
     }
+  };
+
+  const handleShareInviteWhatsApp = () => {
+    if (!org?.code) return;
+    const orgName = org.name || 'our organization';
+    const siteUrl = window.location.origin;
+    const inviteMsg = `👋 Hi!\n\nYou're invited to join *${orgName}* on HandyChapter.\n\n📍 Website: ${siteUrl}\n🔑 Organization Join Code: *${org.code}*\n\nSign in to connect with our team! 🚀`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(inviteMsg)}`;
+    window.open(whatsappUrl, '_blank');
+    showToast('Opening WhatsApp to share invite code!', 'info');
   };
 
   const handleRoleChange = async (targetUserId: string, newRole: UserRole) => {
@@ -49,106 +149,361 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
     }
   };
 
+  // Open Edit Modal
+  const handleOpenEditModal = (member: Member) => {
+    setSelectedEditMember(member);
+    setEditPhone(member.Phone || '');
+    setEditJoinDate(member.JoinDate || '');
+
+    // Default ALWAYS to "" (-- Automatic Matching --) unless member.user_id is a valid non-empty string matching an org user
+    let matchedUserId = '';
+    if (member.user_id && typeof member.user_id === 'string' && member.user_id.trim() !== '') {
+      const targetId = member.user_id.trim();
+      const match = members.find(m => (m.user_id && m.user_id === targetId) || (m.id && m.id === targetId));
+      if (match) {
+        matchedUserId = targetId;
+      }
+    }
+
+    setEditUserId(matchedUserId);
+    setEditAvatarUrl('');
+  };
+
+  const handleCloseEditModal = () => {
+    setSelectedEditMember(null);
+    setEditPhone('');
+    setEditJoinDate('');
+    setEditUserId('');
+    setEditAvatarUrl('');
+  };
+
+  // Reset all member links for this org to Automatic Matching
+  const handleResetAllUserLinks = async () => {
+    if (!org?.id) return;
+    setIsLoading(true);
+    try {
+      const ok = await supabaseService.resetAllMemberUserLinks(org.id);
+      if (ok) {
+        const resetList = rosterList.map(m => ({ ...m, user_id: undefined, avatar_url: undefined }));
+        setRosterList(resetList);
+        if (onUpdateMembers) onUpdateMembers(resetList);
+        showToast('Reset all member links in org to Automatic Matching!', 'success');
+      } else {
+        showToast('Failed to reset member links.', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Error resetting links.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const [defaultCountryCode, setDefaultCountryCode] = useState('+91');
+
+  useEffect(() => {
+    if (!org?.id || !user?.uid) return;
+    supabaseService.fetchOrgSettings(org.id, user.uid).then(res => {
+      if (res && (res as any).defaultCountryCode) {
+        setDefaultCountryCode((res as any).defaultCountryCode);
+      }
+    });
+  }, [org, user]);
+
+  // Save Details via Modal
+  const handleSaveMemberDetails = async () => {
+    if (!selectedEditMember || !selectedEditMember.id) return;
+    setIsSavingMember(true);
+    try {
+      const memberId = selectedEditMember.id;
+      const memberName = selectedEditMember.Name;
+      const savingUserId = editUserId.trim();
+      const formattedPhone = editPhone.trim() ? formatPhoneWithCountryCode(editPhone.trim(), defaultCountryCode) : '';
+
+      const ok = await supabaseService.updateMemberDetails(memberId, {
+        phone: formattedPhone,
+        joinDate: editJoinDate.trim(),
+        userId: savingUserId ? savingUserId : undefined,
+      });
+
+      if (ok) {
+        const updatedList = rosterList.map(m =>
+          m.id === memberId || m.Name.trim().toLowerCase() === memberName.trim().toLowerCase()
+            ? {
+                ...m,
+                Phone: formattedPhone,
+                JoinDate: editJoinDate.trim(),
+                user_id: savingUserId ? savingUserId : undefined,
+                avatar_url: undefined,
+              }
+            : m
+        );
+        setRosterList(updatedList);
+        if (onUpdateMembers) {
+          onUpdateMembers(updatedList);
+        }
+        showToast(`Updated details for ${memberName}!`, 'success');
+        handleCloseEditModal();
+      } else {
+        showToast(`Failed to update details for ${memberName}.`, 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Error updating member.', 'error');
+    } finally {
+      setIsSavingMember(false);
+    }
+  };
+
+  // Handle Excel / CSV Upload & Fuzzy Matching Roster Updates (NON-BLOCKING BACKGROUND PROCESS)
+  const handleExcelRosterUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !org?.id) return;
+    const orgId = org.id;
+
+    showToast('🚀 Background roster update started! You can continue using the app.', 'info');
+
+    // Run processing asynchronously in background without blocking UI
+    setTimeout(async () => {
+      try {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+        if (!jsonRows || jsonRows.length === 0) {
+          showToast('No valid rows found in uploaded file.', 'error');
+          return;
+        }
+
+        const updatesPayload: Array<{ memberId: string; phone?: string; joinDate?: string }> = [];
+        const matchResults: Array<{ excelName: string; matchedName: string; score: number; phone?: string; joinDate?: string }> = [];
+
+        jsonRows.forEach(row => {
+          const keys = Object.keys(row);
+          const nameKey = keys.find(k => /^(name|member name|member|full name|membername)$/i.test(k.trim())) || keys[0];
+          const phoneKey = keys.find(k => /^(phone|phone number|mobile|contact|phoneno|mobileno|cell)$/i.test(k.trim()));
+          const dateKey = keys.find(k => /^(join date|joining date|induction date|inductiondate|date of joining|dateofjoining|doj)$/i.test(k.trim()));
+
+          const rawName = String(row[nameKey] || '').trim();
+          const unformattedPhone = phoneKey ? String(row[phoneKey] || '').trim() : '';
+          const rawPhone = unformattedPhone ? formatPhoneWithCountryCode(unformattedPhone, defaultCountryCode) : '';
+          const rawDate = dateKey ? String(row[dateKey] || '').trim() : '';
+
+          if (!rawName) return;
+
+          // Perform fuzzy similarity matching (threshold >= 70%)
+          const match = findBestMatchingMember(rawName, rosterList, 0.70);
+          if (match && match.member.id) {
+            updatesPayload.push({
+              memberId: match.member.id,
+              phone: rawPhone,
+              joinDate: rawDate,
+            });
+
+            matchResults.push({
+              excelName: rawName,
+              matchedName: match.member.Name,
+              score: Math.round(match.score * 100),
+              phone: rawPhone,
+              joinDate: rawDate,
+            });
+          }
+        });
+
+        if (updatesPayload.length > 0) {
+          const successCount = await supabaseService.batchUpdateMemberDetails(orgId, updatesPayload);
+          
+          const freshList = await supabaseService.fetchMembers(orgId);
+          setRosterList(freshList);
+          if (onUpdateMembers) onUpdateMembers(freshList);
+
+          setImportSummaryModal({
+            visible: true,
+            totalRows: jsonRows.length,
+            updatedCount: successCount,
+            matches: matchResults,
+          });
+
+          showToast(`✅ Roster background update complete! ${successCount} members updated.`, 'success');
+        } else {
+          showToast('No matching members found in chapter roster.', 'warning');
+        }
+      } catch (err: any) {
+        showToast(`Background upload error: ${err.message || err}`, 'error');
+      }
+    }, 50);
+
+    e.target.value = '';
+  };
+
+  // 1. Deduplicate roster by normalized member name (guarantees 0 duplicates per org)
+  const uniqueMasterRoster: Member[] = [];
+  const seenMemberNames = new Set<string>();
+
+  for (const mem of rosterList) {
+    if (!mem.Name) continue;
+    const normKey = mem.Name.trim().toLowerCase();
+    if (seenMemberNames.has(normKey)) continue;
+    seenMemberNames.add(normKey);
+    uniqueMasterRoster.push(mem);
+  }
+
+  // 2. Filter Roster & Sort STRICTLY ALPHABETICAL (A to Z - never shifts order on update)
+  const filteredRoster = uniqueMasterRoster
+    .filter(m => {
+      const q = rosterSearch.toLowerCase().trim();
+      if (!q) return true;
+      return (
+        m.Name.toLowerCase().includes(q) ||
+        (m.Phone || '').toLowerCase().includes(q) ||
+        (m.JoinDate || '').toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => a.Name.localeCompare(b.Name));
+
   if (!org) {
     return (
-      <GlassCard className="p-8 text-center space-y-2">
-        <Building2 className="w-10 h-10 text-slate-500 mx-auto" />
-        <h3 className="text-base font-bold text-white">No Organization Attached</h3>
-      </GlassCard>
+      <div className="p-8 text-center text-slate-400">
+        No active organization found.
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Org Header Card */}
-      <GlassCard glow className="p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20">
-              <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center text-[#22c55e]">
-                <Building2 className="w-6 h-6" />
+    <div className="space-y-6 max-w-5xl mx-auto pb-12 px-2 sm:px-0">
+      {/* Card 1: Chapter Details & 6-Digit Code */}
+      <GlassCard glow className="p-4 sm:p-6 space-y-6 border-white/10 shadow-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
+              <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
+                <Building2 className="w-6 h-6 text-emerald-400" />
               </div>
             </div>
             <div>
               <h2 className="text-xl sm:text-2xl font-black text-white">{org.name}</h2>
               <p className="text-xs text-slate-400">
-                {org.chapter_name || 'BNI Chapter'} &bull; {org.city || 'Regional Division'}
+                {org.chapter_name || 'Handychapter'} &bull; {org.city || 'Regional Division'}
               </p>
             </div>
           </div>
 
           {/* 6-Digit Code Badge */}
-          <div className="flex items-center space-x-2 bg-slate-900/90 border border-emerald-500/30 px-4 py-2 rounded-2xl">
+          <div className="bg-slate-900/90 border border-emerald-500/30 p-3 sm:p-4 rounded-2xl flex items-center justify-between sm:justify-end space-x-4 shrink-0 shadow-inner">
             <div>
-              <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Invite Code</div>
-              <div className="text-lg font-black text-emerald-400 tracking-widest">{org.code}</div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Invite 6-Digit Code</span>
+              <span className="font-mono text-xl sm:text-2xl font-black text-emerald-400 tracking-widest">{org.code}</span>
             </div>
-            <button
-              onClick={handleCopyCode}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
-              title="Copy Invite Code"
-            >
-              {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-            </button>
+            <div className="flex items-center space-x-1.5 shrink-0">
+              <button
+                onClick={handleCopyCode}
+                className="p-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 transition-all shrink-0 active:scale-95 flex items-center justify-center"
+                title="Copy Invite Code"
+              >
+                {copiedCode ? <Check className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5" />}
+              </button>
+              <button
+                onClick={handleShareInviteWhatsApp}
+                className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black transition-all shrink-0 active:scale-95 flex items-center justify-center shadow-md shadow-emerald-500/20"
+                title="Share Invite Code via WhatsApp"
+              >
+                <Share2 className="w-5 h-5 text-slate-950" />
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="text-xs text-slate-300 flex items-center justify-between">
-          <span>Your Org Role: <strong className="text-emerald-400 capitalize">{orgMember?.role}</strong></span>
-          <span className="text-slate-500">Total Members: {members.length}</span>
-        </div>
+        {/* Info Grid */}
+        {/* <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+          <div className="p-3 rounded-xl bg-slate-900/50 border border-white/5 space-y-1">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Green Threshold</span>
+            <span className="text-sm font-black text-emerald-400">{org.green_threshold || 70}+ Points</span>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-900/50 border border-white/5 space-y-1">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Amber Threshold</span>
+            <span className="text-sm font-black text-amber-400">{org.amber_threshold || 50} - {(org.green_threshold || 70) - 1} Points</span>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-900/50 border border-white/5 space-y-1">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Red Threshold</span>
+            <span className="text-sm font-black text-rose-400">Below {org.red_threshold || 30} Points</span>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-900/50 border border-white/5 space-y-1">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Team Role</span>
+            <span className="text-sm font-black text-white capitalize">{orgMember?.role || 'Member'}</span>
+          </div>
+        </div> */}
       </GlassCard>
 
-      {/* Org Members List & RBAC */}
-      <GlassCard className="p-6 space-y-4">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Users className="w-5 h-5 text-emerald-400" />
-          <span>Organization Team & Role Permissions</span>
-        </h3>
+      {/* Card 2: Organization Team & Role Permissions (100% USER & MOBILE FRIENDLY) */}
+      <GlassCard glow className="p-4 sm:p-6 space-y-4 border-white/10 shadow-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+          <div className="flex items-center space-x-2.5">
+            <Users className="w-5 h-5 text-emerald-400 shrink-0" />
+            <div>
+              <h3 className="text-base sm:text-lg font-extrabold text-white">Organization Permissions</h3>
+              {/* <p className="text-xs text-slate-400">
+                Manage account access and administrative role permissions.
+              </p> */}
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-black border border-emerald-500/30 self-start sm:self-auto shrink-0">
+            {members.length} Users
+          </span>
+        </div>
 
-        {/* Mobile Roster Cards View (<640px) */}
-        <div className="sm:hidden space-y-2.5">
+        {/* 1. MOBILE RESPONSIVE TEAM CARDS VIEW (<640px) */}
+        <div className="block sm:hidden space-y-2.5">
           {isLoading ? (
-            <div className="py-6 text-center text-slate-500 flex items-center justify-center space-x-2">
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-              <span>Loading roster...</span>
+            <div className="p-6 text-center text-slate-400 flex items-center justify-center space-x-2">
+              <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+              <span className="text-xs">Loading team...</span>
+            </div>
+          ) : members.length === 0 ? (
+            <div className="p-4 text-center text-slate-500 text-xs">
+              No team members found. Share invite code to invite members!
             </div>
           ) : (
             members.map((mem) => {
-              const isMe = mem.user_id === orgMember?.user_id;
               const isOwner = mem.role === 'owner';
+              const isAdmin = mem.role === 'admin';
+              const isSelfUser = mem.user_id === orgMember?.user_id || (currentUserEmail && mem.user_email === currentUserEmail);
 
               return (
-                <div key={mem.id} className="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-white text-xs">
-                        {(mem.user_email || 'U').charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="font-bold text-white text-xs flex items-center gap-1">
-                          <span className="truncate max-w-[180px]">{mem.user_email || 'User'}</span>
-                          {isMe && <span className="text-[10px] text-emerald-400 font-extrabold">(You)</span>}
-                        </div>
-                        <div className="pt-0.5">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                            mem.role === 'owner' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                            mem.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                            'bg-slate-800 text-slate-400 border border-slate-700/50'
-                          }`}>
-                            {mem.role === 'owner' ? <Crown className="w-3 h-3 text-amber-400" /> : <Shield className="w-3 h-3 text-emerald-400" />}
-                            <span>{mem.role.toUpperCase()}</span>
-                          </span>
-                        </div>
-                      </div>
+                <div
+                  key={mem.id}
+                  className={`p-3.5 rounded-2xl border transition-all ${
+                    isSelfUser
+                      ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5'
+                      : 'bg-slate-900/60 border-white/10 hover:border-white/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      {isOwner ? <Crown className="w-4.5 h-4.5 text-amber-400 shrink-0" /> :
+                       isAdmin ? <ShieldCheck className="w-4.5 h-4.5 text-emerald-400 shrink-0" /> :
+                       <Shield className="w-4.5 h-4.5 text-slate-400 shrink-0" />}
+                      <span className="text-xs font-bold text-white truncate">{mem.user_email || mem.user_id}</span>
+                      {isSelfUser && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase shrink-0">
+                          You
+                        </span>
+                      )}
                     </div>
+
+                    <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full capitalize shrink-0 ${
+                      isOwner ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                      isAdmin ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                      'bg-slate-700/50 text-slate-400 border border-slate-600/30'
+                    }`}>
+                      {mem.role}
+                    </span>
                   </div>
 
-                  {isAdminOrOwner && !isOwner && !isMe && (
-                    <div className="pt-2 border-t border-white/5 flex items-center gap-2">
+                  {isAdminOrOwner && !isOwner && (
+                    <div className="pt-2.5 mt-2 border-t border-white/5">
                       <button
                         onClick={() => handleRoleChange(mem.user_id, mem.role === 'admin' ? 'member' : 'admin')}
-                        className="flex-1 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold text-center border border-white/10 transition-all"
+                        className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-xs font-bold text-center border border-white/10 transition-all active:scale-98"
                       >
                         {mem.role === 'admin' ? 'Demote to Member' : 'Promote to Admin'}
                       </button>
@@ -160,7 +515,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
           )}
         </div>
 
-        {/* Desktop Roster Table View (>=640px) */}
+        {/* 2. DESKTOP TEAM TABLE VIEW (>=640px) */}
         <div className="hidden sm:block overflow-x-auto rounded-xl border border-white/10">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-900/80 uppercase text-slate-400 border-b border-white/10 font-black">
@@ -186,46 +541,444 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({ org, orgMember
                   </td>
                 </tr>
               ) : (
-                members.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-800/40">
-                    <td className="px-4 py-3 font-bold text-white flex items-center space-x-2">
-                      {m.role === 'owner' ? <Crown className="w-4 h-4 text-amber-400" /> :
-                       m.role === 'admin' ? <ShieldCheck className="w-4 h-4 text-emerald-400" /> :
-                       <Shield className="w-4 h-4 text-slate-400" />}
-                      <span>{m.user_email || m.user_id}</span>
-                    </td>
+                members.map((m) => {
+                  const isSelf = m.user_id === orgMember?.user_id || (currentUserEmail && m.user_email === currentUserEmail);
+                  return (
+                    <tr key={m.id} className={`hover:bg-slate-800/40 ${isSelf ? 'bg-emerald-500/5' : ''}`}>
+                      <td className="px-4 py-3 font-bold text-white flex items-center space-x-2">
+                        {m.role === 'owner' ? <Crown className="w-4 h-4 text-amber-400" /> :
+                         m.role === 'admin' ? <ShieldCheck className="w-4 h-4 text-emerald-400" /> :
+                         <Shield className="w-4 h-4 text-slate-400" />}
+                        <span>{m.user_email || m.user_id}</span>
+                        {isSelf && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase">
+                            You
+                          </span>
+                        )}
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full capitalize ${
-                        m.role === 'owner' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                        m.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                        'bg-slate-700/50 text-slate-400 border border-slate-600/30'
-                      }`}>
-                        {m.role}
-                      </span>
-                    </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full capitalize ${
+                          m.role === 'owner' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                          m.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                          'bg-slate-700/50 text-slate-400 border border-slate-600/30'
+                        }`}>
+                          {m.role}
+                        </span>
+                      </td>
 
-                    <td className="px-4 py-3 text-right">
-                      {isAdminOrOwner && m.role !== 'owner' ? (
-                        <select
-                          value={m.role}
-                          onChange={(e) => handleRoleChange(m.user_id, e.target.value as UserRole)}
-                          className="px-2 py-1 rounded-lg glass-input text-xs font-bold text-white bg-slate-900"
-                        >
-                          <option value="member">Member</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      ) : (
-                        <span className="text-[11px] text-slate-500">Fixed</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                      <td className="px-4 py-3 text-right">
+                        {isAdminOrOwner && m.role !== 'owner' ? (
+                          <select
+                            value={m.role}
+                            onChange={(e) => handleRoleChange(m.user_id, e.target.value as UserRole)}
+                            className="px-2 py-1 rounded-lg glass-input text-xs font-bold text-white bg-slate-900 cursor-pointer"
+                          >
+                            <option value="member">Member</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        ) : (
+                          <span className="text-[11px] text-slate-500">Fixed</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </GlassCard>
+
+      {/* Card 3: Chapter Master Roster & Mobile-Friendly Views */}
+      <GlassCard glow className="p-4 sm:p-6 space-y-4 border-white/10 shadow-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+          <div className="flex items-center space-x-2.5">
+            <UserCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+            <div>
+              <h3 className="text-base sm:text-lg font-extrabold text-white">Chapter Master Roster</h3>
+              {/* <p className="text-xs text-slate-400">
+                Single master record per member across all reports.
+              </p> */}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto shrink-0">
+            {/* Hidden File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleExcelRosterUpload}
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+            />
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isProcessingExcel}
+              className="flex-1 sm:flex-initial px-3.5 py-2 sm:py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-75"
+            >
+              {isProcessingExcel ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Matching...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  <span>Update via File</span>
+                </>
+              )}
+            </button>
+
+            <span className="px-3 py-1.5 sm:py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-black border border-emerald-500/30 shrink-0">
+              {filteredRoster.length} Members
+            </span>
+          </div>
+        </div>
+
+        {/* Search Roster Bar */}
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={rosterSearch}
+            onChange={(e) => setRosterSearch(e.target.value)}
+            placeholder="Search report member by name or phone..."
+            className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/80 dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/15 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-all"
+          />
+        </div>
+
+        {/* 1. MOBILE RESPONSIVE CARDS VIEW (<640px) */}
+        <div className="block sm:hidden space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+          {filteredRoster.length === 0 ? (
+            <div className="p-6 text-center text-slate-500 text-xs">
+              No report members found. Upload an Excel/CSV file to update details!
+            </div>
+          ) : (
+            filteredRoster.map((mem) => {
+              const self = isUserSelf(mem);
+              const avatar = getMemberAvatar(mem);
+              return (
+                <div
+                  key={mem.id || mem.Name}
+                  className={`p-3.5 rounded-2xl border transition-all ${
+                    self
+                      ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5'
+                      : 'bg-white/70 dark:bg-slate-900/60 border-slate-200/70 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      {avatar ? (
+                        <img src={avatar} alt={mem.Name} className="w-8 h-8 rounded-full object-cover border border-emerald-500/40 shrink-0" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300/60 dark:border-white/10 text-emerald-600 dark:text-emerald-400 font-extrabold text-xs flex items-center justify-center shrink-0 uppercase">
+                          {mem.Name.slice(0, 2)}
+                        </div>
+                      )}
+                      <div className="flex items-center space-x-1.5 min-w-0">
+                        <span className="text-slate-900 dark:text-white font-extrabold text-sm truncate">{mem.Name}</span>
+                        {self && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 text-[9px] font-black uppercase tracking-wider shrink-0">
+                            You
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleOpenEditModal(mem)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-slate-200/80 dark:border-white/10 flex items-center space-x-1.5 shrink-0 active:scale-95"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                  </div>
+
+                  <div className="mt-2.5 pt-2 border-t border-slate-200/50 dark:border-white/5 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center space-x-1.5">
+                      <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="font-mono text-xs text-slate-700 dark:text-slate-200">{mem.Phone ? formatPhoneWithCountryCode(mem.Phone) : <span className="text-slate-400 italic">No phone set</span>}</span>
+                    </div>
+                    {mem.JoinDate && (
+                      <div className="flex items-center space-x-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        <span>{mem.JoinDate}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* 2. DESKTOP ROSTER TABLE VIEW (>=640px) */}
+        <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[500px] rounded-xl border border-slate-200/70 dark:border-white/10 pr-1">
+          <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+            <thead className="bg-slate-100/90 dark:bg-slate-900/80 uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-white/10 font-black">
+              <tr>
+                <th className="px-4 py-3">Member Name</th>
+                <th className="px-4 py-3">Phone Number</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200/50 dark:divide-white/5 bg-white/40 dark:bg-slate-950/40">
+              {filteredRoster.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
+                    No report members found. Upload an Excel/CSV file to update chapter details!
+                  </td>
+                </tr>
+              ) : (
+                filteredRoster.map((mem) => {
+                  const self = isUserSelf(mem);
+                  const avatar = getMemberAvatar(mem);
+
+                  return (
+                    <tr key={mem.id || mem.Name} className={`transition-colors ${self ? 'bg-emerald-500/10 hover:bg-emerald-500/15' : 'hover:bg-slate-100/60 dark:hover:bg-slate-800/40'}`}>
+                      {/* Member Name + Avatar + YOU Tag */}
+                      <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">
+                        <div className="flex items-center space-x-2.5">
+                          {avatar ? (
+                            <img src={avatar} alt={mem.Name} className="w-8 h-8 rounded-full object-cover border border-emerald-500/40 shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300/60 dark:border-white/10 text-emerald-600 dark:text-emerald-400 font-extrabold text-xs flex items-center justify-center shrink-0 uppercase">
+                              {mem.Name.slice(0, 2)}
+                            </div>
+                          )}
+                          <div className="flex items-center space-x-2">
+                            <span className="text-slate-900 dark:text-slate-100 font-extrabold text-sm">{mem.Name}</span>
+                            {self && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center space-x-1">
+                                <UserCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>You</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Phone Number */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-1.5">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="font-mono text-slate-800 dark:text-slate-200">{mem.Phone ? formatPhoneWithCountryCode(mem.Phone) : <span className="text-slate-400 italic">No phone set</span>}</span>
+                        </div>
+                      </td>
+
+                      {/* Actions (Opens Edit Modal) */}
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleOpenEditModal(mem)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 text-xs font-bold transition-all border border-white/10 flex items-center space-x-1.5 ml-auto active:scale-95"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </GlassCard>
+
+      {/* MODAL 1: EDIT MEMBER PHONE & JOINING DATE */}
+      {selectedEditMember && (
+        <div role="dialog" className="fixed inset-0 z-50 flex items-center justify-center p-3 pt-10 sm:p-4 bg-transparent overflow-y-auto animate-fadeIn">
+          <div className="w-full max-w-md bg-[#0a0f1d] border border-white/20 rounded-2xl p-6 space-y-5 modal-card-shadow relative">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Edit Member Details</h3>
+                  <p className="text-xs text-slate-400 truncate max-w-[240px]">{selectedEditMember.Name}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseEditModal}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <div className="space-y-4">
+              {/* Phone Number Field */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+                  <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Phone Number</span>
+                </label>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="9876543210"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
+                />
+              </div>
+
+              {/* Induction / Joining Date Field */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Induction / Joining Date</span>
+                </label>
+                <input
+                  type="date"
+                  value={editJoinDate}
+                  onChange={(e) => setEditJoinDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-sm text-white font-mono focus:outline-none focus:border-emerald-500 transition-all"
+                />
+              </div>
+
+              {/* Link to Organization User Account Dropdown */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Link to Organization User Account</span>
+                </label>
+                <select
+                  value={editUserId || ''}
+                  onChange={(e) => {
+                    const uId = e.target.value;
+                    setEditUserId(uId);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-emerald-300 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer"
+                >
+                  <option value="">-- Automatic Matching (by Phone/Email) --</option>
+                  {members.map(m => {
+                    const optionVal = m.user_id || m.id;
+                    if (!optionVal || typeof optionVal !== 'string' || optionVal.trim() === '') return null;
+                    const uName = m.profile?.full_name || m.user_email || optionVal;
+                    const uPhone = m.profile?.phone ? ` (${m.profile.phone})` : '';
+                    return (
+                      <option key={optionVal} value={optionVal}>
+                        {uName}{uPhone} [{m.role.toUpperCase()}]
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-[11px] text-slate-400">
+                  Manually link this report member to an organization user profile & avatar.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Action Buttons */}
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                onClick={handleCloseEditModal}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveMemberDetails}
+                disabled={isSavingMember}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center space-x-2 shadow-lg shadow-emerald-500/25 transition-all active:scale-95 disabled:opacity-75"
+              >
+                {isSavingMember ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Save Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: EXCEL/CSV ROSTER IMPORT SUMMARY MODAL */}
+      {importSummaryModal && importSummaryModal.visible && (
+        <div role="dialog" className="fixed inset-0 z-50 flex items-center justify-center p-3 pt-10 sm:p-4 bg-transparent overflow-y-auto animate-fadeIn">
+          <div className="w-full max-w-lg bg-[#0a0f1d] border border-white/20 rounded-2xl p-6 space-y-5 modal-card-shadow relative">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Roster Update Complete</h3>
+                </div>
+              </div>
+              <button
+                onClick={() => setImportSummaryModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Summary Stat Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-slate-900 border border-white/5">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Total File Rows</span>
+                <span className="text-lg font-black text-white">{importSummaryModal.totalRows}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-emerald-500/30">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Members Updated</span>
+                <span className="text-lg font-black text-emerald-400">{importSummaryModal.updatedCount}</span>
+              </div>
+            </div>
+
+            {/* Match Details List */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-300">Fuzzy Name Matches & Updates Log:</label>
+              <div className="max-h-56 overflow-y-auto space-y-2 pr-1 rounded-xl border border-white/10 p-3 bg-slate-950/60 text-xs">
+                {importSummaryModal.matches.map((item, idx) => (
+                  <div key={idx} className="p-2.5 rounded-lg bg-slate-900/80 border border-white/5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white truncate max-w-[220px]">{item.excelName}</span>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-black ${
+                        item.score >= 95 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                        'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                      }`}>
+                        {item.score}% Similar Match
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex items-center space-x-3 font-mono">
+                      <span>Phone: {item.phone || 'N/A'}</span>
+                      <span>•</span>
+                      <span>Joined: {item.joinDate || 'N/A'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setImportSummaryModal(null)}
+                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/25 transition-all"
+              >
+                Close & View Roster
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };

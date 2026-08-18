@@ -5,12 +5,20 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
 node_modules
 dist
 dist-ssr
 *.local
+.env
+*.json
+!package.json
+!tsconfig.json
+!package-lock.json
+!postcss.config.js
+!tailwind.config.js
+!.mcp.json
+!mcp_config.json
 
 # Editor directories and files
 .vscode/*

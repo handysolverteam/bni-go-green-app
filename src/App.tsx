@@ -168,8 +168,8 @@ export const AppContent: React.FC = () => {
       try {
         // Fetch Org and User Profile concurrently
         const [orgRes, profRes] = await Promise.all([
-          supabaseService.fetchUserOrganization(user.uid),
-          supabaseService.fetchUserProfile(user.uid),
+          supabaseService.fetchUserOrganization(user.uid, user.email),
+          supabaseService.fetchUserProfile(user.uid, user.email),
         ]);
 
         let fetchedMembers: Member[] = [];
@@ -438,6 +438,8 @@ export const AppContent: React.FC = () => {
           isSyncing={isSyncing}
           isInitialLoading={isInitializing}
           isDataLoaded={isDataLoaded}
+          userProfile={userProfile}
+          currentUserEmail={user?.email}
         />
       )}
 
@@ -466,6 +468,10 @@ export const AppContent: React.FC = () => {
         <OrganizationTab
           org={org}
           orgMember={orgMember}
+          rosterMembers={members}
+          onUpdateMembers={setMembers}
+          userProfile={userProfile}
+          currentUserEmail={user?.email}
         />
       )}
 

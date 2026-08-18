@@ -269,7 +269,7 @@ export function buildSnapshotLines(member: Member): string[] {
   ];
 }
 
-export function buildMemberMessage(member: Member, options?: { signature?: string }): string {
+export function buildMemberMessage(member: Member, options?: { signature?: string; scoreTerm?: string }): string {
   const firstName = getFirstName(member.Name);
   const score = member.score ?? 0;
   const light = member.trafficLight || { label: 'Grey', emoji: '⚪', color: '#9ca3af' };
@@ -309,8 +309,9 @@ export function buildMemberMessage(member: Member, options?: { signature?: strin
     return `• *${labelOf(n)}*${pts}: ${n.action} → *+${n.gain} pts*`;
   };
 
+  const scoreTerm = options?.scoreTerm || 'Go Green';
   let msg = `Hi ${firstName}! 👋\n\n`;
-  msg += `Your Handychapter Score: *${score}/100* ${light.emoji} ${light.label}\n\n`;
+  msg += `Your ${scoreTerm} Score: *${score}/100* ${light.emoji} ${light.label}\n\n`;
 
   if (plan.stayGreen) {
     if (plan.nudgesForLevel.length === 0) {
@@ -371,7 +372,7 @@ export function buildMemberMessage(member: Member, options?: { signature?: strin
 
 export const UNIVERSAL_DEFAULT_TEMPLATE_TEXT = `Hi {{name}}!
 
-Your Handychapter Score: {{score}}/100 {{traffic_light}}
+Your Go Green Score: {{score}}/100 {{traffic_light}}
 
 To reach Green, you need +{{pts_to_green}} pts.
 Do these steps:

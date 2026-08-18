@@ -78,10 +78,11 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
   return (
     <div
+      role="dialog"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md animate-fadeIn cursor-pointer"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 pt-10 sm:p-4 bg-transparent overflow-y-auto animate-fadeIn cursor-pointer"
     >
-      <GlassCard className="w-full max-w-md p-4 sm:p-5 space-y-4 sm:space-y-5 relative border-t sm:border border-white/15 shadow-2xl rounded-t-3xl sm:rounded-3xl">
+      <GlassCard className="w-full max-w-md p-4 sm:p-5 space-y-4 sm:space-y-5 relative border-t sm:border border-white/20 modal-card-shadow rounded-t-3xl sm:rounded-3xl">
         {/* Mobile Drag Handle */}
         <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-2 sm:hidden shrink-0" />
         <button

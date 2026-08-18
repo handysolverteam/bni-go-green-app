@@ -98,13 +98,25 @@ export const LoginPage: React.FC = () => {
         </GlassCard>
 
         {/* Footer */}
-        <div className="text-center space-y-1">
-          {/* <p className="text-xs text-slate-500">HandySolver Team &bull; BNI Chapter Operations</p> */}
+        <div className="text-center space-y-2">
           <div className="text-xs sm:text-sm font-medium text-slate-300 flex items-center justify-center gap-1.5 flex-wrap">
             <span>Made with</span>
             <Heart className="w-4 h-4 text-rose-500 fill-current animate-pulse shrink-0" />
             <span>by</span>
             <strong className="text-white font-black text-sm sm:text-base">Handysolver</strong>
+          </div>
+          <div className="flex items-center justify-center gap-3 text-xs text-slate-400">
+            <a href="/homepage.html" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors underline">
+              App Overview
+            </a>
+            <span>&bull;</span>
+            <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors underline">
+              Privacy Policy
+            </a>
+            <span>&bull;</span>
+            <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors underline">
+              Terms of Service
+            </a>
           </div>
         </div>
       </div>

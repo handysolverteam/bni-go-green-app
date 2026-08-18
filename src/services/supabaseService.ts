@@ -135,9 +135,9 @@ export const supabaseService = {
     }
   },
 
-  async fetchUserOrganization(userId: string): Promise<{ org: Organization; member: OrgMember } | null> {
+  async fetchUserOrganization(userId: string, userEmail?: string | null): Promise<{ org: Organization; member: OrgMember } | null> {
     try {
-      const { data: memberData, error: memberError } = await supabase
+      let { data: memberData } = await supabase
         .from('org_members')
         .select('*, organization:organizations(*)')
         .eq('user_id', userId)
@@ -145,7 +145,27 @@ export const supabaseService = {
         .limit(1)
         .maybeSingle();
 
-      if (memberError || !memberData || !memberData.organization) {
+      // Fallback: search by email if Firebase UID changed
+      if ((!memberData || !memberData.organization) && userEmail) {
+        const { data: emailMatch } = await supabase
+          .from('org_members')
+          .select('*, organization:organizations(*)')
+          .eq('user_email', userEmail)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (emailMatch && emailMatch.organization) {
+          memberData = emailMatch;
+          // Auto-heal / update user_id to new UID
+          await supabase
+            .from('org_members')
+            .update({ user_id: userId })
+            .eq('id', emailMatch.id);
+        }
+      }
+
+      if (!memberData || !memberData.organization) {
         return null;
       }
 
@@ -154,8 +174,8 @@ export const supabaseService = {
         member: {
           id: memberData.id,
           org_id: memberData.org_id,
-          user_id: memberData.user_id,
-          user_email: memberData.user_email,
+          user_id: userId,
+          user_email: memberData.user_email || userEmail || '',
           role: memberData.role,
           created_at: memberData.created_at
         }
@@ -198,17 +218,34 @@ export const supabaseService = {
   },
 
   // --- USER PROFILE METHODS ---
-  async fetchUserProfile(userId: string): Promise<UserProfileExtended | null> {
+  async fetchUserProfile(userId: string, userEmail?: string | null): Promise<UserProfileExtended | null> {
     try {
-      const { data, error } = await supabase
+      let { data } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (error || !data) return null;
+      // Fallback: search profile by email if UID changed
+      if (!data && userEmail) {
+        const { data: emailData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', userEmail)
+          .maybeSingle();
+
+        if (emailData) {
+          data = emailData;
+          await supabase
+            .from('profiles')
+            .update({ user_id: userId })
+            .eq('id', emailData.id);
+        }
+      }
+
+      if (!data) return null;
       return {
-        user_id: data.user_id,
+        user_id: userId,
         full_name: data.full_name || '',
         phone: data.phone || '',
         business_category: data.business_category || data.chapter_role || '',
@@ -272,6 +309,14 @@ export const supabaseService = {
 
       if (error || !data) return [];
 
+      // Count frequency of user_id values to detect uploader bulk-stamping
+      const userIdCounts = new Map<string, number>();
+      data.forEach((r: any) => {
+        if (r.user_id) {
+          userIdCounts.set(r.user_id, (userIdCounts.get(r.user_id) || 0) + 1);
+        }
+      });
+
       data.sort((a: any, b: any) => {
         const idxA = Number(a.raw_data?.excel_row_index);
         const idxB = Number(b.raw_data?.excel_row_index);
@@ -282,9 +327,16 @@ export const supabaseService = {
       return data.map((row: any) => {
         const raw = row.raw_data || {};
         const totalVal = Number(raw['Total Score'] ?? raw['total_score'] ?? raw['TotalScore'] ?? row.score) || (row.score > 0 ? row.score : undefined);
+        
+        // If a user_id appears on more than 2 members, it was bulk-stamped by uploader -> ignore it
+        const isBulkStamped = row.user_id && (userIdCounts.get(row.user_id) || 0) > 2;
+        const validUserId = isBulkStamped ? undefined : (row.user_id || undefined);
+
         const mem = scoreMember({
           id: row.id,
           org_id: row.org_id,
+          user_id: validUserId,
+          avatar_url: row.avatar_url || undefined,
           Name: row.name,
           Phone: row.phone || '',
           Email: row.email || '',
@@ -330,7 +382,7 @@ export const supabaseService = {
       const row = {
         ...(scored.id && !scored.id.startsWith('temp_') ? { id: scored.id } : {}),
         org_id: orgId,
-        user_id: userId,
+        user_id: scored.user_id || null,
         name: scored.Name,
         chapter: scored.Chapter || 'Influencers',
         phone: scored.Phone || '',
@@ -402,7 +454,7 @@ export const supabaseService = {
       const now = new Date().toISOString();
       const rows = members.map(m => ({
         org_id: orgId,
-        user_id: userId || '',
+        user_id: m.user_id || null,
         name: m.Name ? String(m.Name).trim() : 'Unnamed Member',
         chapter: m.Chapter ? String(m.Chapter).trim() : 'Influencers',
         phone: m.Phone ? String(m.Phone).trim() : '',
@@ -574,8 +626,9 @@ export const supabaseService = {
 
   // --- REALTIME SUBSCRIPTION ---
   subscribeToMembers(orgId: string, onUpdate: () => void) {
+    const topic = `members_rt_${orgId}_${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel(`members-realtime-${orgId}`)
+      .channel(topic)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'members', filter: `org_id=eq.${orgId}` },
@@ -600,10 +653,13 @@ export const supabaseService = {
         .single();
 
       if (orgData) {
+        const orgSettings = orgData.settings || {};
         return {
           scoringConfig: orgData.custom_scoring || null,
           signature: orgData.custom_signature || 'Keep the momentum going! 💪',
-          enableSignature: (orgData as any).enable_signature !== undefined ? Boolean((orgData as any).enable_signature) : true,
+          enableSignature: orgSettings.enable_signature !== undefined ? Boolean(orgSettings.enable_signature) : true,
+          scoreTerm: orgSettings.score_term || 'Go Green',
+          defaultCountryCode: orgSettings.default_country_code || '+91',
         };
       }
       return null;
@@ -612,16 +668,30 @@ export const supabaseService = {
     }
   },
 
-  async saveOrgSettings(orgId: string, userId: string, settings: any, fullScoringConfig: any): Promise<boolean> {
+  async saveOrgSettings(orgId: string, userId: string, settingsPayload: any, fullScoringConfig: any): Promise<boolean> {
     try {
+      const { data: currentOrg } = await supabase
+        .from('organizations')
+        .select('settings')
+        .eq('id', orgId)
+        .maybeSingle();
+
+      const existingSettings = currentOrg?.settings || {};
+      const updatedSettings = {
+        ...existingSettings,
+        enable_signature: settingsPayload.enableSignature !== undefined ? settingsPayload.enableSignature : true,
+        score_term: settingsPayload.scoreTerm || 'Go Green',
+        default_country_code: settingsPayload.defaultCountryCode || '+91',
+      };
+
       const { error: orgError } = await supabase
         .from('organizations')
         .update({
-          green_threshold: settings.green,
-          amber_threshold: settings.amber,
-          red_threshold: settings.red,
-          custom_signature: settings.signature,
-          enable_signature: settings.enableSignature !== undefined ? settings.enableSignature : true,
+          green_threshold: settingsPayload.green,
+          amber_threshold: settingsPayload.amber,
+          red_threshold: settingsPayload.red,
+          custom_signature: settingsPayload.signature,
+          settings: updatedSettings,
           custom_scoring: fullScoringConfig,
         })
         .eq('id', orgId);
@@ -854,11 +924,19 @@ export const supabaseService = {
     return this.updateMemberDetails(memberId, { phone });
   },
 
-  async updateMemberDetails(memberId: string, details: { phone?: string; joinDate?: string }): Promise<boolean> {
+  async updateMemberDetails(memberId: string, detailsOrPhone: string | { phone?: string; joinDate?: string; userId?: string; avatarUrl?: string }, joinDateStr?: string): Promise<boolean> {
     try {
+      let details: { phone?: string; joinDate?: string; userId?: string; avatarUrl?: string } = {};
+      if (typeof detailsOrPhone === 'string') {
+        details = { phone: detailsOrPhone, joinDate: joinDateStr || '' };
+      } else {
+        details = detailsOrPhone || {};
+      }
+
       const payload: Record<string, any> = { updated_at: new Date().toISOString() };
       if (details.phone !== undefined) payload.phone = details.phone.trim();
       if (details.joinDate !== undefined) payload.join_date = details.joinDate.trim();
+      if (details.userId !== undefined) payload.user_id = details.userId ? details.userId : null;
 
       const { data: memberData } = await supabase
         .from('members')
@@ -885,6 +963,50 @@ export const supabaseService = {
       return !error;
     } catch (e) {
       return false;
+    }
+  },
+
+  async resetAllMemberUserLinks(orgId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('members')
+        .update({ user_id: null, updated_at: new Date().toISOString() })
+        .eq('org_id', orgId);
+      return !error;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async batchUpdateMemberDetails(
+    orgId: string,
+    updates: Array<{ memberId: string; phone?: string; joinDate?: string }>
+  ): Promise<number> {
+    try {
+      // 1. Execute atomic RPC on Supabase server-side (survives page refresh & executes in background)
+      const { data, error } = await supabase.rpc('batch_update_member_details', {
+        p_org_id: orgId,
+        p_updates: updates,
+      });
+
+      if (!error && typeof data === 'number') {
+        return data;
+      }
+
+      // 2. Client-side fallback if RPC is unavailable
+      let count = 0;
+      for (const item of updates) {
+        if (!item.memberId) continue;
+        const ok = await this.updateMemberDetails(item.memberId, {
+          phone: item.phone,
+          joinDate: item.joinDate,
+        });
+        if (ok) count++;
+      }
+      return count;
+    } catch (e) {
+      console.error('Error batch updating member details:', e);
+      return 0;
     }
   },
 

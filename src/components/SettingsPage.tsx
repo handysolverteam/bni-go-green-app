@@ -82,6 +82,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
   const [config, setConfigState] = useState<ScoringConfig>(getScoringConfig());
   const [signatureText, setSignatureText] = useState('Keep the momentum going! 💪');
   const [enableSignature, setEnableSignature] = useState(true);
+  const [scoreTerm, setScoreTerm] = useState('Go Green');
+  const [defaultCountryCode, setDefaultCountryCode] = useState('+91');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
@@ -103,6 +105,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
         if (res.enableSignature !== undefined) {
           setEnableSignature(Boolean(res.enableSignature));
         }
+        if ((res as any).scoreTerm) {
+          setScoreTerm((res as any).scoreTerm);
+        }
+        if ((res as any).defaultCountryCode) {
+          setDefaultCountryCode((res as any).defaultCountryCode);
+        }
       }
       setIsLoadingSettings(false);
     };
@@ -121,12 +129,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
           red: config.trafficLight.red,
           signature: signatureText,
           enableSignature: enableSignature,
+          scoreTerm: scoreTerm,
+          defaultCountryCode: defaultCountryCode,
         },
         config
       );
     }
     setSavedSuccess(true);
-    showToast('Scoring thresholds & custom signature settings saved!', 'success');
+    showToast('Scoring thresholds & custom settings saved!', 'success');
     if (onSettingsSaved) onSettingsSaved();
     setTimeout(() => setSavedSuccess(false), 2000);
   };
@@ -205,7 +215,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-black text-white">WhatsApp Outreach Messages</h3>
-              <p className="text-[11px] text-slate-400">Custom signature &amp; auto-generated dynamic messages based on member data</p>
             </div>
           </div>
 
@@ -223,6 +232,36 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
               }`}
             />
           </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/10">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-300">Default Country Code</label>
+            <input
+              type="text"
+              value={defaultCountryCode}
+              onChange={(e) => setDefaultCountryCode(e.target.value)}
+              placeholder="+91"
+              className="w-full px-4 py-2.5 rounded-xl glass-input text-xs font-bold text-emerald-300 border-emerald-500/40"
+            />
+            <p className="text-[11px] text-slate-400">
+              Default: <strong>+91</strong> (India). Applied to 10-digit mobile numbers for WhatsApp outreach.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-300">Score Term Label</label>
+            <input
+              type="text"
+              value={scoreTerm}
+              onChange={(e) => setScoreTerm(e.target.value)}
+              placeholder="Go Green"
+              className="w-full px-4 py-2.5 rounded-xl glass-input text-xs font-bold text-emerald-300 border-emerald-500/40"
+            />
+            <p className="text-[11px] text-slate-400">
+              Default: <strong>Go Green</strong>. Replaces 'Handychapter Score' in outreach headers.
+            </p>
+          </div>
         </div>
 
         {enableSignature && (

@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { Member } from '../types';
 import { scoreMember, parseDateValue } from './scoringEngine';
+import { formatPhoneWithCountryCode } from './whatsappUtils';
 
 export interface ParseResult {
   members: Member[];
@@ -43,7 +44,7 @@ function isIgnoredName(name: string): boolean {
   return false;
 }
 
-function parseSheetData(sheet: XLSX.WorkSheet): ParseResult {
+function parseSheetData(sheet: XLSX.WorkSheet, defaultCountryCode: string = '+91'): ParseResult {
   const errors: string[] = [];
   const members: Member[] = [];
 
@@ -206,7 +207,8 @@ function parseSheetData(sheet: XLSX.WorkSheet): ParseResult {
 
     if (!memberName || isIgnoredName(memberName)) continue;
 
-    const phoneVal = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+    const rawPhone = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+    const phoneVal = rawPhone ? formatPhoneWithCountryCode(rawPhone, defaultCountryCode) : '';
     const emailVal = emailIdx !== -1 ? String(row[emailIdx] || '').trim() : '';
     const joinDateVal = joinDateIdx !== -1 ? String(row[joinDateIdx] || '').trim() : '';
     const totalScoreVal = totalScoreIdx !== -1 ? cleanNumber(row[totalScoreIdx]) : undefined;
@@ -295,7 +297,7 @@ function parseSheetData(sheet: XLSX.WorkSheet): ParseResult {
   };
 }
 
-export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
+export function parsePalmsExcel(fileData: ArrayBuffer, defaultCountryCode: string = '+91'): ParseResult {
   try {
     const workbook = XLSX.read(fileData, { type: 'array', cellDates: true });
     if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
@@ -308,7 +310,7 @@ export function parsePalmsExcel(fileData: ArrayBuffer): ParseResult {
     for (const name of workbook.SheetNames) {
       const sheet = workbook.Sheets[name];
       if (!sheet) continue;
-      const res = parseSheetData(sheet);
+      const res = parseSheetData(sheet, defaultCountryCode);
       if (res.members.length > bestResult.members.length) {
         bestResult = res;
       }

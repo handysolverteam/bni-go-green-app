@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Member, ImportLog } from '../types';
+import { Member, ImportLog, UserProfileExtended } from '../types';
 import { GlassCard } from './GlassCard';
 import { ConfirmationModal } from './ConfirmationModal';
 import { AddMemberModal } from './AddMemberModal';
 import { PageHeader } from './PageHeader';
 import {
   Search, Filter, MessageSquare, Award, ArrowUpDown, Download, Users, TrendingUp,
-  Trash2, Edit, UserPlus, Calendar, Layers, X, Eye, FileSpreadsheet, ArrowLeft, Loader2, FileDown, BarChart3
+  Trash2, Edit, UserPlus, Calendar, Layers, X, Eye, FileSpreadsheet, ArrowLeft, Loader2, FileDown, BarChart3,
+  UserCheck, ChevronRight, ChevronDown
 } from 'lucide-react';
 import { generateSampleExcelBuffer } from '../lib/excelParser';
 import { useToast } from '../context/ToastContext';
@@ -55,6 +56,8 @@ interface DashboardProps {
   isSyncing?: boolean;
   isInitialLoading?: boolean;
   isDataLoaded?: boolean;
+  userProfile?: UserProfileExtended | null;
+  currentUserEmail?: string | null;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -72,6 +75,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   isSyncing = false,
   isInitialLoading = false,
   isDataLoaded = false,
+  userProfile,
+  currentUserEmail,
 }) => {
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,12 +92,75 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  // Helper to match logged-in user (by phone or email)
+  const isUserSelf = React.useCallback((mem: Member): boolean => {
+    const userPhoneClean = (userProfile?.phone || '').replace(/[^0-9]/g, '');
+    const userEmailClean = (currentUserEmail || '').toLowerCase().trim();
+
+    if (userPhoneClean && mem.Phone) {
+      const memPhoneClean = mem.Phone.replace(/[^0-9]/g, '');
+      if (
+        memPhoneClean &&
+        (memPhoneClean === userPhoneClean ||
+          (userPhoneClean.length >= 10 && memPhoneClean.endsWith(userPhoneClean.slice(-10))) ||
+          (memPhoneClean.length >= 10 && userPhoneClean.endsWith(memPhoneClean.slice(-10))))
+      ) {
+        return true;
+      }
+    }
+
+    if (userEmailClean && mem.Email) {
+      if (mem.Email.toLowerCase().trim() === userEmailClean) {
+        return true;
+      }
+    }
+
+    return false;
+  }, [userProfile, currentUserEmail]);
+
+  // Find all member entries in `members` that belong to the logged-in user
+  const selfMemberEntries = useMemo(() => {
+    return members.filter(m => isUserSelf(m));
+  }, [members, isUserSelf]);
+
+  // Unique report names/batches where this logged-in user is present
+  const selfUserReports = useMemo(() => {
+    const map = new Map<string, Member>();
+    selfMemberEntries.forEach(m => {
+      const bName = m.batch_name || 'Latest Report';
+      if (!map.has(bName)) {
+        map.set(bName, m);
+      }
+    });
+    return Array.from(map.entries()).map(([batchName, member]) => ({
+      batchName,
+      member,
+    }));
+  }, [selfMemberEntries]);
+
+  // Selected report for the My Personal Performance card dropdown
+  const [selectedSelfReportName, setSelectedSelfReportName] = useState<string>('');
+
+  useEffect(() => {
+    if (selfUserReports.length > 0) {
+      if (!selectedSelfReportName || !selfUserReports.some(r => r.batchName === selectedSelfReportName)) {
+        setSelectedSelfReportName(selfUserReports[0].batchName);
+      }
+    }
+  }, [selfUserReports, selectedSelfReportName]);
+
+  const activeSelfMember = useMemo(() => {
+    if (!selectedSelfReportName) return selfUserReports[0]?.member || null;
+    return selfUserReports.find(r => r.batchName === selectedSelfReportName)?.member || selfUserReports[0]?.member || null;
+  }, [selfUserReports, selectedSelfReportName]);
+
   // Modal states
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
   const [batchToDelete, setBatchToDelete] = useState<{ name: string; logId?: string } | null>(null);
   const [memberToEdit, setMemberToEdit] = useState<Member | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [showSelfPerformanceDetails, setShowSelfPerformanceDetails] = useState(false);
 
   // Extract unique report batches from importLogs and members
   const availableReports = useMemo(() => {
@@ -320,6 +388,126 @@ export const Dashboard: React.FC<DashboardProps> = ({
         }
       />
 
+      {/* --- MY PERSONAL PERFORMANCE & REPORT SNAPSHOT (LOGGED-IN MEMBER - MAIN DASHBOARD ONLY) --- */}
+      {!activeReportName && selfUserReports.length > 0 && activeSelfMember && (
+        <div className="w-full" style={{ marginBottom: '20px' }}>
+          <GlassCard glow className="p-3.5 sm:p-5 border-emerald-500/30 bg-emerald-950/20 shadow-2xl w-full">
+          {/* Mobile & Desktop Single Row Card Header - Clickable anywhere across full card */}
+          <div
+            onClick={() => setShowSelfPerformanceDetails(!showSelfPerformanceDetails)}
+            className="flex items-center justify-between gap-2 cursor-pointer select-none w-full group"
+          >
+            <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-1">
+              {userProfile?.avatar_url ? (
+                <img src={userProfile.avatar_url} alt={activeSelfMember.Name} className="w-8 h-8 rounded-full object-cover border border-emerald-500/40 shrink-0" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-black text-xs shrink-0">
+                  <UserCheck className="w-4 h-4" />
+                </div>
+              )}
+              
+              <div className="flex items-center space-x-1.5 min-w-0 flex-1">
+                <span className="text-xs sm:text-sm font-black text-white truncate group-hover:text-emerald-300 transition-colors">{activeSelfMember.Name}</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-400 border border-emerald-500/40 text-[9px] font-black uppercase tracking-wider shrink-0 hidden sm:inline-flex items-center space-x-1">
+                  <UserCheck className="w-3 h-3 text-emerald-400" />
+                  <span>You</span>
+                </span>
+                <span className="shrink-0 scale-90 sm:scale-100 origin-left">
+                  {getStatusBadge(activeSelfMember.trafficLight?.label)}
+                </span>
+              </div>
+            </div>
+
+            {/* Right Side: Hidden Dropdown by Default & Collapse Toggle */}
+            <div className="flex items-center space-x-1.5 shrink-0">
+              <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/90 group-hover:bg-slate-800 border border-emerald-500/40 text-xs font-bold text-emerald-300 flex items-center space-x-1 transition-all active:scale-95">
+                <Filter className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[11px] font-extrabold hidden xs:inline-block">Report</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-emerald-400 transition-transform duration-200 ${showSelfPerformanceDetails ? 'rotate-180' : ''}`} />
+              </div>
+            </div>
+          </div>
+
+          {/* Hidden by Default Collapsible Metrics & Report Selector */}
+          {showSelfPerformanceDetails && (
+            <div className="pt-3.5 mt-3 border-t border-white/10 space-y-3.5 animate-fadeIn w-full">
+              {/* Report Selector Dropdown - Full Width on Mobile, Fixed Width on Big Screens */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full">
+                {/* <label className="text-xs font-bold text-slate-300 shrink-0">Selected Report:</label> */}
+                <div className="max-h-44 overflow-y-auto w-full sm:w-80 rounded-xl border border-emerald-500/40 bg-slate-900 shadow-inner">
+                  <select
+                    value={selectedSelfReportName || activeSelfMember.batch_name || ''}
+                    onChange={(e) => setSelectedSelfReportName(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-900 text-xs text-emerald-300 font-bold focus:outline-none cursor-pointer"
+                  >
+                    {selfUserReports.map(({ batchName }) => (
+                      <option key={batchName} value={batchName} className="bg-slate-900 text-emerald-300 py-1 font-bold">
+                        {batchName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Metric Breakdown Grid - 1 card per row on mobile */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                {/* Zone & Score */}
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Traffic Light Score</span>
+                  <div className="flex items-center justify-between">
+                    {getStatusBadge(activeSelfMember.trafficLight?.label)}
+                    <span className="text-sm font-black text-white font-mono">{activeSelfMember.score || 0} Pts</span>
+                  </div>
+                </div>
+
+                {/* Attendance Breakdown */}
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Attendance Record</span>
+                  <div className="flex items-center space-x-1.5 text-[11px] font-black font-mono">
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{activeSelfMember.P || 0} Pres</span>
+                    <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400">{activeSelfMember.A || 0} Abs</span>
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">{activeSelfMember.S || 0} Sub</span>
+                  </div>
+                </div>
+
+                {/* Referrals */}
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Referrals Given</span>
+                  <span className="text-base font-black text-emerald-400">{activeSelfMember.RGT || 0} Referrals</span>
+                </div>
+
+                {/* Visitors */}
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Visitors Brought</span>
+                  <span className="text-base font-black text-cyan-400">{activeSelfMember.V || 0} Visitors</span>
+                </div>
+
+                {/* 1-to-1s */}
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">1-to-1 Meetings</span>
+                  <span className="text-base font-black text-amber-400">{activeSelfMember.OneToOnes || 0} Meetings</span>
+                </div>
+
+                {/* CEU */}
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">CEU Education</span>
+                  <span className="text-base font-black text-purple-400">{activeSelfMember.CEU || 0} Credits</span>
+                </div>
+
+                {/* TYFCB Business */}
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-emerald-500/30 space-y-1 col-span-1 sm:col-span-1 lg:col-span-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">TYFCB Business</span>
+                  <span className="text-lg font-black text-emerald-400 font-mono tracking-tight">
+                    ₹{Number(activeSelfMember.TYFCB || 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </GlassCard>
+      </div>
+    )}
+
       {/* --- TOP SUMMARY CARDS (SHOWN ONLY WHEN VIEWING SPECIFIC ACTIVE REPORT) --- */}
       {Boolean(activeReportName) && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
@@ -412,13 +600,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   Upload your BNI Traffic Light Excel file to automatically calculate PALMS scores, generate level-up nudges, and track member performance.
                 </p>
               </div>
-              <button
+              {/* <button
                 onClick={onOpenImport}
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all inline-flex items-center space-x-2"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 <span>Upload First Excel Report</span>
-              </button>
+              </button> */}
             </GlassCard>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

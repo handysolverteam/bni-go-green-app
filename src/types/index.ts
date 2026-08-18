@@ -107,6 +107,8 @@ export interface TrafficLightStatus {
 export interface Member {
   id?: string;
   org_id?: string;
+  user_id?: string;
+  avatar_url?: string;
   Name: string;
   Chapter?: string;
   Region?: string;

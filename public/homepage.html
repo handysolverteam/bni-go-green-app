@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handychapter — Chapter Operations & Scoring Platform</title>
+    <meta name="description" content="Handychapter is the high-velocity chapter operations platform with 100-point scoring engine and direct WhatsApp outreach for directors.">
+    
+    <!-- Fonts & Tailwind -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-[#060a12] text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-white relative">
+
+    <!-- Background Orbs -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[140px]"></div>
+        <div class="absolute bottom-[-10%] right-[10%] w-[400px] h-[400px] bg-teal-500/10 rounded-full blur-[120px]"></div>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-40 w-full glass-card border-b border-white/10 px-4 sm:px-8 py-4">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <a href="/homepage.html" class="flex items-center space-x-2.5">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-400 p-[2px] shadow-lg shadow-emerald-500/30">
+                    <div class="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center">
+                        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                </div>
+                <span class="font-black text-xl tracking-tight text-white">Handychapter</span>
+            </a>
+
+            <div class="flex items-center space-x-4 text-xs sm:text-sm font-semibold">
+                <a href="/privacy.html" class="text-slate-300 hover:text-emerald-400 transition-colors">Privacy Policy</a>
+                <a href="/terms.html" class="text-slate-300 hover:text-emerald-400 transition-colors">Terms of Service</a>
+                <a href="/" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-lg shadow-emerald-500/25 transition-all">Director Login</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area (Unauthenticated Public Access) -->
+    <main class="max-w-6xl mx-auto px-4 sm:px-8 py-12 sm:py-20 relative z-10 flex-1 space-y-16">
+        
+        <!-- Hero Banner -->
+        <div class="text-center space-y-6 max-w-3xl mx-auto">
+            <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>Official Handychapter Operations Platform</span>
+            </div>
+            
+            <h1 class="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
+                High-Velocity Analytics & <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">Direct WhatsApp Outreach</span>
+            </h1>
+
+            <p class="text-slate-300 text-sm sm:text-base leading-relaxed">
+                Handychapter empowers chapter directors to track member participation, automate 100-point performance scoring, generate executive reports, and send instant WhatsApp nudges.
+            </p>
+
+            <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
+                <a href="/" class="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/30 transition-all hover:scale-105">
+                    Launch Director Portal
+                </a>
+                <a href="/privacy.html" class="w-full sm:w-auto px-6 py-3.5 rounded-xl glass-card hover:bg-slate-800 text-slate-200 font-bold text-sm transition-all border border-white/10">
+                    Review Privacy Policy
+                </a>
+            </div>
+        </div>
+
+        <!-- App Features Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8">
+            <div class="glass-card p-6 sm:p-8 rounded-2xl space-y-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"/></svg>
+                </div>
+                <h3 class="text-lg font-extrabold text-white">100-Point Score Engine</h3>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    Automated evaluation engine calculating member referrals, one-on-ones, chapter visitor points, and attendance ranks.
+                </p>
+            </div>
+
+            <div class="glass-card p-6 sm:p-8 rounded-2xl space-y-3">
+                <div class="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                </div>
+                <h3 class="text-lg font-extrabold text-white">Direct WhatsApp Nudge</h3>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    Send personalized WhatsApp reminders and performance breakdown reports directly to chapter members with 1 click.
+                </p>
+            </div>
+
+            <div class="glass-card p-6 sm:p-8 rounded-2xl space-y-3">
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <h3 class="text-lg font-extrabold text-white">Google Single Sign-On</h3>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    Secure enterprise authentication via Google OAuth 2.0 with zero password storage and 256-bit SSL encryption.
+                </p>
+            </div>
+        </div>
+
+        <!-- Google OAuth Access Clarification Banner -->
+        <div class="glass-card p-6 sm:p-8 rounded-2xl border border-emerald-500/30 space-y-3">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                <span>Google OAuth User Scope & Privacy Guarantee</span>
+            </h3>
+            <p class="text-xs text-slate-300 leading-relaxed">
+                Handychapter only requests basic Google profile info (name, email address, profile photo) to authenticate chapter directors. We <strong>never</strong> request access to your Google Drive, Gmail messages, or private Google Contacts.
+            </p>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full border-t border-white/10 glass-card py-6 text-center text-xs text-slate-400 relative z-20">
+        <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p>© 2026 Handychapter • Chapter Operations Platform</p>
+            <div class="flex items-center space-x-4">
+                <a href="/homepage.html" class="hover:text-emerald-400 transition-colors">Overview</a>
+                <a href="/privacy.html" class="hover:text-emerald-400 transition-colors">Privacy Policy</a>
+                <a href="/terms.html" class="hover:text-emerald-400 transition-colors">Terms of Service</a>
+                <a href="mailto:connect@handysolver.com" class="hover:text-emerald-400 transition-colors">Contact Support</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

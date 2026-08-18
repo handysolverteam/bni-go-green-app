@@ -6,7 +6,7 @@ import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { useToast } from '../context/ToastContext';
 import {
   MessageSquare, Copy, Check, Send, Play, Pause,
-  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, EyeOff, FileText, Edit, X, Tag, Phone, Search, RefreshCw
+  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, EyeOff, FileText, Edit, X, Tag, Phone, Search, RefreshCw, Loader2
 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
@@ -208,12 +208,17 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   const [dbSignature, setDbSignature] = useState(customSignature || 'Keep the momentum going! 💪');
   const [enableSignature, setEnableSignature] = useState(true);
 
+  const [dbScoreTerm, setDbScoreTerm] = useState('Go Green');
+  const [dbCountryCode, setDbCountryCode] = useState('+91');
+
   useEffect(() => {
     if (orgId && user?.uid) {
       supabaseService.fetchOrgSettings(orgId, user.uid).then(res => {
         if (res) {
           if (res.signature) setDbSignature(res.signature);
           if (res.enableSignature !== undefined) setEnableSignature(Boolean(res.enableSignature));
+          if ((res as any).scoreTerm) setDbScoreTerm((res as any).scoreTerm);
+          if ((res as any).defaultCountryCode) setDbCountryCode((res as any).defaultCountryCode);
         }
       });
     }
@@ -225,11 +230,11 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       return customMessages[key];
     }
     const finalSignature = enableSignature ? dbSignature : '';
-    return buildMemberMessage(member, { signature: finalSignature });
+    return buildMemberMessage(member, { signature: finalSignature, scoreTerm: dbScoreTerm });
   };
 
   const getWhatsAppLink = (member: Member, message: string): string => {
-    return getWhatsAppUrl(member.Phone || '', message);
+    return getWhatsAppUrl(member.Phone || '', message, dbCountryCode);
   };
 
   const [expandedPreviews, setExpandedPreviews] = useState<Record<string, boolean>>({});
@@ -618,7 +623,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                         {/* Phone section */}
                         <div>
                           {(!member.Phone || editingPhoneMap[key] !== undefined) ? (
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full pt-1">
+                            <div className="flex flex-row items-center gap-1.5 w-full sm:w-auto pt-1">
                               <input
                                 type="tel"
                                 inputMode="numeric"
@@ -639,21 +644,37 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                                     );
                                   }
                                 }}
-                                className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white w-full sm:w-48 border-emerald-500/40"
+                                className="px-3 py-1.5 rounded-lg glass-input text-xs font-mono text-white flex-1 min-w-0 sm:flex-initial sm:w-44 border-emerald-500/40"
                               />
-                              <button
-                                onClick={() => handleSaveDetails(
-                                  member,
-                                  editingPhoneMap[key] ?? member.Phone ?? '',
-                                  ''
+                              <div className="flex items-center space-x-1.5 shrink-0">
+                                <button
+                                  onClick={() => handleSaveDetails(
+                                    member,
+                                    editingPhoneMap[key] ?? member.Phone ?? '',
+                                    ''
+                                  )}
+                                  disabled={savingPhoneId === key}
+                                  className="p-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md flex items-center justify-center transition-all shrink-0 active:scale-95"
+                                  title="Save Phone Number"
+                                >
+                                  {savingPhoneId === key ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" /> : <Check className="w-3.5 h-3.5" />}
+                                </button>
+                                {Boolean(member.Phone) && (
+                                  <button
+                                    onClick={() => {
+                                      setEditingPhoneMap(prev => {
+                                        const next = { ...prev };
+                                        delete next[key];
+                                        return next;
+                                      });
+                                    }}
+                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-white/10 transition-all shrink-0"
+                                    title="Cancel Editing"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
                                 )}
-                                disabled={savingPhoneId === key}
-                                className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md flex items-center justify-center space-x-1 transition-all w-full sm:w-auto shrink-0"
-                                title="Save Phone Number"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>{savingPhoneId === key ? 'Saving...' : 'Save'}</span>
-                              </button>
+                              </div>
                             </div>
                           ) : (
                             <div className="flex items-center space-x-2.5 text-xs pt-0.5 flex-wrap gap-y-1">
@@ -746,7 +767,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                           <div className="flex items-center sm:justify-end">
                           {editingPreviewKey === key ? (
                             <div className="flex items-center space-x-1.5">
-                              <button
+                              {/* <button
                                 type="button"
                                 onClick={() => handleRegenerateMessage(key, member)}
                                 className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-bold border border-emerald-500/30 flex items-center space-x-1 transition-all"
@@ -754,7 +775,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                               >
                                 <RefreshCw className="w-3.5 h-3.5" />
                                 <span>Regenerate</span>
-                              </button>
+                              </button> */}
                               <button
                                 type="button"
                                 onClick={() => setEditingPreviewKey(null)}
@@ -774,7 +795,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                             </div>
                           ) : (
                             <div className="flex items-center space-x-1.5">
-                              <button
+                              {/* <button
                                 type="button"
                                 onClick={() => handleRegenerateMessage(key, member)}
                                 className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-bold border border-emerald-500/30 flex items-center space-x-1 transition-all"
@@ -782,7 +803,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                               >
                                 <RefreshCw className="w-3.5 h-3.5" />
                                 <span>Regenerate</span>
-                              </button>
+                              </button> */}
                               <button
                                 type="button"
                                 onClick={() => startEditingMessage(key, member)}
