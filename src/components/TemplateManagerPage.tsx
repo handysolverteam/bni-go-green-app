@@ -4,6 +4,7 @@ import { OutreachTemplate } from '../types';
 import { supabaseService, DEFAULT_OUTREACH_TEMPLATES } from '../services/supabaseService';
 import { useToast } from '../context/ToastContext';
 import { substituteKeywords } from '../lib/outreachUtils';
+import { UniversalModal } from './UniversalModal';
 import {
   FileText, Plus, Edit, Trash2, Check, Sparkles, Tag, Eye, RefreshCw, Copy, Layers, Save
 } from 'lucide-react';
@@ -196,118 +197,103 @@ export const TemplateManagerPage: React.FC<TemplateManagerPageProps> = ({ orgId,
         </button>
       </div>
 
-      {isEditing && (
-        <div
-          onClick={(e) => { if (e.target === e.currentTarget) setIsEditing(false); }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md animate-fadeIn cursor-pointer"
-        >
-          <GlassCard className="w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 border-t sm:border border-emerald-500/40 bg-slate-900/95 shadow-2xl rounded-t-3xl sm:rounded-3xl cursor-default">
-            <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-1 sm:hidden shrink-0" />
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-base font-black text-white flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-emerald-400" />
-                <span>{editingId ? 'Edit Outreach Template' : 'Create New Outreach Template'}</span>
-              </h3>
-              <button
-                onClick={() => setIsEditing(false)}
-                className="text-xs font-bold text-slate-400 hover:text-white px-3 py-1 rounded-lg bg-slate-800"
-              >
-                Cancel
-              </button>
+      <UniversalModal
+        isOpen={isEditing}
+        onClose={() => setIsEditing(false)}
+        title={editingId ? 'Edit Outreach Template' : 'Create New Outreach Template'}
+        icon={<Sparkles className="w-5 h-5 text-emerald-400" />}
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2 space-y-1">
+              <label className="text-xs font-bold text-slate-300">Template Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Green Tier Leadership Nudge"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold text-white"
+              />
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2 space-y-1">
-                  <label className="text-xs font-bold text-slate-300">Template Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Green Tier Leadership Nudge"
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-semibold text-white"
-                  />
-                </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-300">Target Score Tier</label>
+              <select
+                value={targetStatus}
+                onChange={(e) => setTargetStatus(e.target.value as any)}
+                className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-bold text-white bg-slate-900"
+              >
+                <option value="All">🌐 All Tiers</option>
+                <option value="Green">🟢 Green Tier</option>
+                <option value="Amber">🟡 Amber Tier</option>
+                <option value="Red">🔴 Red Tier</option>
+                <option value="Grey">⚪ Grey Tier</option>
+              </select>
+            </div>
+          </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">Target Score Tier</label>
-                  <select
-                    value={targetStatus}
-                    onChange={(e) => setTargetStatus(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs font-bold text-white bg-slate-900"
-                  >
-                    <option value="All">🌐 All Tiers</option>
-                    <option value="Green">🟢 Green Tier</option>
-                    <option value="Amber">🟡 Amber Tier</option>
-                    <option value="Red">🔴 Red Tier</option>
-                    <option value="Grey">⚪ Grey Tier</option>
-                  </select>
-                </div>
-              </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300">Message Body Template *</label>
+              <span className="text-[10px] text-slate-400">Use dynamic keywords below</span>
+            </div>
+            <textarea
+              required
+              rows={6}
+              value={messageTemplate}
+              onChange={(e) => setMessageTemplate(e.target.value)}
+              placeholder="Dear {{name}}, congratulations on your {{score}}/100 score in BNI {{chapter}}..."
+              className="w-full p-3.5 rounded-xl glass-input text-xs font-mono text-white leading-relaxed resize-y"
+            />
+          </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-300">Message Body Template *</label>
-                  <span className="text-[10px] text-slate-400">Use dynamic keywords below</span>
-                </div>
-                <textarea
-                  required
-                  rows={6}
-                  value={messageTemplate}
-                  onChange={(e) => setMessageTemplate(e.target.value)}
-                  placeholder="Dear {{name}}, congratulations on your {{score}}/100 score in BNI {{chapter}}..."
-                  className="w-full p-3.5 rounded-xl glass-input text-xs font-mono text-white leading-relaxed resize-y"
-                />
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-white/10 space-y-2">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Dynamic Keywords (Click to Insert):</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {['{{name}}', '{{score}}', '{{traffic_light}}', '{{present}}', '{{absent}}', '{{referrals}}', '{{tyfcb}}', '{{one_to_ones}}', '{{ceu}}', '{{sponsors}}', '{{chapter}}'].map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => setMessageTemplate(prev => `${prev} ${tag}`)}
-                      className="px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono font-bold transition-all"
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-1.5">
-                <div className="text-[10px] font-extrabold uppercase text-emerald-400 flex items-center gap-1.5">
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Live Rendered Sample Preview:</span>
-                </div>
-                <div className="text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed p-2.5 rounded-lg bg-slate-950/90 border border-white/5">
-                  {previewRendered}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-white/10">
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-white/10 space-y-2">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Dynamic Keywords (Click to Insert):</div>
+            <div className="flex flex-wrap gap-1.5">
+              {['{{name}}', '{{score}}', '{{traffic_light}}', '{{present}}', '{{absent}}', '{{referrals}}', '{{tyfcb}}', '{{one_to_ones}}', '{{ceu}}', '{{sponsors}}', '{{chapter}}'].map((tag) => (
                 <button
+                  key={tag}
                   type="button"
-                  onClick={() => setIsEditing(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
+                  onClick={() => setMessageTemplate(prev => `${prev} ${tag}`)}
+                  className="px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono font-bold transition-all"
                 >
-                  Cancel
+                  {tag}
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{isSaving ? 'Saving...' : 'Save Template'}</span>
-                </button>
-              </div>
-            </form>
-          </GlassCard>
-        </div>
-      )}
+              ))}
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-1.5">
+            <div className="text-[10px] font-extrabold uppercase text-emerald-400 flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5" />
+              <span>Live Rendered Sample Preview:</span>
+            </div>
+            <div className="text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed p-2.5 rounded-lg bg-slate-950/90 border border-white/5">
+              {previewRendered}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end space-x-2 pt-2 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSaving ? 'Saving...' : 'Save Template'}</span>
+            </button>
+          </div>
+        </form>
+      </UniversalModal>
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -444,13 +444,12 @@ export const AppContent: React.FC = () => {
       )}
 
       {activeTab === 'import' && (
-        <div className="max-w-3xl mx-auto">
-          <ImportModal
-            existingBatchNames={importLogs.map(l => l.batch_name).filter((b): b is string => Boolean(b))}
-            onImportComplete={handleImportMembers}
-            onClose={() => setActiveTab('dashboard')}
-          />
-        </div>
+        <ImportModal
+          isOpen={activeTab === 'import'}
+          existingBatchNames={importLogs.map(l => l.batch_name).filter((b): b is string => Boolean(b))}
+          onImportComplete={handleImportMembers}
+          onClose={() => setActiveTab('dashboard')}
+        />
       )}
 
       {activeTab === 'nudges' && (
@@ -496,6 +495,7 @@ export const AppContent: React.FC = () => {
       {/* Member Detail Modal */}
       {selectedMember && (
         <MemberDetailModal
+          isOpen={!!selectedMember}
           member={selectedMember}
           onClose={() => setSelectedMember(null)}
         />

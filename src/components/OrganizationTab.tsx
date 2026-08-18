@@ -6,7 +6,8 @@ import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { findBestMatchingMember } from '../lib/nameMatcher';
-import { arePhoneNumbersMatching, formatPhoneWithCountryCode } from '../lib/whatsappUtils';
+import { arePhoneNumbersMatching, formatPhoneWithCountryCode, getWhatsAppUrl } from '../lib/whatsappUtils';
+import { UniversalModal } from './UniversalModal';
 import * as XLSX from 'xlsx';
 
 interface OrganizationTabProps {
@@ -132,10 +133,22 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
     if (!org?.code) return;
     const orgName = org.name || 'our organization';
     const siteUrl = window.location.origin;
-    const inviteMsg = `👋 Hi!\n\nYou're invited to join *${orgName}* on HandyChapter.\n\n📍 Website: ${siteUrl}\n🔑 Organization Join Code: *${org.code}*\n\nSign in to connect with our team! 🚀`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(inviteMsg)}`;
-    window.open(whatsappUrl, '_blank');
-    showToast('Opening WhatsApp to share invite code!', 'info');
+    const inviteMsg = `Hi! Join ${orgName} on HandyChapter!\n\nWebsite: ${siteUrl}\nOrganization Join Code: ${org.code}\n\nEnter this 6-digit code after logging in to connect with our team!`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: `Join ${orgName} on HandyChapter`,
+        text: inviteMsg,
+        url: siteUrl,
+      }).catch(() => {
+        const url = getWhatsAppUrl('', inviteMsg, defaultCountryCode);
+        window.open(url, '_blank');
+      });
+    } else {
+      const url = getWhatsAppUrl('', inviteMsg, defaultCountryCode);
+      window.open(url, '_blank');
+    }
+    showToast('Sharing invite code!', 'info');
   };
 
   const handleRoleChange = async (targetUserId: string, newRole: UserRole) => {
@@ -370,7 +383,8 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12 px-2 sm:px-0">
+    <>
+      <div className="space-y-6 max-w-5xl mx-auto pb-12 px-2 sm:px-0">
       {/* Card 1: Chapter Details & 6-Digit Code */}
       <GlassCard glow className="p-4 sm:p-6 space-y-6 border-white/10 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
@@ -786,150 +800,118 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
           </table>
         </div>
       </GlassCard>
+      </div>
 
       {/* MODAL 1: EDIT MEMBER PHONE & JOINING DATE */}
-      {selectedEditMember && (
-        <div role="dialog" className="fixed inset-0 z-50 flex items-center justify-center p-3 pt-10 sm:p-4 bg-transparent overflow-y-auto animate-fadeIn">
-          <div className="w-full max-w-md bg-[#0a0f1d] border border-white/20 rounded-2xl p-6 space-y-5 modal-card-shadow relative">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <UserCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-white">Edit Member Details</h3>
-                  <p className="text-xs text-slate-400 truncate max-w-[240px]">{selectedEditMember.Name}</p>
-                </div>
-              </div>
-              <button
-                onClick={handleCloseEditModal}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <UniversalModal
+        isOpen={!!selectedEditMember}
+        onClose={handleCloseEditModal}
+        title={`Edit ${selectedEditMember?.Name || 'Member'}`}
+        icon={<UserCheck className="w-5 h-5" />}
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          {/* Phone Number Field */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+              <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Phone Number</span>
+            </label>
+            <input
+              type="tel"
+              inputMode="numeric"
+              value={editPhone}
+              onChange={(e) => setEditPhone(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="9876543210"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
+            />
+          </div>
 
-            {/* Modal Form */}
-            <div className="space-y-4">
-              {/* Phone Number Field */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
-                  <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Phone Number</span>
-                </label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                  placeholder="9876543210"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
-                />
-              </div>
+          {/* Induction / Joining Date Field */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Induction / Joining Date</span>
+            </label>
+            <input
+              type="date"
+              value={editJoinDate}
+              onChange={(e) => setEditJoinDate(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-sm text-white font-mono focus:outline-none focus:border-emerald-500 transition-all"
+            />
+          </div>
 
-              {/* Induction / Joining Date Field */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Induction / Joining Date</span>
-                </label>
-                <input
-                  type="date"
-                  value={editJoinDate}
-                  onChange={(e) => setEditJoinDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-sm text-white font-mono focus:outline-none focus:border-emerald-500 transition-all"
-                />
-              </div>
+          {/* Link to Organization User Account Dropdown */}
+          <div className="space-y-1.5 pt-1">
+            <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Link to Organization User Account</span>
+            </label>
+            <select
+              value={editUserId || ''}
+              onChange={(e) => {
+                const uId = e.target.value;
+                setEditUserId(uId);
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-emerald-300 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer"
+            >
+              <option value="">-- Automatic Matching (by Phone/Email) --</option>
+              {members.map(m => {
+                const optionVal = m.user_id || m.id;
+                if (!optionVal || typeof optionVal !== 'string' || optionVal.trim() === '') return null;
+                const uName = m.profile?.full_name || m.user_email || optionVal;
+                const uPhone = m.profile?.phone ? ` (${m.profile.phone})` : '';
+                return (
+                  <option key={optionVal} value={optionVal}>
+                    {uName}{uPhone} [{m.role.toUpperCase()}]
+                  </option>
+                );
+              })}
+            </select>
+            <p className="text-[11px] text-slate-400">
+              Manually link this report member to an organization user profile & avatar.
+            </p>
+          </div>
 
-              {/* Link to Organization User Account Dropdown */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
-                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Link to Organization User Account</span>
-                </label>
-                <select
-                  value={editUserId || ''}
-                  onChange={(e) => {
-                    const uId = e.target.value;
-                    setEditUserId(uId);
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-emerald-300 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer"
-                >
-                  <option value="">-- Automatic Matching (by Phone/Email) --</option>
-                  {members.map(m => {
-                    const optionVal = m.user_id || m.id;
-                    if (!optionVal || typeof optionVal !== 'string' || optionVal.trim() === '') return null;
-                    const uName = m.profile?.full_name || m.user_email || optionVal;
-                    const uPhone = m.profile?.phone ? ` (${m.profile.phone})` : '';
-                    return (
-                      <option key={optionVal} value={optionVal}>
-                        {uName}{uPhone} [{m.role.toUpperCase()}]
-                      </option>
-                    );
-                  })}
-                </select>
-                <p className="text-[11px] text-slate-400">
-                  Manually link this report member to an organization user profile & avatar.
-                </p>
-              </div>
-            </div>
-
-            {/* Modal Action Buttons */}
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <button
-                onClick={handleCloseEditModal}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all border border-white/10"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveMemberDetails}
-                disabled={isSavingMember}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center space-x-2 shadow-lg shadow-emerald-500/25 transition-all active:scale-95 disabled:opacity-75"
-              >
-                {isSavingMember ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>Save Changes</span>
-                  </>
-                )}
-              </button>
-            </div>
-
+          {/* Modal Action Buttons */}
+          <div className="flex items-center justify-end space-x-3 pt-3 border-t border-white/10">
+            <button
+              onClick={handleCloseEditModal}
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all border border-white/10"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveMemberDetails}
+              disabled={isSavingMember}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center space-x-2 shadow-lg shadow-emerald-500/25 transition-all active:scale-95 disabled:opacity-75"
+            >
+              {isSavingMember ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Save Changes</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
-      )}
+      </UniversalModal>
 
       {/* MODAL 2: EXCEL/CSV ROSTER IMPORT SUMMARY MODAL */}
-      {importSummaryModal && importSummaryModal.visible && (
-        <div role="dialog" className="fixed inset-0 z-50 flex items-center justify-center p-3 pt-10 sm:p-4 bg-transparent overflow-y-auto animate-fadeIn">
-          <div className="w-full max-w-lg bg-[#0a0f1d] border border-white/20 rounded-2xl p-6 space-y-5 modal-card-shadow relative">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-white">Roster Update Complete</h3>
-                </div>
-              </div>
-              <button
-                onClick={() => setImportSummaryModal(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
+      {importSummaryModal && (
+        <UniversalModal
+          isOpen={importSummaryModal.visible}
+          onClose={() => setImportSummaryModal(null)}
+          title="Roster Update Complete"
+          icon={<CheckCircle2 className="w-5 h-5" />}
+          maxWidth="max-w-lg"
+        >
+          <div className="space-y-4">
             {/* Summary Stat Grid */}
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-xl bg-slate-900 border border-white/5">
@@ -967,18 +949,17 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setImportSummaryModal(null)}
-                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/25 transition-all"
+                className="px-5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs hover:bg-emerald-400 transition-all"
               >
-                Close & View Roster
+                Done
               </button>
             </div>
-
           </div>
-        </div>
+        </UniversalModal>
       )}
-    </div>
+    </>
   );
 };

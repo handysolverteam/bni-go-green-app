@@ -3,7 +3,7 @@ import { Member } from '../types';
 import { scoreMember } from '../lib/scoringEngine';
 import { GlassCard } from './GlassCard';
 import { UserPlus, UserCheck, X, Save, Calculator } from 'lucide-react';
-
+import { UniversalModal } from './UniversalModal';
 import { useToast } from '../context/ToastContext';
 
 interface AddMemberModalProps {
@@ -11,20 +11,23 @@ interface AddMemberModalProps {
   memberToEdit?: Member | null;
   onSave: (member: Member) => Promise<void>;
   onClose: () => void;
+  chapters?: string[];
 }
 
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   isOpen,
-  memberToEdit,
-  onSave,
   onClose,
+  onSave,
+  memberToEdit = null,
+  chapters = [],
 }) => {
   const { showToast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+
   const [formData, setFormData] = useState<Partial<Member>>({
     Name: '',
-    Phone: '',
-    Email: '',
-    P: 24,
+    Chapter: chapters[0] || 'Handychapter',
+    P: 0,
     A: 0,
     S: 0,
     M: 0,
@@ -34,19 +37,22 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
     CEU: 0,
     OneToOnes: 0,
     Sponsors: 0,
+    Phone: '',
+    JoinDate: '',
   });
-
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (memberToEdit) {
-      setFormData({ ...memberToEdit });
+      setFormData({
+        ...memberToEdit,
+        Phone: memberToEdit.Phone || '',
+        JoinDate: memberToEdit.JoinDate || '',
+      });
     } else {
       setFormData({
         Name: '',
-        Phone: '',
-        Email: '',
-        P: 24,
+        Chapter: chapters[0] || 'Handychapter',
+        P: 0,
         A: 0,
         S: 0,
         M: 0,
@@ -56,82 +62,61 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         CEU: 0,
         OneToOnes: 0,
         Sponsors: 0,
+        Phone: '',
+        JoinDate: '',
       });
     }
-  }, [memberToEdit, isOpen]);
-
-  if (!isOpen) return null;
+  }, [memberToEdit, chapters, isOpen]);
 
   const currentScored = scoreMember(formData as Member);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!formData.Name?.trim()) {
-      showToast('Please enter Member Full Name', 'error');
-      return;
-    }
-
-    if (!formData.Phone?.trim()) {
-      showToast('WhatsApp Phone number is compulsory for member outreach', 'error');
+      showToast('Member name is required!', 'warning');
       return;
     }
 
     setIsLoading(true);
     try {
-      const finalMember = scoreMember({
-        ...formData,
+      const updatedMember: Member = {
+        id: memberToEdit?.id || `mem_${Date.now()}`,
         Name: formData.Name.trim(),
-        Phone: formData.Phone.trim(),
-        id: memberToEdit?.id || undefined,
-      } as Member);
+        Chapter: formData.Chapter || 'Handychapter',
+        P: Number(formData.P) || 0,
+        A: Number(formData.A) || 0,
+        S: Number(formData.S) || 0,
+        M: Number(formData.M) || 0,
+        RGT: Number(formData.RGT) || 0,
+        V: Number(formData.V) || 0,
+        TYFCB: Number(formData.TYFCB) || 0,
+        CEU: Number(formData.CEU) || 0,
+        OneToOnes: Number(formData.OneToOnes) || 0,
+        Sponsors: Number(formData.Sponsors) || 0,
+        Phone: formData.Phone || '',
+        JoinDate: formData.JoinDate || '',
+      };
 
-      await onSave(finalMember);
+      await onSave(updatedMember);
+      showToast(memberToEdit ? 'Member updated successfully!' : 'New member added successfully!', 'success');
       onClose();
     } catch (err) {
-      console.error('Save member error:', err);
-      showToast('Failed to save member', 'error');
+      showToast('Failed to save member.', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div
-      role="dialog"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 pt-10 sm:p-4 bg-transparent overflow-y-auto animate-fadeIn cursor-pointer"
+    <UniversalModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={memberToEdit ? `Edit ${memberToEdit.Name}` : 'Add New Member'}
+      icon={memberToEdit ? <UserCheck className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
+      maxWidth="max-w-xl"
     >
-      <GlassCard className="w-full max-w-xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col relative border-t sm:border border-emerald-500/40 modal-card-shadow overflow-hidden rounded-t-3xl sm:rounded-3xl">
-        {/* Mobile Drag Handle */}
-        <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto mt-2.5 sm:hidden shrink-0" />
-        {/* Modal Header */}
-        <div className="flex items-center justify-between p-2.5 sm:p-3 border-b border-white/10 shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              {memberToEdit ? <UserCheck className="w-6 h-6" /> : <UserPlus className="w-6 h-6" />}
-            </div>
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-white">
-                {memberToEdit ? `Edit ${memberToEdit.Name}` : 'Add New Member'}
-              </h2>
-              {/* <p className="text-xs text-slate-400">
-                Enter metrics to calculate score & sync to Supabase database.
-              </p> */}
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors z-20 shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+      {/* Scrollable Form Body */}
+      <form onSubmit={handleSubmit} className="space-y-4">
           {/* Live Score Preview Bar */}
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 space-y-2.5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -330,7 +315,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
             </button>
           </div>
         </form>
-      </GlassCard>
-    </div>
+    </UniversalModal>
   );
 };

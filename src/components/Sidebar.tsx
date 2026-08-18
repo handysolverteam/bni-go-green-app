@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
+import { UniversalModal } from './UniversalModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
@@ -330,92 +331,81 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       </div>
 
       {/* Preferences Modal (Persisted in localStorage) */}
-      {showModeModal && (
-        <div
-          onClick={(e) => { if (e.target === e.currentTarget) setShowModeModal(false); }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/25 backdrop-blur-md animate-fadeIn cursor-pointer"
-        >
-          <div className="glass-panel w-full max-w-sm p-4 sm:p-5 rounded-t-3xl sm:rounded-2xl space-y-4 sm:space-y-5 border-t sm:border border-emerald-500/30">
-            {/* Mobile Drag Handle */}
-            <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto -mt-2 sm:hidden shrink-0" />
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-base font-black text-white flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
-                <span>Preferences</span>
-              </h3>
-              <button onClick={() => setShowModeModal(false)} className="p-1 text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Light / Dark Mode Switcher */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-300">Theme Mode</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => toggleTheme('dark')}
-                  className={`p-3 rounded-xl border text-center text-xs font-extrabold flex items-center justify-center space-x-2 transition-all ${
-                    themeMode === 'dark'
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-md'
-                      : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Moon className="w-4 h-4" />
-                  <span>Dark Mode</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => toggleTheme('light')}
-                  className={`p-3 rounded-xl border text-center text-xs font-extrabold flex items-center justify-center space-x-2 transition-all ${
-                    themeMode === 'light'
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-md'
-                      : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Sun className="w-4 h-4" />
-                  <span>Light Mode</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Sidebar View Mode Options */}
-            <div className="space-y-2 pt-1">
-              <label className="text-xs font-bold text-slate-300">Sidebar View Mode</label>
+      <UniversalModal
+        isOpen={showModeModal}
+        onClose={() => setShowModeModal(false)}
+        title="Preferences"
+        icon={<SlidersHorizontal className="w-4 h-4 text-emerald-400" />}
+        maxWidth="max-w-sm"
+      >
+        <div className="space-y-4">
+          {/* Light / Dark Mode Switcher */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-300">Theme Mode</label>
+            <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => updateSidebarMode('full')}
-                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
-                  sidebarMode === 'full' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
+                type="button"
+                onClick={() => toggleTheme('dark')}
+                className={`p-3 rounded-xl border text-center text-xs font-extrabold flex items-center justify-center space-x-2 transition-all ${
+                  themeMode === 'dark'
+                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-md'
+                    : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <div>Expanded View</div>
-                <div className="text-[10px] text-slate-400 font-normal">Shows navigation icons and section titles</div>
+                <Moon className="w-4 h-4" />
+                <span>Dark Mode</span>
               </button>
 
               <button
-                onClick={() => updateSidebarMode('icons')}
-                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
-                  sidebarMode === 'icons' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
+                type="button"
+                onClick={() => toggleTheme('light')}
+                className={`p-3 rounded-xl border text-center text-xs font-extrabold flex items-center justify-center space-x-2 transition-all ${
+                  themeMode === 'light'
+                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-md'
+                    : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <div>Compact Icon View</div>
-                <div className="text-[10px] text-slate-400 font-normal">Minimal sidebar displaying icons only</div>
-              </button>
-
-              <button
-                onClick={() => updateSidebarMode('hover')}
-                className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
-                  sidebarMode === 'hover' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
-                }`}
-              >
-                <div>Expand on Hover</div>
-                <div className="text-[10px] text-slate-400 font-normal">Collapsed by default, expands when mouse hovers over sidebar</div>
+                <Sun className="w-4 h-4" />
+                <span>Light Mode</span>
               </button>
             </div>
           </div>
+
+          {/* Sidebar View Mode Options */}
+          <div className="space-y-2 pt-1">
+            <label className="text-xs font-bold text-slate-300">Sidebar View Mode</label>
+            <button
+              onClick={() => updateSidebarMode('full')}
+              className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
+                sidebarMode === 'full' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
+              }`}
+            >
+              <div>Expanded View</div>
+              <div className="text-[10px] text-slate-400 font-normal">Shows navigation icons and section titles</div>
+            </button>
+
+            <button
+              onClick={() => updateSidebarMode('icons')}
+              className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
+                sidebarMode === 'icons' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
+              }`}
+            >
+              <div>Compact Icon View</div>
+              <div className="text-[10px] text-slate-400 font-normal">Minimal sidebar displaying icons only</div>
+            </button>
+
+            <button
+              onClick={() => updateSidebarMode('hover')}
+              className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all ${
+                sidebarMode === 'hover' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900/60 border-white/5 text-slate-300'
+              }`}
+            >
+              <div>Expand on Hover</div>
+              <div className="text-[10px] text-slate-400 font-normal">Collapsed by default, expands when mouse hovers over sidebar</div>
+            </button>
+          </div>
         </div>
-      )}
+      </UniversalModal>
 
       {/* Logout Confirm Modal */}
       <ConfirmationModal

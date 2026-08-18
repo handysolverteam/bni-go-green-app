@@ -4,14 +4,16 @@ import { Upload, FileSpreadsheet, X, AlertCircle, Loader2, Tag } from 'lucide-re
 import { parsePalmsExcel } from '../lib/excelParser';
 import { Member } from '../types';
 import { useToast } from '../context/ToastContext';
+import { UniversalModal } from './UniversalModal';
 
 interface ImportModalProps {
+  isOpen: boolean;
   existingBatchNames?: string[];
   onImportComplete: (batchName: string, members: Member[], fileName: string, fileData?: string) => void;
   onClose: () => void;
 }
 
-export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [], onImportComplete, onClose }) => {
+export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, existingBatchNames = [], onImportComplete, onClose }) => {
   const { showToast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -103,57 +105,30 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
     input.click();
   };
 
-  // const handleDownloadSample = () => {
-  //   const buffer = generateSampleExcelBuffer();
-  //   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  //   const url = URL.createObjectURL(blob);
-  //   const a = document.createElement('a');
-  //   a.href = url;
-  //   a.download = 'BNI_Traffic_Lights_Sample.xlsx';
-  //   a.click();
-  //   URL.revokeObjectURL(url);
-  //   showToast('Downloaded 17-header sample Excel file', 'info');
-  // };
+  const resetState = () => {
+    setFileName(null);
+    setBatchName('');
+    setRawFileData('');
+    setParsedMembers([]);
+    setErrors([]);
+  };
 
   const handleConfirmImport = () => {
     if (parsedMembers.length > 0 && fileName) {
       const finalName = batchName.trim() || fileName.replace(/\.[^/.]+$/, '');
       onImportComplete(finalName, parsedMembers, fileName, rawFileData);
+      resetState();
     }
   };
 
   return (
-    <div
-      role="dialog"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 pt-10 sm:p-4 bg-transparent overflow-y-auto animate-fadeIn cursor-pointer"
+    <UniversalModal
+      isOpen={isOpen}
+      onClose={() => { resetState(); onClose(); }}
+      title="Upload Report"
+      icon={<FileSpreadsheet className="w-5 h-5" />}
+      maxWidth="max-w-2xl"
     >
-      <GlassCard className="w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col relative border-t sm:border border-emerald-500/40 modal-card-shadow overflow-hidden rounded-t-3xl sm:rounded-3xl">
-        {/* Mobile Sheet Drag Handle */}
-        <div className="w-12 h-1.5 rounded-full bg-slate-700/60 mx-auto mt-2.5 sm:hidden shrink-0" />
-        
-        {/* Header with Close Button */}
-        <div className="flex items-center justify-between p-2.5 sm:p-3 border-b border-white/10 shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 sm:p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-xl font-black text-white">Upload Report</h2>
-              {/* <p className="text-[11px] sm:text-xs text-slate-400">Import BNI Chapter Excel/CSV file to calculate scores</p> */}
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors z-20 shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Scrollable Content Body */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
           {/* File Dropzone / Small Re-upload Button + Info Capsules */}
           {fileName ? (
             <div className="flex flex-wrap items-center gap-2 pt-1 animate-fadeIn">
@@ -253,7 +228,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
               ))}
             </div>
           )}
-        </div>        {/* Footer Actions */}
+
+          {/* Footer Actions */}
         <div className="p-2.5 sm:p-3 border-t border-white/10 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Sample download option disabled/removed */}
           {/* <button
@@ -280,7 +256,6 @@ export const ImportModal: React.FC<ImportModalProps> = ({ existingBatchNames = [
             </button>
           </div>
         </div>
-      </GlassCard>
-    </div>
+    </UniversalModal>
   );
 };

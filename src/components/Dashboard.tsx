@@ -357,7 +357,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   return (
-    <div className="space-y-2 pb-12">
+    <>
+      <div className="space-y-2 pb-12">
       {/* --- DASHBOARD HEADER --- */}
       <PageHeader
         icon={<BarChart3 className="w-5 h-5" />}
@@ -996,6 +997,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </GlassCard>
         </div>
       )}
+      </div>
 
       {/* Add / Edit Member Modal */}
       {isAddModalOpen && (
@@ -1032,6 +1034,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           isLoading={isActionLoading}
         />
       )}
-    </div>
+    </>
   );
 };

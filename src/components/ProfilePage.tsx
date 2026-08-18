@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { UserProfileExtended, Organization, OrgMember } from '../types';
 import { GlassCard } from './GlassCard';
-import { User, ShieldCheck, Building2, Save, Check, Copy, Camera, Upload, Link } from 'lucide-react';
+import { User, ShieldCheck, Building2, Save, Check, Copy, Camera, Upload, Link, Share2 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useToast } from '../context/ToastContext';
+import { getWhatsAppUrl } from '../lib/whatsappUtils';
 
 interface ProfilePageProps {
   profile: UserProfileExtended | null;
@@ -24,6 +25,37 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
   const [isLoading, setIsLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  const handleCopyCode = () => {
+    if (org?.code) {
+      navigator.clipboard.writeText(org.code);
+      setCopiedCode(true);
+      showToast('Chapter invite code copied to clipboard!', 'info');
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
+  const handleShareInviteCode = () => {
+    if (!org?.code) return;
+    const orgName = org.name || 'our organization';
+    const siteUrl = window.location.origin;
+    const inviteMsg = `Hi! Join ${orgName} on HandyChapter!\n\nWebsite: ${siteUrl}\nOrganization Join Code: ${org.code}\n\nEnter this 6-digit code after logging in to connect with our team!`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: `Join ${orgName} on HandyChapter`,
+        text: inviteMsg,
+        url: siteUrl,
+      }).catch(() => {
+        const url = getWhatsAppUrl('', inviteMsg);
+        window.open(url, '_blank');
+      });
+    } else {
+      const url = getWhatsAppUrl('', inviteMsg);
+      window.open(url, '_blank');
+    }
+    showToast('Sharing invite code!', 'info');
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -58,14 +90,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
     }
   };
 
-  const handleCopyCode = () => {
-    if (org?.code) {
-      navigator.clipboard.writeText(org.code);
-      setCopiedCode(true);
-      showToast('Invite code copied to clipboard!', 'info');
-      setTimeout(() => setCopiedCode(false), 2000);
-    }
-  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,7 +130,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
   };
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-6 mx-auto">
       {/* Profile Banner Card */}
       <GlassCard glow className="p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -142,13 +167,22 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
                 <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Chapter Invite Code</div>
                 <div className="text-base font-black text-emerald-400 tracking-widest">{org.code}</div>
               </div>
-              <button
-                onClick={handleCopyCode}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
-                title="Copy Invite code"
-              >
-                {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-              </button>
+              <div className="flex items-center space-x-1.5 shrink-0">
+                <button
+                  onClick={handleCopyCode}
+                  className="p-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 transition-all shrink-0 active:scale-95 flex items-center justify-center"
+                  title="Copy Invite Code"
+                >
+                  {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={handleShareInviteCode}
+                  className="p-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black transition-all shrink-0 active:scale-95 flex items-center justify-center shadow-md shadow-emerald-500/20"
+                  title="Share Invite Code"
+                >
+                  <Share2 className="w-4 h-4 text-slate-950" />
+                </button>
+              </div>
             </div>
           )}
         </div>
