@@ -481,3 +481,61 @@ body.light-mode .ai-chat-action-btn {
   border: 1px solid rgba(0, 0, 0, 0.12) !important;
   color: #334155 !important;
 }
+
+/* Global Light Mode Overrides for Mobile Cards, Comparison Cards & Tables */
+body.light-mode .dark\:bg-slate-900\/60,
+body.light-mode .dark\:bg-slate-900\/80,
+body.light-mode .dark\:bg-slate-900\/90,
+body.light-mode .dark\:bg-slate-900\/95,
+body.light-mode .dark\:bg-slate-900,
+body.light-mode .dark\:bg-slate-950\/40,
+body.light-mode .dark\:bg-slate-800\/90,
+body.light-mode .dark\:bg-slate-800\/40,
+body.light-mode .dark\:bg-slate-800 {
+  background-color: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: #0f172a !important;
+}
+
+body.light-mode .dark\:text-white,
+body.light-mode .dark\:text-slate-100,
+body.light-mode .dark\:text-slate-200,
+body.light-mode .dark\:text-slate-300 {
+  color: #0f172a !important;
+}
+
+body.light-mode .dark\:text-slate-400 {
+  color: #64748b !important;
+}
+
+body.light-mode .dark\:border-white\/10,
+body.light-mode .dark\:border-white\/15,
+body.light-mode .dark\:border-white\/20,
+body.light-mode .dark\:border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+body.light-mode .bg-slate-100\/90 {
+  background-color: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+body.light-mode .border-slate-300\/80 {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Light Mode Card Badge / Sub-container Overrides */
+body.light-mode .bg-emerald-500\/5,
+body.light-mode .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+
+body.light-mode .bg-rose-500\/5,
+body.light-mode .bg-rose-500\/10 {
+  background-color: rgba(244, 63, 94, 0.08) !important;
+}
+
+body.light-mode .bg-cyan-500\/5,
+body.light-mode .bg-cyan-500\/10 {
+  background-color: rgba(6, 182, 212, 0.08) !important;
+}
