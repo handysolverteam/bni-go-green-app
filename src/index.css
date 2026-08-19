@@ -2,6 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Smooth Tab Page Transition Animations ── */
+@keyframes tab-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tab-enter-fast {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tab-page {
+  animation: tab-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+/* For Chapter AI which needs instant show (no layout shift) */
+.tab-page-instant {
+  animation: tab-enter-fast 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
 @layer base {
   html, body {
     touch-action: manipulation;
@@ -432,7 +466,7 @@ body.light-mode .ai-chat-ai-bubble {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
 }
 
-body.light-mode .ai-chat-ai-bubble div {
+body.light-mode .ai-chat-ai-bubble > .whitespace-pre-wrap {
   color: #0f172a !important;
 }
 
@@ -480,6 +514,70 @@ body.light-mode .ai-chat-action-btn {
   background-color: #e2e8f0 !important;
   border: 1px solid rgba(0, 0, 0, 0.12) !important;
   color: #334155 !important;
+}
+
+/* Chapter AI Sticky Navbar */
+.ai-chat-navbar {
+  background-color: rgba(2, 6, 23, 0.97);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+body.light-mode .ai-chat-navbar {
+  background-color: rgba(255, 255, 255, 0.97) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.10) !important;
+  box-shadow: 0 1px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+body.light-mode .ai-chat-navbar h2 {
+  color: #0f172a !important;
+}
+
+body.light-mode .ai-chat-navbar .ai-chat-nav-btn-secondary {
+  background-color: #e2e8f0 !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: #1e293b !important;
+}
+
+/* Chapter AI Bottom Input Bar */
+.ai-chat-input-bar {
+  background-color: rgba(2, 6, 23, 0.97);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+body.light-mode .ai-chat-input-bar {
+  background-color: rgba(248, 250, 252, 0.97) !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.10) !important;
+  box-shadow: 0 -1px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Input field wrapper inside the bar */
+.ai-chat-input-wrap {
+  background-color: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+body.light-mode .ai-chat-input-wrap {
+  background-color: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Input text and placeholder */
+.ai-chat-input-field {
+  color: #f8fafc;
+  background: transparent;
+}
+
+body.light-mode .ai-chat-input-field {
+  color: #0f172a !important;
+}
+
+body.light-mode .ai-chat-input-field::placeholder {
+  color: #94a3b8 !important;
 }
 
 /* Global Light Mode Overrides for Mobile Cards, Comparison Cards & Tables */

@@ -56,6 +56,13 @@ export const geminiService = {
       ceu: m.CEU || (m as any).ceu || 0,
       referrals: m.ReferralsGivenRate ?? m.RGT ?? (m as any).referrals_given ?? 0,
       tyfcb: m.TYFCB || (m as any).tyfcb || 0,
+      present: m.P || (m as any).present || 0,
+      absent: m.A || (m as any).absent || 0,
+      substitute: m.S || (m as any).substitute || 0,
+      medical: m.M || (m as any).medical || 0,
+      visitors: m.V || (m as any).visitors || 0,
+      sponsors: m.Sponsors || (m as any).sponsors || 0,
+      email: m.Email || (m as any).email || 'N/A',
       reportBatch: m.batch_name || (m as any).batch_name || 'Latest',
     }));
 
@@ -78,6 +85,12 @@ REAL-TIME READ-ONLY SUPABASE DATABASE SNAPSHOT FOR ${orgName} (${snapshot.member
 
 👥 ALL MEMBERS RECORDS (${snapshot.members.length} Total Tracked Members):
 ${JSON.stringify(datasetSummary, null, 0)}
+
+📄 UPLOADED REPORT BATCHES (${snapshot.importLogs?.length || 0} Total):
+${JSON.stringify((snapshot.importLogs || []).map(l => ({ batchName: l.batch_name || l.file_name, totalRecords: l.total_records, greenCount: l.green_count, amberCount: l.amber_count, redCount: l.red_count, avgScore: l.avg_score, uploadedAt: l.created_at })), null, 0)}
+
+📝 AVAILABLE OUTREACH TEMPLATES (${snapshot.templates?.length || 0} Total):
+${JSON.stringify(snapshot.templates || [], null, 0)}
 
 CRITICAL CONVERSATIONAL & DATA RULES:
 1. INTENT ANALYSIS & COUNTER-QUESTION RULE: Before answering, analyze what the user is asking for against the live database snapshot. If the user's question is ambiguous, incomplete, or matches multiple entities, ask a friendly counter-question offering specific choices from the live database snapshot. If the user asks to "create template for X", generate the WhatsApp Outreach Template directly—do NOT confuse template requests with member comparisons!
@@ -132,7 +145,7 @@ CRITICAL CONVERSATIONAL & DATA RULES:
           }
         } catch (err) {
           // Silently fail over to local AI engine
-          break;
+          continue;
         }
       }
     }

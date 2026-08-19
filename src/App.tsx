@@ -456,92 +456,95 @@ export const AppContent: React.FC = () => {
       orgMember={orgMember}
       userProfile={userProfile}
     >
-      {activeTab === 'dashboard' && (
-        <Dashboard
-          members={members}
-          importLogs={importLogs}
-          selectedReportName={selectedNudgeReport}
-          onSelectReportName={(repName) => navigateTo('dashboard', repName)}
-          onSelectMember={(m) => setSelectedMember(m)}
-          onOpenImport={() => navigateTo('import')}
-          onOpenNudges={(reportName) => navigateTo('nudges', reportName)}
-          onSaveMember={handleSaveMember}
-          onDeleteMember={handleDeleteMember}
-          onDeleteBatch={handleDeleteBatch}
-          onPurgeAll={handlePurgeAll}
-          isSyncing={isSyncing}
-          isInitialLoading={isInitializing}
-          isDataLoaded={isDataLoaded}
-          userProfile={userProfile}
-          currentUserEmail={user?.email}
-        />
-      )}
+      {/* Animated Tab Page Wrapper — key forces remount on tab change, triggering smooth enter animation */}
+      <div key={activeTab} className={activeTab === 'chat' ? 'tab-page-instant h-full flex flex-col' : 'tab-page'}>
+        {activeTab === 'dashboard' && (
+          <Dashboard
+            members={members}
+            importLogs={importLogs}
+            selectedReportName={selectedNudgeReport}
+            onSelectReportName={(repName) => navigateTo('dashboard', repName)}
+            onSelectMember={(m) => setSelectedMember(m)}
+            onOpenImport={() => navigateTo('import')}
+            onOpenNudges={(reportName) => navigateTo('nudges', reportName)}
+            onSaveMember={handleSaveMember}
+            onDeleteMember={handleDeleteMember}
+            onDeleteBatch={handleDeleteBatch}
+            onPurgeAll={handlePurgeAll}
+            isSyncing={isSyncing}
+            isInitialLoading={isInitializing}
+            isDataLoaded={isDataLoaded}
+            userProfile={userProfile}
+            currentUserEmail={user?.email}
+          />
+        )}
 
-      {activeTab === 'import' && (
-        <ImportModal
-          isOpen={activeTab === 'import'}
-          existingBatchNames={importLogs.map(l => l.batch_name).filter((b): b is string => Boolean(b))}
-          onImportComplete={handleImportMembers}
-          onClose={() => setActiveTab('dashboard')}
-        />
-      )}
+        {activeTab === 'import' && (
+          <ImportModal
+            isOpen={activeTab === 'import'}
+            existingBatchNames={importLogs.map(l => l.batch_name).filter((b): b is string => Boolean(b))}
+            onImportComplete={handleImportMembers}
+            onClose={() => setActiveTab('dashboard')}
+          />
+        )}
 
-      {activeTab === 'trends' && (
-        <TrendsTab
-          members={members}
-          importLogs={importLogs}
-          onNavigateToDashboard={(reportName) => navigateTo('dashboard', reportName)}
-        />
-      )}
+        {activeTab === 'trends' && (
+          <TrendsTab
+            members={members}
+            importLogs={importLogs}
+            onNavigateToDashboard={(reportName) => navigateTo('dashboard', reportName)}
+          />
+        )}
 
-      {activeTab === 'nudges' && (
-        <NudgeSender
-          members={members}
-          importLogs={importLogs}
-          initialReportName={selectedNudgeReport}
-          onSelectReportName={(repName) => navigateTo('nudges', repName)}
-          customSignature={org.custom_signature}
-          orgId={org.id}
-        />
-      )}
+        {activeTab === 'nudges' && (
+          <NudgeSender
+            members={members}
+            importLogs={importLogs}
+            initialReportName={selectedNudgeReport}
+            onSelectReportName={(repName) => navigateTo('nudges', repName)}
+            customSignature={org.custom_signature}
+            orgId={org.id}
+          />
+        )}
 
-      {activeTab === 'chat' && (
-        <ChatTab
-          members={members}
-          org={org}
-          importLogs={importLogs}
-          userProfile={userProfile}
-        />
-      )}
+        {activeTab === 'chat' && (
+          <ChatTab
+            members={members}
+            org={org}
+            importLogs={importLogs}
+            userProfile={userProfile}
+          />
+        )}
 
-      {activeTab === 'org' && (
-        <OrganizationTab
-          org={org}
-          orgMember={orgMember}
-          rosterMembers={members}
-          onUpdateMembers={setMembers}
-          userProfile={userProfile}
-          currentUserEmail={user?.email}
-        />
-      )}
+        {activeTab === 'org' && (
+          <OrganizationTab
+            org={org}
+            orgMember={orgMember}
+            rosterMembers={members}
+            onUpdateMembers={setMembers}
+            userProfile={userProfile}
+            currentUserEmail={user?.email}
+          />
+        )}
 
-      {activeTab === 'profile' && (
-        <ProfilePage
-          profile={userProfile}
-          org={org}
-          orgMember={orgMember}
-          onProfileUpdated={(updated) => setUserProfile(updated)}
-        />
-      )}
+        {activeTab === 'profile' && (
+          <ProfilePage
+            profile={userProfile}
+            org={org}
+            orgMember={orgMember}
+            onProfileUpdated={(updated) => setUserProfile(updated)}
+          />
+        )}
 
-      {activeTab === 'settings' && (
-        <SettingsPage
-          orgId={org.id}
-          onSettingsSaved={() => {
-            setMembers(prev => prev.map(m => scoreMember(m)));
-          }}
-        />
-      )}
+        {activeTab === 'settings' && (
+          <SettingsPage
+            orgId={org.id}
+            onSettingsSaved={() => {
+              setMembers(prev => prev.map(m => scoreMember(m)));
+            }}
+          />
+        )}
+      </div>
 
       {/* Member Detail Modal */}
       {selectedMember && (

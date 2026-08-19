@@ -14,6 +14,28 @@ import {
   Send, Plus, History, Clock, RefreshCw
 } from 'lucide-react';
 
+// Lightweight markdown renderer: converts *bold* to <strong>, preserves line breaks
+const renderFormattedText = (text: string): React.ReactNode => {
+  const lines = text.split('\n');
+  return lines.map((line, lineIdx) => {
+    // Split on *bold* patterns and render <strong> tags
+    const parts = line.split(/\*(.*?)\*/g);
+    const rendered = parts.map((part, partIdx) => {
+      // Odd indices are the captured groups (bold text)
+      if (partIdx % 2 === 1) {
+        return <strong key={partIdx} className="font-extrabold">{part}</strong>;
+      }
+      return part;
+    });
+    return (
+      <span key={lineIdx}>
+        {rendered}
+        {lineIdx < lines.length - 1 && <br />}
+      </span>
+    );
+  });
+};
+
 export interface ChatOption {
   id: string;
   label: string;
@@ -40,6 +62,24 @@ interface ChatTabProps {
 
 export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [], userProfile }) => {
   const { showToast } = useToast();
+
+  // Safe member property accessors (handles both PascalCase and snake_case from DB)
+  const safeName = (m: any): string => m?.Name || m?.name || 'Member';
+  const safePhone = (m: any): string => m?.Phone || m?.phone || 'N/A';
+  const safeEmail = (m: any): string => m?.Email || m?.email || 'N/A';
+  const safeScore = (m: any): number => m?.score || 0;
+  const safeZone = (m: any): string => {
+    const tl = m?.trafficLight?.label || m?.traffic_light || '';
+    const s = String(tl).toLowerCase();
+    if (s.includes('green')) return 'Green';
+    if (s.includes('red')) return 'Red';
+    return 'Amber';
+  };
+  const safeOneToOnes = (m: any): number => m?.OneToOnes || m?.one_to_ones || 0;
+  const safeCEU = (m: any): number => m?.CEU || m?.ceu || 0;
+  const safeRefs = (m: any): number => m?.ReferralsGivenRate ?? m?.RGT ?? m?.referrals_given ?? 0;
+  const safeTYFCB = (m: any): number => m?.TYFCB || m?.tyfcb || 0;
+  const safeBatch = (m: any): string => m?.batch_name || 'Latest';
 
   // Active Session Management (persisted in sessionStorage while app is open)
   const [sessionId, setSessionId] = useState<string>(() => {
@@ -501,13 +541,13 @@ REGENERATION INSTRUCTIONS:
 
         case 'VIEW_SINGLE_REPORT': {
           const reportName = option.payload?.reportName;
-          const reportMembers = members.filter(m => m.batch_name === reportName);
+          const reportMembers = members.filter(m => safeBatch(m) === reportName);
 
-          const g = reportMembers.filter(m => m.trafficLight?.label === 'Green').length;
-          const a = reportMembers.filter(m => m.trafficLight?.label === 'Amber').length;
-          const r = reportMembers.filter(m => m.trafficLight?.label === 'Red').length;
+          const g = reportMembers.filter(m => safeZone(m) === 'Green').length;
+          const a = reportMembers.filter(m => safeZone(m) === 'Amber').length;
+          const r = reportMembers.filter(m => safeZone(m) === 'Red').length;
           const avg = reportMembers.length > 0
-            ? reportMembers.reduce((sum, m) => sum + (m.score || 0), 0) / reportMembers.length
+            ? reportMembers.reduce((sum, m) => sum + safeScore(m), 0) / reportMembers.length
             : 0;
 
           const gPct = reportMembers.length > 0 ? formatDecimal((g / reportMembers.length) * 100, 1) : 0;
@@ -531,7 +571,7 @@ REGENERATION INSTRUCTIONS:
 
         case 'QUERY_GREEN_REPORT': {
           const rName = option.payload?.reportName;
-          const rMembers = members.filter(m => m.batch_name === rName && m.trafficLight?.label === 'Green');
+          const rMembers = members.filter(m => safeBatch(m) === rName && safeZone(m) === 'Green');
 
           if (rMembers.length === 0) {
             replyText = `🟢 *Green Zone Audit (${rName})*\n\nCurrently, no members are listed in the Green Zone for this report period.`;
@@ -540,10 +580,10 @@ REGENERATION INSTRUCTIONS:
               `*Report:* ${rName}\n\n`;
 
             rMembers.forEach((m, idx) => {
-              const refs = m.ReferralsGivenRate ?? m.RGT ?? 0;
-              replyText += `${idx + 1}. *${m.Name}* — ${m.score} pts (📱 ${m.Phone || 'N/A'})\n` +
-                `   • 1-to-1s: ${formatDecimal(m.OneToOnes || 0, 1)}/wk | CEU: ${formatDecimal(m.CEU || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
-                `   • TYFCB: ${formatCurrency(m.TYFCB || 0)}\n\n`;
+              const refs = safeRefs(m);
+              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)} pts (📱 ${safePhone(m)})\n` +
+                `   • 1-to-1s: ${formatDecimal(safeOneToOnes(m), 1)}/wk | CEU: ${formatDecimal(safeCEU(m), 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
+                `   • TYFCB: ${formatCurrency(safeTYFCB(m))}\n\n`;
             });
 
             replyText += `💡 *Leadership Action:*\nAcknowledge these top contributors in your next meeting!`;
@@ -559,7 +599,7 @@ REGENERATION INSTRUCTIONS:
 
         case 'QUERY_RED_REPORT': {
           const rName = option.payload?.reportName;
-          const rMembers = members.filter(m => m.batch_name === rName && m.trafficLight?.label === 'Red');
+          const rMembers = members.filter(m => safeBatch(m) === rName && safeZone(m) === 'Red');
 
           if (rMembers.length === 0) {
             replyText = `🎉 *Red Zone Alert (${rName})*\n\nGreat news! 0 members are in the Red Zone for this report period. All members are Amber or Green!`;
@@ -568,10 +608,10 @@ REGENERATION INSTRUCTIONS:
               `*Report:* ${rName}\n\n`;
 
             rMembers.forEach((m, idx) => {
-              const refs = m.ReferralsGivenRate ?? m.RGT ?? 0;
-              replyText += `${idx + 1}. *${m.Name}* — ${m.score}/100 pts (📱 ${m.Phone || 'N/A'})\n` +
-                `   • 1-to-1s: ${formatDecimal(m.OneToOnes || 0, 1)}/wk | CEU: ${formatDecimal(m.CEU || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
-                `   • TYFCB: ${formatCurrency(m.TYFCB || 0)}\n\n`;
+              const refs = safeRefs(m);
+              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)}/100 pts (📱 ${safePhone(m)})\n` +
+                `   • 1-to-1s: ${formatDecimal(safeOneToOnes(m), 1)}/wk | CEU: ${formatDecimal(safeCEU(m), 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
+                `   • TYFCB: ${formatCurrency(safeTYFCB(m))}\n\n`;
             });
 
             replyText += `💡 *Action Plan:*\n` +
@@ -590,7 +630,7 @@ REGENERATION INSTRUCTIONS:
 
         case 'QUERY_AMBER_REPORT': {
           const rName = option.payload?.reportName;
-          const rMembers = members.filter(m => m.batch_name === rName && m.trafficLight?.label === 'Amber');
+          const rMembers = members.filter(m => safeBatch(m) === rName && safeZone(m) === 'Amber');
 
           if (rMembers.length === 0) {
             replyText = `🟡 *Amber Zone Audit (${rName})*\n\n0 members are currently in the Amber Zone for this report period.`;
@@ -599,10 +639,10 @@ REGENERATION INSTRUCTIONS:
               `*Report:* ${rName}\n\n`;
 
             rMembers.forEach((m, idx) => {
-              const refs = m.ReferralsGivenRate ?? m.RGT ?? 0;
-              replyText += `${idx + 1}. *${m.Name}* — ${m.score}/100 pts (📱 ${m.Phone || 'N/A'})\n` +
-                `   • 1-to-1s: ${formatDecimal(m.OneToOnes || 0, 1)}/wk | CEU: ${formatDecimal(m.CEU || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
-                `   • TYFCB: ${formatCurrency(m.TYFCB || 0)}\n\n`;
+              const refs = safeRefs(m);
+              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)}/100 pts (📱 ${safePhone(m)})\n` +
+                `   • 1-to-1s: ${formatDecimal(safeOneToOnes(m), 1)}/wk | CEU: ${formatDecimal(safeCEU(m), 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
+                `   • TYFCB: ${formatCurrency(safeTYFCB(m))}\n\n`;
             });
 
             replyText += `💡 *Action:* 1 additional CEU module or 1-to-1 meeting elevates them to Green!`;
@@ -618,7 +658,7 @@ REGENERATION INSTRUCTIONS:
 
         case 'QUERY_121_REPORT': {
           const rName = option.payload?.reportName;
-          const rMembers = members.filter(m => m.batch_name === rName && (m.OneToOnes || 0) < 2);
+          const rMembers = members.filter(m => safeBatch(m) === rName && safeOneToOnes(m) < 2);
 
           if (rMembers.length === 0) {
             replyText = `🤝 *1-to-1 Meetings Audit (${rName})*\n\nAll members in this report period have completed 2 or more 1-to-1 meetings! Outstanding collaboration!`;
@@ -627,7 +667,7 @@ REGENERATION INSTRUCTIONS:
               `*Report:* ${rName}\n\n`;
 
             rMembers.forEach((m, idx) => {
-              replyText += `${idx + 1}. *${m.Name}* — ${formatDecimal(m.OneToOnes || 0, 1)} meetings/wk (📱 ${m.Phone || 'N/A'})\n`;
+              replyText += `${idx + 1}. *${safeName(m)}* — ${formatDecimal(safeOneToOnes(m), 1)} meetings/wk (📱 ${safePhone(m)})\n`;
             });
 
             replyText += `\n💡 *Action:* Pair these members during feature presentations!`;
@@ -642,15 +682,15 @@ REGENERATION INSTRUCTIONS:
 
         case 'QUERY_TYFCB_REPORT': {
           const rName = option.payload?.reportName;
-          const rMembers = members.filter(m => m.batch_name === rName);
-          const sortedTYFCB = [...rMembers].sort((a, b) => (b.TYFCB || 0) - (a.TYFCB || 0));
-          const totalTYFCB = rMembers.reduce((sum, m) => sum + (m.TYFCB || 0), 0);
+          const rMembers = members.filter(m => safeBatch(m) === rName);
+          const sortedTYFCB = [...rMembers].sort((a, b) => safeTYFCB(b) - safeTYFCB(a));
+          const totalTYFCB = rMembers.reduce((sum, m) => sum + safeTYFCB(m), 0);
 
           replyText = `💰 *TYFCB Business Breakdown (${sortedTYFCB.length} Members)*\n` +
             `*Report:* ${rName}\n\n`;
 
           sortedTYFCB.forEach((m, idx) => {
-            replyText += `${idx + 1}. *${m.Name}* — ${formatCurrency(m.TYFCB || 0)}\n`;
+            replyText += `${idx + 1}. *${safeName(m)}* — ${formatCurrency(safeTYFCB(m))}\n`;
           });
 
           replyText += `\n📈 *Total Closed in ${rName}:* ${formatCurrency(totalTYFCB)}`;
@@ -730,21 +770,21 @@ REGENERATION INSTRUCTIONS:
           const rA = option.payload?.reportA;
           const rB = option.payload?.reportB;
 
-          const mAList = members.filter(m => m.batch_name === rA);
-          const mBList = members.filter(m => m.batch_name === rB);
+          const mAList = members.filter(m => safeBatch(m) === rA);
+          const mBList = members.filter(m => safeBatch(m) === rB);
 
-          const avgA = mAList.length > 0 ? mAList.reduce((sum, m) => sum + (m.score || 0), 0) / mAList.length : 0;
-          const avgB = mBList.length > 0 ? mBList.reduce((sum, m) => sum + (m.score || 0), 0) / mBList.length : 0;
+          const avgA = mAList.length > 0 ? mAList.reduce((sum, m) => sum + safeScore(m), 0) / mAList.length : 0;
+          const avgB = mBList.length > 0 ? mBList.reduce((sum, m) => sum + safeScore(m), 0) / mBList.length : 0;
           const delta = avgB - avgA;
 
-          const greenA = mAList.filter(m => m.trafficLight?.label === 'Green').length;
-          const greenB = mBList.filter(m => m.trafficLight?.label === 'Green').length;
+          const greenA = mAList.filter(m => safeZone(m) === 'Green').length;
+          const greenB = mBList.filter(m => safeZone(m) === 'Green').length;
 
-          const redA = mAList.filter(m => m.trafficLight?.label === 'Red').length;
-          const redB = mBList.filter(m => m.trafficLight?.label === 'Red').length;
+          const redA = mAList.filter(m => safeZone(m) === 'Red').length;
+          const redB = mBList.filter(m => safeZone(m) === 'Red').length;
 
-          const tyfcbA = mAList.reduce((sum, m) => sum + (m.TYFCB || 0), 0);
-          const tyfcbB = mBList.reduce((sum, m) => sum + (m.TYFCB || 0), 0);
+          const tyfcbA = mAList.reduce((sum, m) => sum + safeTYFCB(m), 0);
+          const tyfcbB = mBList.reduce((sum, m) => sum + safeTYFCB(m), 0);
 
           replyText = `📈 *Report Comparison: ${rA} ➔ ${rB}*\n\n` +
             `📊 *Chapter Movement:*\n` +
@@ -767,11 +807,11 @@ REGENERATION INSTRUCTIONS:
 
         case 'QUERY_EXEC': {
           const total = members.length;
-          const g = members.filter(m => m.trafficLight?.label === 'Green').length;
-          const a = members.filter(m => m.trafficLight?.label === 'Amber').length;
-          const r = members.filter(m => m.trafficLight?.label === 'Red').length;
-          const avg = total > 0 ? members.reduce((sum, m) => sum + (m.score || 0), 0) / total : 0;
-          const tyfcb = members.reduce((sum, m) => sum + (m.TYFCB || 0), 0);
+          const g = members.filter(m => safeZone(m) === 'Green').length;
+          const a = members.filter(m => safeZone(m) === 'Amber').length;
+          const r = members.filter(m => safeZone(m) === 'Red').length;
+          const avg = total > 0 ? members.reduce((sum, m) => sum + safeScore(m), 0) / total : 0;
+          const tyfcb = members.reduce((sum, m) => sum + safeTYFCB(m), 0);
 
           replyText = `📋 *Chapter Executive Overview*\n\n` +
             `• *Total Reports:* ${availableReportNames.length} reports\n` +
@@ -824,7 +864,7 @@ REGENERATION INSTRUCTIONS:
   return (
     <div className="w-full h-full flex flex-col overflow-hidden bg-transparent">
       {/* Pinned Top Header Bar (Chapter AI Title, New Chat, History, Share Conversation) */}
-      <div className="shrink-0 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md px-3 sm:px-6 py-3 border-b border-slate-200/60 dark:border-white/10 flex items-center justify-between shadow-xs z-10">
+      <div className="ai-chat-navbar shrink-0 px-3 sm:px-6 py-3 flex items-center justify-between z-10">
         <div className="flex items-center space-x-2.5">
           <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
             <Bot className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
@@ -848,7 +888,7 @@ REGENERATION INSTRUCTIONS:
           {/* New Chat Button */}
           <button
             onClick={handleStartNewChat}
-            className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10 text-xs font-black flex items-center space-x-1.5 transition-all cursor-pointer active:scale-95 shadow-sm"
+            className="ai-chat-nav-btn-secondary p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 text-xs font-black flex items-center space-x-1.5 transition-all cursor-pointer active:scale-95 shadow-sm"
             title="Start New Chat Session"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -858,10 +898,10 @@ REGENERATION INSTRUCTIONS:
           {/* History Drawer Button */}
           <button
             onClick={handleOpenHistoryModal}
-            className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10 text-xs font-black flex items-center space-x-1.5 transition-all cursor-pointer active:scale-95 shadow-sm"
+            className="ai-chat-nav-btn-secondary p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 text-xs font-black flex items-center space-x-1.5 transition-all cursor-pointer active:scale-95 shadow-sm"
             title="View Chat History"
           >
-            <History className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+            <History className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">History</span>
           </button>
         </div>
@@ -908,7 +948,7 @@ REGENERATION INSTRUCTIONS:
                   }`}
                 >
                   {/* Markdown Message Content */}
-                  <div className="whitespace-pre-wrap font-sans leading-relaxed">{msg.text}</div>
+                  <div className="whitespace-pre-wrap font-sans leading-relaxed">{renderFormattedText(msg.text)}</div>
 
                   {/* Message Timestamp */}
                   <div className="text-[9px] opacity-50 text-right mt-1 font-mono">
@@ -988,8 +1028,8 @@ REGENERATION INSTRUCTIONS:
       </div>
 
       {/* Pinned Bottom Text Input Box & Send Button Bar (Mobile & Laptop Friendly) */}
-      <div className="shrink-0 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md px-3 sm:px-6 pt-2.5 pb-[95px] lg:pb-3 border-t border-slate-200/60 dark:border-white/10 z-10">
-        <div className="max-w-4xl mx-auto flex items-center space-x-2 bg-slate-100 dark:bg-slate-900/95 p-1.5 sm:p-2 rounded-2xl border border-slate-300/80 dark:border-white/15 shadow-sm">
+      <div className="ai-chat-input-bar shrink-0 px-3 sm:px-6 pt-2.5 pb-[95px] lg:pb-3 z-10">
+        <div className="ai-chat-input-wrap max-w-4xl mx-auto flex items-center space-x-2 p-1.5 sm:p-2 rounded-2xl shadow-sm">
           <input
             type="text"
             placeholder="Ask AI anything about members, scores, reports..."
@@ -997,7 +1037,7 @@ REGENERATION INSTRUCTIONS:
             onChange={(e) => setCustomInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isTyping}
-            className="flex-1 bg-transparent px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none disabled:opacity-50"
+            className="ai-chat-input-field flex-1 bg-transparent px-3 py-1.5 text-xs sm:text-sm font-bold placeholder-slate-500 focus:outline-none disabled:opacity-50"
           />
           <button
             onClick={handleSendCustomMessage}

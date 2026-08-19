@@ -76,9 +76,9 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
     { id: 'trends' as NavigationTab, label: 'Trends', icon: TrendingUp },
     { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare },
-    { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Bot },
     { id: 'org' as NavigationTab, label: 'Chapter', icon: Building2 },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
+    { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Bot },
   ];
 
   // Width calculations based on sidebarMode
@@ -132,26 +132,33 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             const isActive = activeTab === item.id;
 
             return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                title={isCompact ? item.label : undefined}
-                className={`w-full flex items-center ${isCompact ? 'justify-center px-2' : 'justify-between px-3.5'} py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-500/20'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <div className="flex items-center space-x-3 truncate">
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  {!isCompact && <span className="truncate">{item.label}</span>}
-                </div>
-                {!isCompact && item.badge !== null && item.badge !== undefined && (
-                  <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${isActive ? 'bg-slate-950 text-emerald-400' : 'bg-slate-800 text-slate-300'}`}>
-                    {item.badge}
-                  </span>
+              <div key={item.id}>
+                {/* Divider above Chapter AI to visually separate it at the bottom */}
+                {item.id === 'chat' && (
+                  <div className="my-2 border-t border-white/10" />
                 )}
-              </button>
+                <button
+                  onClick={() => setActiveTab(item.id)}
+                  title={isCompact ? item.label : undefined}
+                  className={`w-full flex items-center ${isCompact ? 'justify-center px-2' : 'justify-between px-3.5'} py-2.5 rounded-xl text-xs font-bold transition-all ${
+                    isActive
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-500/20'
+                      : item.id === 'chat'
+                      ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 truncate">
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    {!isCompact && <span className="truncate">{item.label}</span>}
+                  </div>
+                  {!isCompact && item.badge !== null && item.badge !== undefined && (
+                    <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${isActive ? 'bg-slate-950 text-emerald-400' : 'bg-slate-800 text-slate-300'}`}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              </div>
             );
           })}
         </nav>
@@ -321,18 +328,25 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                title={item.label}
-                className={`flex-1 flex items-center justify-center py-2.5 px-1 rounded-full transition-all duration-300 active:scale-90 ${
-                  isActive
-                    ? 'text-emerald-400 bg-gradient-to-tr from-emerald-500/25 to-teal-400/25 border border-emerald-500/50 font-black shadow-lg shadow-emerald-500/20 -translate-y-0.5'
-                    : 'text-slate-400 hover:text-slate-200 font-medium'
-                }`}
-              >
-                <Icon className={`w-5 h-5 transition-all duration-300 ${isActive ? 'text-emerald-400 scale-110' : 'text-slate-400'}`} />
-              </button>
+              <div key={item.id} className="flex items-center flex-1">
+                {/* Thin vertical separator before Chapter AI on mobile */}
+                {item.id === 'chat' && (
+                  <div className="w-px h-6 bg-white/15 mx-1 shrink-0" />
+                )}
+                <button
+                  onClick={() => setActiveTab(item.id)}
+                  title={item.label}
+                  className={`flex-1 flex items-center justify-center py-2.5 px-1 rounded-full transition-all duration-300 active:scale-90 ${
+                    isActive
+                      ? 'text-emerald-400 bg-gradient-to-tr from-emerald-500/25 to-teal-400/25 border border-emerald-500/50 font-black shadow-lg shadow-emerald-500/20 -translate-y-0.5'
+                      : item.id === 'chat'
+                      ? 'text-emerald-500/70 hover:text-emerald-400 font-medium'
+                      : 'text-slate-400 hover:text-slate-200 font-medium'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 transition-all duration-300 ${isActive ? 'text-emerald-400 scale-110' : item.id === 'chat' ? 'text-emerald-500/70' : 'text-slate-400'}`} />
+                </button>
+              </div>
             );
           })}
         </nav>

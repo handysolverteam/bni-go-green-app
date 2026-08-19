@@ -52,12 +52,138 @@ export function analyzeLocalChapterQuery(
   const total121 = members.reduce((sum, m) => sum + (m.OneToOnes || (m as any).one_to_ones || 0), 0);
   const totalRefs = members.reduce((sum, m) => sum + (m.ReferralsGivenRate ?? m.RGT ?? (m as any).referrals_given ?? 0), 0);
 
+  // --- Reusable Report Comparison Builder ---
+  const buildReportComparison = (rA: string, rB: string): string => {
+    const mAList = members.filter(m => (m.batch_name || (m as any).batch_name) === rA);
+    const mBList = members.filter(m => (m.batch_name || (m as any).batch_name) === rB);
+
+    const avgA = mAList.length > 0 ? mAList.reduce((s, m) => s + getMemberScore(m), 0) / mAList.length : 0;
+    const avgB = mBList.length > 0 ? mBList.reduce((s, m) => s + getMemberScore(m), 0) / mBList.length : 0;
+    const delta = avgB - avgA;
+
+    const greenA = mAList.filter(m => getMemberZone(m) === 'Green').length;
+    const greenB = mBList.filter(m => getMemberZone(m) === 'Green').length;
+    const redA = mAList.filter(m => getMemberZone(m) === 'Red').length;
+    const redB = mBList.filter(m => getMemberZone(m) === 'Red').length;
+    const amberA = mAList.filter(m => getMemberZone(m) === 'Amber').length;
+    const amberB = mBList.filter(m => getMemberZone(m) === 'Amber').length;
+
+    const tyfcbA = mAList.reduce((s, m) => s + (m.TYFCB || (m as any).tyfcb || 0), 0);
+    const tyfcbB = mBList.reduce((s, m) => s + (m.TYFCB || (m as any).tyfcb || 0), 0);
+    const tyfcbDelta = tyfcbB - tyfcbA;
+
+    const refs121A = mAList.reduce((s, m) => s + (m.OneToOnes || (m as any).one_to_ones || 0), 0);
+    const refs121B = mBList.reduce((s, m) => s + (m.OneToOnes || (m as any).one_to_ones || 0), 0);
+
+    const deltaArrow = delta > 0 ? '📈 +' : delta < 0 ? '📉 ' : '➡️ ';
+    const tyfcbArrow = tyfcbDelta > 0 ? '📈' : tyfcbDelta < 0 ? '📉' : '➡️';
+
+    // Members who improved zone (Amber/Red → Green)
+    const improved = mBList.filter(m => {
+      const zoneB = getMemberZone(m);
+      const mA = mAList.find(ma => getMemberName(ma).toLowerCase() === getMemberName(m).toLowerCase());
+      if (!mA) return false;
+      const zoneA = getMemberZone(mA);
+      return zoneA !== 'Green' && zoneB === 'Green';
+    });
+    // Members who declined zone (Green → Amber/Red)
+    const declined = mBList.filter(m => {
+      const zoneB = getMemberZone(m);
+      const mA = mAList.find(ma => getMemberName(ma).toLowerCase() === getMemberName(m).toLowerCase());
+      if (!mA) return false;
+      const zoneA = getMemberZone(mA);
+      return zoneA === 'Green' && zoneB !== 'Green';
+    });
+
+    let res = `📈 *Report Comparison: ${rA} ➔ ${rB}*\n\n` +
+      `📊 *Chapter Score Movement:*\n` +
+      `• *Avg Score (${rA}):* ${formatDecimal(avgA, 1)} pts\n` +
+      `• *Avg Score (${rB}):* ${formatDecimal(avgB, 1)} pts\n` +
+      `• *Score Delta:* ${deltaArrow}${formatDecimal(Math.abs(delta), 1)} pts ${delta > 0 ? '(Chapter improved! 🎉)' : delta < 0 ? '(Chapter declined ⚠️)' : '(No change)'}\n\n` +
+      `🟢 *Green Zone:* ${greenA} → ${greenB} (${greenB >= greenA ? '+' : ''}${greenB - greenA} members)\n` +
+      `🟡 *Amber Zone:* ${amberA} → ${amberB} (${amberB >= amberA ? '+' : ''}${amberB - amberA} members)\n` +
+      `🔴 *Red Zone:* ${redA} → ${redB} (${redB >= redA ? '+' : ''}${redB - redA} members)\n\n` +
+      `💰 *TYFCB Revenue:*\n` +
+      `• *${rA}:* ${formatCurrency(tyfcbA)}\n` +
+      `• *${rB}:* ${formatCurrency(tyfcbB)}\n` +
+      `• *Revenue Delta:* ${tyfcbArrow} ${tyfcbDelta >= 0 ? '+' : ''}${formatCurrency(tyfcbDelta)}\n\n` +
+      `🤝 *1-to-1 Meetings:* ${formatDecimal(refs121A, 1)} → ${formatDecimal(refs121B, 1)} total\n`;
+
+    if (improved.length > 0) {
+      res += `\n🌟 *Members Who Improved to Green Zone:*\n`;
+      improved.forEach(m => { res += `• *${getMemberName(m)}* — now at ${getMemberScore(m)}/100 pts 🟢\n`; });
+    }
+    if (declined.length > 0) {
+      res += `\n⚠️ *Members Who Dropped from Green Zone:*\n`;
+      declined.forEach(m => { res += `• *${getMemberName(m)}* — now at ${getMemberScore(m)}/100 pts ${getZoneEmoji(getMemberZone(m))}\n`; });
+    }
+
+    res += `\n❓ *Would you like me to generate outreach messages for members who declined or dropped from Green Zone?*`;
+    return res;
+  };
+
   // 1. Affirmative Response to previous AI counter-question ("yes", "sure", "ok", "do it", "yeah", "generate")
-  const isAffirmative = ['yes', 'sure', 'ok', 'yeah', 'yep', 'do it', 'generate', 'send', 'please', 'go ahead'].includes(lower);
+  const isAffirmative = ['yes', 'sure', 'ok', 'yeah', 'yep', 'do it', 'generate', 'send', 'please', 'go ahead'].some(w => lower === w || lower.startsWith(w + ' ') || lower.startsWith(w + ','));
+
+  // Detect compare-reports intent even if sentence starts with "yes" (e.g. "yes compare both report side by side")
+  const isCompareReportsIntent =
+    (lower.includes('compare') && (lower.includes('report') || lower.includes('both') || lower.includes('all'))) ||
+    lower.includes('compare both') ||
+    lower.includes('side by side') ||
+    lower.includes('compare side');
+
+  if (isCompareReportsIntent && availableReports.length >= 2) {
+    return buildReportComparison(availableReports[availableReports.length - 1], availableReports[0]);
+  }
 
   if (isAffirmative && conversationHistory && conversationHistory.length > 0) {
     const aiMessages = conversationHistory.filter(m => m.sender === 'ai');
     const lastAiMsg = aiMessages[aiMessages.length - 1]?.text || '';
+
+    // ✅ CASE: User says yes after AI offered to compare reports or showed report list
+    if (
+      lastAiMsg.includes('compare') &&
+      (lastAiMsg.includes('report') || lastAiMsg.includes('side-by-side') || lastAiMsg.includes('side by side') || lastAiMsg.includes('inspect details'))
+    ) {
+      if (availableReports.length >= 2) {
+        return buildReportComparison(availableReports[availableReports.length - 1], availableReports[0]);
+      } else if (availableReports.length === 1) {
+        return `📄 *Only 1 report available: ${availableReports[0]}*\n\nI need at least 2 uploaded reports to run a side-by-side comparison. Please upload another report batch!\n\n❓ *Would you like me to inspect full details for ${availableReports[0]} instead?*`;
+      }
+    }
+
+    // ✅ CASE: User says yes after AI showed generic report list (which also asks about compare)
+    if (lastAiMsg.includes('inspect details for a specific report')) {
+      if (availableReports.length >= 2) {
+        return buildReportComparison(availableReports[availableReports.length - 1], availableReports[0]);
+      }
+    }
+
+    // Green zone congratulation template
+    if (lastAiMsg.includes('congratulate') || (lastAiMsg.includes('Green') && lastAiMsg.includes('WhatsApp'))) {
+      const greenMembers = members.filter(m => getMemberZone(m) === 'Green');
+      const topGreen = greenMembers[0];
+      const topName = topGreen ? getMemberName(topGreen) : 'Member';
+      const topScore = topGreen ? getMemberScore(topGreen) : 0;
+      return `💬 *WhatsApp Congratulation Template for Green Leaders*\n\n` +
+        `Hi ${topName} 🌟\n\n` +
+        `Congratulations! You are leading in the *GREEN Zone* with *${topScore}/100 points* in our *${orgName}* chapter! 🟢\n\n` +
+        `Thank you for your outstanding contribution! Your dedication to 1-to-1 meetings and referrals is setting the benchmark. Keep up the incredible momentum! 🚀\n\n` +
+        `❓ *Would you like me to customize this for each Green member individually?*`;
+    }
+
+    // Red zone support template
+    if (lastAiMsg.includes('support invitation') || lastAiMsg.includes('support nudge') || (lastAiMsg.includes('Red') && (lastAiMsg.includes('draft') || lastAiMsg.includes('WhatsApp') || lastAiMsg.includes('invitation')))) {
+      const redMembers = members.filter(m => getMemberZone(m) === 'Red');
+      const topRed = redMembers[0];
+      const redName = topRed ? getMemberName(topRed) : 'Member';
+      const redScore = topRed ? getMemberScore(topRed) : 0;
+      return `💬 *WhatsApp Support Template for Red Zone Members*\n\n` +
+        `Hi ${redName} 👋\n\n` +
+        `We noticed you are currently at *${redScore}/100 points* in our *${orgName}* chapter report.\n\n` +
+        `We are here to support your business growth! Let us schedule a quick 1-to-1 catch-up call this week. Completing just 1 extra CEU module or booking 1 One-to-One meeting will start moving you towards the Green Zone! 💪\n\n` +
+        `❓ *Would you like me to pair these Red members with Green zone mentors?*`;
+    }
 
     // Check if previous AI message was about a specific member (e.g. Abhay Goenka)
     const memberInPrevMsg = members.find(m => {
@@ -79,37 +205,16 @@ export function analyzeLocalChapterQuery(
         `Let us reach new heights together! 💪\n\n` +
         `❓ *Would you like me to generate an outreach template for another member or inspect chapter statistics?*`;
     }
-
-    if (lastAiMsg.includes('Green leaders') || lastAiMsg.includes('Green Zone')) {
-      const greenMembers = members.filter(m => getMemberZone(m) === 'Green');
-      let res = `🟢 *${orgName} Green Zone Leaders (${greenMembers.length} Members)*\n\n`;
-      greenMembers.forEach((m, idx) => {
-        const name = getMemberName(m);
-        const phone = getMemberPhone(m);
-        const score = getMemberScore(m);
-        res += `${idx + 1}. *${name}* — ${score} pts (📱 ${phone})\n`;
-      });
-      res += `\n❓ *Would you like a draft WhatsApp message to congratulate these Green leaders?*`;
-      return res;
-    }
-
-    if (lastAiMsg.includes('Red') || lastAiMsg.includes('support list')) {
-      const redMembers = members.filter(m => getMemberZone(m) === 'Red');
-      let res = `🔴 *${orgName} Red Zone Support List (${redMembers.length} Members)*\n\n`;
-      redMembers.forEach((m, idx) => {
-        const name = getMemberName(m);
-        const phone = getMemberPhone(m);
-        const score = getMemberScore(m);
-        res += `${idx + 1}. *${name}* — ${score}/100 pts (📱 ${phone})\n`;
-      });
-      res += `\n❓ *Should I draft a 1-to-1 support invitation for these members?*`;
-      return res;
-    }
   }
 
   const matchedMembers = members.filter(m => {
-    const name = getMemberName(m).toLowerCase();
-    return name && name.length > 2 && lower.includes(name);
+    const fullName = getMemberName(m).toLowerCase().trim();
+    if (!fullName || fullName.length < 2) return false;
+    // Exact full-name match
+    if (lower.includes(fullName)) return true;
+    // First-name or last-name partial match
+    const nameParts = fullName.split(/\s+/);
+    return nameParts.some((part: string) => part.length >= 3 && lower.includes(part));
   });
   const isTemplateRequest =
     lower.includes('template') ||
@@ -241,7 +346,11 @@ export function analyzeLocalChapterQuery(
       `• 🟢 *Green Zone Leaders*: View members with scores >= ${greenThreshold} pts.\n` +
       `• 🔴 *Red Zone Support*: View members needing outreach (Score < ${amberThreshold} pts).\n` +
       `• 🟡 *Amber Candidates*: View candidates close to Green status.\n` +
-      `• 💰 *TYFCB Revenue*: Track closed business generated in ${orgName}.\n\n` +
+      `• 💰 *TYFCB Revenue*: Track closed business generated in ${orgName}.\n` +
+      `• 📋 *Attendance Audit*: Track absences, substitutes, and medical leaves.\n` +
+      `• 🎓 *CEU Education*: View CEU completion status and education leaderboard.\n` +
+      `• 📄 *Report Batches*: List uploaded reports and compare report-over-report trends.\n` +
+      `• 🏆 *Top/Bottom Scorer*: Find the highest or lowest scoring member.\n\n` +
       `❓ *What would you like me to look up for ${orgName} right now?*`;
   }
 
@@ -272,11 +381,14 @@ export function analyzeLocalChapterQuery(
 
   // 6. Direct Member Name Lookup (Single Member)
   const matchedMember = members.find(m => {
-    const name = getMemberName(m).toLowerCase();
-    return name && name.length > 2 && lower.includes(name);
+    const fullName = getMemberName(m).toLowerCase().trim();
+    if (!fullName || fullName.length < 2) return false;
+    if (lower.includes(fullName)) return true;
+    const nameParts = fullName.split(/\s+/);
+    return nameParts.some((part: string) => part.length >= 3 && lower.includes(part));
   });
 
-  if (matchedMember) {
+  if (matchedMembers.length === 1 && matchedMember) {
     const name = getMemberName(matchedMember);
     const phone = getMemberPhone(matchedMember);
     const score = getMemberScore(matchedMember);
@@ -297,6 +409,20 @@ export function analyzeLocalChapterQuery(
       `• *Referrals Given:* ${formatDecimal(refs, 1)} / wk\n` +
       `• *TYFCB Business:* ${formatCurrency(memberTyfcb)}\n\n` +
       `❓ *Would you like me to generate a WhatsApp outreach message for ${name}?*`;
+  }
+
+  // 5.5 Multi-Member Disambiguation Counter-Question
+  if (matchedMembers.length > 1 && !isExplicitComparison && !isTemplateRequest) {
+    let res = `🔍 *I found ${matchedMembers.length} members matching your query in ${orgName}:*\n\n`;
+    matchedMembers.forEach((m, idx) => {
+      const name = getMemberName(m);
+      const score = getMemberScore(m);
+      const zone = getMemberZone(m);
+      const emoji = getZoneEmoji(zone);
+      res += `${idx + 1}. ${emoji} *${name}* — ${score}/100 pts (${zone} Zone)\n`;
+    });
+    res += `\n❓ *Which member would you like me to look up? Please type their full name.*`;
+    return res;
   }
 
   // 7. Green Zone Query
@@ -452,12 +578,31 @@ export function analyzeLocalChapterQuery(
 
   // 14. Report Batches List Query
   if (lower.includes('report') || lower.includes('batches') || lower.includes('uploaded')) {
-    const reports = availableReports.length > 0 ? availableReports : ['Latest PALMS Upload'];
+    const reports = availableReports.length > 0 ? availableReports : [];
+
+    // If user explicitly asked to compare AND we have exactly 2 reports, run comparison immediately
+    if (
+      (lower.includes('compare') || lower.includes('compare those') || lower.includes('compare all') || lower.includes('compare both')) &&
+      reports.length >= 2
+    ) {
+      return buildReportComparison(reports[reports.length - 1], reports[0]);
+    }
+
+    if (reports.length === 0) {
+      return `📄 *No reports uploaded yet for ${orgName}.*\n\nPlease upload a PALMS Excel report to get started with analytics.\n\n❓ *Would you like guidance on how to upload a report?*`;
+    }
+
     let res = `📊 *Available Chapter Performance Reports (${orgName})*\n\n`;
     reports.forEach((rep, idx) => {
       res += `${idx + 1}. 📄 *${rep}*\n`;
     });
-    res += `\n❓ *Would you like me to inspect details for a specific report or compare two reports side-by-side?*`;
+
+    if (reports.length >= 2) {
+      res += `\n💡 *Tip:* I can compare *${reports[reports.length - 1]}* vs *${reports[0]}* side-by-side!\n`;
+      res += `\n❓ *Would you like me to compare these ${reports.length} reports side-by-side, or inspect one specific report?*`;
+    } else {
+      res += `\n❓ *Would you like me to inspect details for ${reports[0]}?*`;
+    }
     return res;
   }
 
