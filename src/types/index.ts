@@ -1,6 +1,23 @@
 export type UserRole = 'owner' | 'admin' | 'member';
 export type SidebarMode = 'full' | 'icons' | 'hover';
 
+export interface ChatOption {
+  id: string;
+  label: string;
+  action: string;
+  payload?: any;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender: 'ai' | 'user';
+  text: string;
+  options?: ChatOption[];
+  timestamp?: string;
+  isCustomAnswer?: boolean;
+  isRegenerated?: boolean;
+}
+
 export interface Organization {
   id: string;
   name: string;

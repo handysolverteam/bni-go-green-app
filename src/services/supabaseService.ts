@@ -53,14 +53,48 @@ export const supabaseService = {
     }
   },
 
-  async getAIChatHistory(orgId: string): Promise<any[]> {
+  // Real-time Read-Only Supabase Org Snapshot for Chapter AI (All tables & fields for orgId)
+  async getCompleteOrgSnapshot(orgId: string): Promise<{
+    organization: any;
+    members: any[];
+    importLogs: any[];
+    templates: any[];
+  }> {
     try {
-      const { data, error } = await supabase
+      const [orgRes, membersRes, logsRes, templatesRes] = await Promise.all([
+        supabase.from('organizations').select('*').eq('id', orgId).maybeSingle(),
+        supabase.from('members').select('*').eq('org_id', orgId).order('name', { ascending: true }),
+        supabase.from('import_logs').select('*').eq('org_id', orgId).order('created_at', { ascending: false }),
+        supabase.from('outreach_templates').select('*').eq('org_id', orgId),
+      ]);
+
+      return {
+        organization: orgRes.data || null,
+        members: membersRes.data || [],
+        importLogs: logsRes.data || [],
+        templates: templatesRes.data || [],
+      };
+    } catch (err) {
+      console.warn('Failed to fetch complete org snapshot:', err);
+      return { organization: null, members: [], importLogs: [], templates: [] };
+    }
+  },
+
+  async getAIChatHistory(orgId: string, sessionId?: string): Promise<any[]> {
+    try {
+      let query = supabase
         .from('ai_chat_history')
         .select('*')
-        .eq('org_id', orgId)
+        .eq('org_id', orgId);
+
+      if (sessionId) {
+        query = query.eq('session_id', sessionId);
+      }
+
+      const { data, error } = await query
         .order('created_at', { ascending: true })
-        .limit(60);
+        .limit(100);
+
       if (error) return [];
       return data || [];
     } catch {
@@ -68,7 +102,48 @@ export const supabaseService = {
     }
   },
 
-  async saveAIChatMessage(orgId: string, sender: 'user' | 'ai', text: string, options: any[] = []): Promise<boolean> {
+  async getAIChatSessions(orgId: string): Promise<Array<{ session_id: string; last_text: string; created_at: string; msg_count: number }>> {
+    try {
+      const { data, error } = await supabase
+        .from('ai_chat_history')
+        .select('session_id, text, created_at, sender')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(300);
+
+      if (error || !data) return [];
+
+      const sessionsMap = new Map<string, { session_id: string; last_text: string; created_at: string; msg_count: number; has_user_msg: boolean }>();
+
+      data.forEach((row: any) => {
+        const sId = row.session_id || 'default';
+        const isUser = row.sender === 'user';
+
+        if (!sessionsMap.has(sId)) {
+          sessionsMap.set(sId, {
+            session_id: sId,
+            last_text: row.text,
+            created_at: row.created_at,
+            msg_count: 1,
+            has_user_msg: isUser,
+          });
+        } else {
+          const s = sessionsMap.get(sId)!;
+          s.msg_count += 1;
+          if (isUser) s.has_user_msg = true;
+        }
+      });
+
+      // Filter out empty sessions where the user never sent any message or selected any option
+      return Array.from(sessionsMap.values())
+        .filter(s => s.has_user_msg)
+        .map(({ has_user_msg, ...rest }) => rest);
+    } catch {
+      return [];
+    }
+  },
+
+  async saveAIChatMessage(orgId: string, sender: 'user' | 'ai', text: string, options: any[] = [], sessionId: string = 'default'): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('ai_chat_history')
@@ -77,6 +152,7 @@ export const supabaseService = {
           sender,
           text,
           options: JSON.stringify(options),
+          session_id: sessionId,
         }]);
       return !error;
     } catch {
@@ -84,12 +160,18 @@ export const supabaseService = {
     }
   },
 
-  async clearAIChatHistory(orgId: string): Promise<boolean> {
+  async clearAIChatHistory(orgId: string, sessionId?: string): Promise<boolean> {
     try {
-      const { error } = await supabase
+      let query = supabase
         .from('ai_chat_history')
         .delete()
         .eq('org_id', orgId);
+
+      if (sessionId) {
+        query = query.eq('session_id', sessionId);
+      }
+
+      const { error } = await query;
       return !error;
     } catch {
       return false;

@@ -14,6 +14,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_SERVICE_ROLE_KEY: string;
   readonly VITE_SUPABASE_PUBLISHABLE_KEY: string;
   readonly VITE_SUPABASE_SECRET_KEY: string;
+  readonly VITE_GEMINI_API_KEY?: string;
 }
 
 interface ImportMeta {

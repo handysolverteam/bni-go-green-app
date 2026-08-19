@@ -641,7 +641,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </h2>
           </div> */}
 
-          {!isDataLoaded || isSyncing || isInitialLoading || (availableReports.length === 0 && !hasConfirmedEmptyDb) ? (
+          {!isDataLoaded || isInitialLoading || (availableReports.length === 0 && !hasConfirmedEmptyDb) ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map((i) => (
                 <GlassCard key={i} className="p-5 space-y-4 border-emerald-500/20 bg-slate-900/60 animate-pulse">

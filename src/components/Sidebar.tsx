@@ -87,7 +87,11 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   const mainMarginClass = sidebarMode === 'icons' ? 'lg:ml-20' : sidebarMode === 'hover' ? (isHovered ? 'lg:ml-64' : 'lg:ml-20') : 'lg:ml-64';
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row antialiased">
+    <div className={`flex flex-col lg:flex-row antialiased ${
+      activeTab === 'chat'
+        ? 'fixed inset-0 h-dvh max-h-dvh overflow-hidden'
+        : 'min-h-screen'
+    }`}>
       {/* --- DESKTOP SIDEBAR (≥1024px) --- */}
       <aside
         onMouseEnter={() => { if (sidebarMode === 'hover') setIsHovered(true); }}
@@ -212,7 +216,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       </aside>
 
       {/* --- MOBILE HEADER & DRAWER (<1024px) --- */}
-      <header className="lg:hidden sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-4 py-2.5 backdrop-blur-xl pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+      <header className="lg:hidden shrink-0 sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-4 py-2.5 backdrop-blur-xl pt-[calc(env(safe-area-inset-top,0px)+10px)]">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <img
@@ -220,37 +224,37 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
               alt="Handychapter Logo"
               className="w-9 h-9 rounded-xl object-cover shadow-lg shadow-emerald-500/20 shrink-0"
             />
-            <div>
-              <h1 className="text-sm font-extrabold text-white">Handychapter</h1>
-              <p className="text-[10px] text-emerald-400 font-semibold">{org?.name || 'Chapter'}</p>
+            <div className="overflow-hidden">
+              <h1 className="text-sm font-extrabold text-white tracking-wide truncate">Handychapter</h1>
+              <p className="text-[10px] text-emerald-400 font-semibold truncate">{org?.name || 'Chapter Portal'}</p>
             </div>
           </div>
 
-          {/* Theme Toggle + Profile Photo Avatar Button */}
           <div className="flex items-center space-x-2">
+            {/* Theme Toggle Button */}
             <button
               onClick={() => toggleTheme(themeMode === 'dark' ? 'light' : 'dark')}
-              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-amber-400 border border-white/10 transition-all shrink-0 cursor-pointer"
+              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-amber-400 border border-white/10 transition-all shadow-md shrink-0 cursor-pointer"
               title={themeMode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {themeMode === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-400" />}
             </button>
 
+            {/* Profile Avatar Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="relative p-0.5 rounded-full ring-2 ring-emerald-500/50 hover:ring-emerald-400 transition-all active:scale-95"
-              title="Account Menu"
+              className="relative p-0.5 rounded-full ring-2 ring-emerald-500/50 hover:ring-emerald-400 transition-all shrink-0 cursor-pointer"
             >
-              {user ? (
+              {userProfile?.avatar_url || user?.photoURL ? (
                 <img
-                  src={userProfile?.avatar_url || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                  alt="Profile Avatar"
+                  src={userProfile?.avatar_url || user?.photoURL || ''}
+                  alt="User Avatar"
                   referrerPolicy="no-referrer"
-                  className="w-9 h-9 rounded-full object-cover"
+                  className="w-8 h-8 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-emerald-400 font-bold text-sm">
-                  U
+                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-emerald-400 font-bold text-xs">
+                  {userProfile?.full_name ? userProfile.full_name.charAt(0) : 'U'}
                 </div>
               )}
             </button>
@@ -301,7 +305,11 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       </header>
 
       {/* --- MAIN CONTENT CONTAINER --- */}
-      <main className={`flex-1 ${mainMarginClass} w-full min-w-0 p-2.5 sm:p-5 lg:p-8 pb-[calc(env(safe-area-inset-bottom,0px)+100px)] lg:pb-8 min-h-screen transition-all duration-300 ease-in-out`}>
+      <main className={`flex-1 min-h-0 ${mainMarginClass} w-full transition-all duration-300 ease-in-out ${
+        activeTab === 'chat'
+          ? 'p-0 pb-0 h-full max-h-full overflow-hidden flex flex-col'
+          : 'p-2.5 sm:p-5 lg:p-8 pb-[calc(env(safe-area-inset-bottom,0px)+100px)] lg:pb-8 min-h-screen'
+      }`}>
         {children}
       </main>
 
