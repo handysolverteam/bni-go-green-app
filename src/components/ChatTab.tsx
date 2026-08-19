@@ -192,12 +192,19 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
     let sub: any = null;
     if (org?.id) {
       sub = supabaseService.subscribeToAIChatHistory(org.id, () => {
-        loadActiveHistory();
+        // Only re-fetch if component is mounted and we aren't actively generating a response locally
+        if (isMounted) {
+          loadActiveHistory();
+        }
       });
     }
 
     const handleWindowFocus = () => {
-      loadActiveHistory();
+      // Only reload on focus if we are awaiting a background response
+      const isPending = sessionStorage.getItem(`bni_ai_is_processing_${sessionId}`) === 'true';
+      if (isPending) {
+        loadActiveHistory();
+      }
     };
 
     window.addEventListener('focus', handleWindowFocus);
@@ -210,13 +217,13 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
     };
   }, [org?.id, sessionId]);
 
-  // Fallback Polling for AI reply when switching tabs while processing
+  // Fallback Polling ONLY when AI reply is in progress across tab switches
   useEffect(() => {
     let interval: any = null;
     const isPending = sessionStorage.getItem(`bni_ai_is_processing_${sessionId}`) === 'true';
 
-    if (isPending && org?.id) {
-      setIsTyping(true);
+    // Only run interval when actively pending and typing
+    if (isPending && isTyping && org?.id) {
       interval = setInterval(async () => {
         try {
           const history = await supabaseService.getAIChatHistory(org.id, sessionId);
@@ -233,11 +240,10 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
               setMessages(parsed);
               setIsTyping(false);
               sessionStorage.removeItem(`bni_ai_is_processing_${sessionId}`);
-              clearInterval(interval);
             }
           }
         } catch (_) {}
-      }, 1500);
+      }, 3000); // 3s interval instead of 1.5s to reduce unnecessary API pressure
     }
 
     return () => {

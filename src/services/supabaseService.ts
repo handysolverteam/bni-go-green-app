@@ -114,7 +114,7 @@ export const supabaseService = {
 
   subscribeToAIChatHistory(orgId: string, onUpdate: () => void) {
     const channelName = `ai_chat_realtime_${orgId}_${Date.now()}`;
-    return supabase
+    const channel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
@@ -129,6 +129,14 @@ export const supabaseService = {
         }
       )
       .subscribe();
+
+    return {
+      unsubscribe: () => {
+        try {
+          supabase.removeChannel(channel);
+        } catch (_) {}
+      }
+    };
   },
 
   async getAIChatSessions(orgId: string): Promise<Array<{ session_id: string; last_text: string; created_at: string; msg_count: number }>> {
