@@ -98,7 +98,9 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
   }, [messages]);
 
   const [customInput, setCustomInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [isTyping, setIsTyping] = useState<boolean>(() => {
+    return sessionStorage.getItem(`bni_ai_is_processing_${sessionId}`) === 'true';
+  });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
@@ -111,7 +113,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Load active session chat history on mount, session change, or window re-focus
+  // Load active session chat history & setup Realtime WebSocket Listener
   useEffect(() => {
     let isMounted = true;
     async function loadActiveHistory() {
@@ -127,6 +129,16 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
             timestamp: new Date(item.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           }));
           setMessages(parsed);
+
+          // Check if AI processing was in progress when user switched tabs
+          const isPending = sessionStorage.getItem(`bni_ai_is_processing_${sessionId}`) === 'true';
+          const lastMsg = parsed[parsed.length - 1];
+          if (isPending && lastMsg && lastMsg.sender === 'user') {
+            setIsTyping(true);
+          } else {
+            setIsTyping(false);
+            sessionStorage.removeItem(`bni_ai_is_processing_${sessionId}`);
+          }
         } else if (isMounted) {
           setMessages([initialWelcomeMsg]);
         }
@@ -136,6 +148,14 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
     }
     loadActiveHistory();
 
+    // Supabase Realtime WebSocket Subscription for 0ms latency background updates
+    let sub: any = null;
+    if (org?.id) {
+      sub = supabaseService.subscribeToAIChatHistory(org.id, () => {
+        loadActiveHistory();
+      });
+    }
+
     const handleWindowFocus = () => {
       loadActiveHistory();
     };
@@ -144,8 +164,46 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
     return () => {
       isMounted = false;
       window.removeEventListener('focus', handleWindowFocus);
+      if (sub && typeof sub.unsubscribe === 'function') {
+        sub.unsubscribe();
+      }
     };
   }, [org?.id, sessionId]);
+
+  // Fallback Polling for AI reply when switching tabs while processing
+  useEffect(() => {
+    let interval: any = null;
+    const isPending = sessionStorage.getItem(`bni_ai_is_processing_${sessionId}`) === 'true';
+
+    if (isPending && org?.id) {
+      setIsTyping(true);
+      interval = setInterval(async () => {
+        try {
+          const history = await supabaseService.getAIChatHistory(org.id, sessionId);
+          if (history && history.length > 0) {
+            const lastItem = history[history.length - 1];
+            if (lastItem.sender === 'ai') {
+              const parsed: ChatMessage[] = history.map((item: any) => ({
+                id: item.id || `hist_${Math.random()}`,
+                sender: item.sender || 'ai',
+                text: item.text || '',
+                options: item.options ? (typeof item.options === 'string' ? JSON.parse(item.options) : item.options) : [],
+                timestamp: new Date(item.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              }));
+              setMessages(parsed);
+              setIsTyping(false);
+              sessionStorage.removeItem(`bni_ai_is_processing_${sessionId}`);
+              clearInterval(interval);
+            }
+          }
+        } catch (_) {}
+      }, 1500);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [sessionId, org?.id, isTyping]);
 
   // Auto-scroll to bottom when messages update
   useEffect(() => {
@@ -253,6 +311,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
     setMessages(prev => [...prev, userMsg]);
     setCustomInput('');
     setIsTyping(true);
+    sessionStorage.setItem(`bni_ai_is_processing_${sessionId}`, 'true');
     await saveMessageToDB('user', userMsg.text);
 
     try {
@@ -312,6 +371,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
       await saveMessageToDB('ai', errorMsg.text, errorMsg.options);
     } finally {
       setIsTyping(false);
+      sessionStorage.removeItem(`bni_ai_is_processing_${sessionId}`);
     }
   };
 

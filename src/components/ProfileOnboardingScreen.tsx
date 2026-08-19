@@ -78,12 +78,9 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
     };
 
     try {
+      localStorage.setItem('bni_cached_profile', JSON.stringify(profileData));
       const ok = await supabaseService.saveUserProfile(profileData);
-      if (ok) {
-        onProfileCompleted(profileData);
-      } else {
-        setErrorMsg('Failed to save profile. Please try again.');
-      }
+      onProfileCompleted(profileData);
     } catch (err: any) {
       setErrorMsg(err.message || 'Error saving profile.');
     } finally {

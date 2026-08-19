@@ -107,15 +107,48 @@ export function analyzeLocalChapterQuery(
     }
   }
 
-  // 2. Multi-Member Comparison / Side-by-Side Analysis Query
   const matchedMembers = members.filter(m => {
     const name = getMemberName(m).toLowerCase();
     return name && name.length > 2 && lower.includes(name);
   });
+  const isTemplateRequest =
+    lower.includes('template') ||
+    lower.includes('draft message') ||
+    lower.includes('create message') ||
+    lower.includes('create template') ||
+    lower.includes('nudge') ||
+    lower.includes('whatsapp message') ||
+    lower.includes('outreach message');
+
+  if (isTemplateRequest && matchedMembers.length > 0) {
+    const targetMember = matchedMembers[0];
+    const name = getMemberName(targetMember);
+    const score = getMemberScore(targetMember);
+    const zone = getMemberZone(targetMember);
+    const phone = getMemberPhone(targetMember);
+    const emoji = getZoneEmoji(zone);
+
+    return `💬 *WhatsApp Outreach Message Template for ${name}*\n` +
+      `*Target Member:* ${name} (Score: ${emoji} ${score}/100 pts, ${zone} Zone | 📱 ${phone})\n\n` +
+      `Hi ${name} 👋\n\n` +
+      `Great effort in our recent performance report! You are currently at *${score}/100 points* (${zone} Zone) in our *${orgName}* chapter.\n\n` +
+      `You are just a few steps away from elevating your performance! 🚀 Completing 1 CEU module or booking 1 One-to-One meeting this week will boost your score.\n\n` +
+      `Let us reach new heights together! 💪\n\n` +
+      `❓ *Would you like me to generate a 1-to-1 invitation template for another member or inspect chapter statistics?*`;
+  }
+
+  // 3. Multi-Member Comparison / Side-by-Side Analysis Query
+  const isExplicitComparison =
+    lower.includes('compare') ||
+    lower.includes('comprasion') ||
+    lower.includes('versus') ||
+    lower.includes('vs') ||
+    lower.includes('difference');
 
   if (
-    (lower.includes('compare') || lower.includes('comprasion') || lower.includes('versus') || lower.includes('vs') || matchedMembers.length >= 2) &&
-    matchedMembers.length >= 2
+    isExplicitComparison &&
+    matchedMembers.length >= 2 &&
+    getMemberName(matchedMembers[0]).toLowerCase() !== getMemberName(matchedMembers[1]).toLowerCase()
   ) {
     const m1 = matchedMembers[0];
     const m2 = matchedMembers[1];
@@ -356,21 +389,127 @@ export function analyzeLocalChapterQuery(
     return res;
   }
 
-  // 12. Draft WhatsApp Message Query
-  if (lower.includes('draft') || lower.includes('nudge') || lower.includes('whatsapp message')) {
-    return `💬 *WhatsApp Outreach Template*\n\n` +
-      `Hi {{member_name}} 👋\n\n` +
-      `Great effort in our recent ${availableReports[0] || 'PALMS'} performance report! You are currently at *{{score}}/100 points*.\n\n` +
-      `You are just a few steps away from elevating into the *GREEN Zone*! 🚀 Completing 1 CEU module or booking 1 One-to-One meeting this week will boost your score.\n\n` +
-      `Let us reach Green together! 💪\n\n` +
-      `❓ *Would you like me to customize this template for Green, Amber, or Red members?*`;
+  // 12. Attendance & Absenteeism Audit Query
+  if (lower.includes('attendance') || lower.includes('absent') || lower.includes('substitute') || lower.includes('late')) {
+    const absentMembers = members.filter(m => (m.A || (m as any).absent || 0) > 0);
+    const subMembers = members.filter(m => (m.S || (m as any).substitute || 0) > 0);
+
+    let res = `📋 *Attendance & Absenteeism Audit (${orgName})*\n\n`;
+    if (absentMembers.length > 0) {
+      res += `🚨 *Members with Recorded Absences:*\n`;
+      absentMembers.forEach((m, idx) => {
+        const name = getMemberName(m);
+        const phone = getMemberPhone(m);
+        const abs = m.A || (m as any).absent || 0;
+        res += `${idx + 1}. *${name}* — ${abs} Absences (📱 ${phone})\n`;
+      });
+      res += `\n`;
+    }
+
+    if (subMembers.length > 0) {
+      res += `👥 *Members utilizing Substitutes:*\n`;
+      subMembers.forEach((m, idx) => {
+        const name = getMemberName(m);
+        const subs = m.S || (m as any).substitute || 0;
+        res += `${idx + 1}. *${name}* — ${subs} Substitutes\n`;
+      });
+      res += `\n`;
+    }
+
+    if (absentMembers.length === 0 && subMembers.length === 0) {
+      res += `🎉 100% Perfect Attendance recorded across all members in this report period!\n\n`;
+    }
+
+    res += `❓ *Would you like a friendly WhatsApp check-in message for absent members?*`;
+    return res;
   }
 
-  // 13. Specific Default Reply
-  return `📊 *Chapter AI Overview for ${firstName}*\n` +
+  // 13. CEU Education & Training Audit Query
+  if (lower.includes('ceu') || lower.includes('education') || lower.includes('credit') || lower.includes('training')) {
+    const sortedCeu = [...members].sort((a, b) => (b.CEU || (b as any).ceu || 0) - (a.CEU || (a as any).ceu || 0));
+    const lowCeu = members.filter(m => (m.CEU || (m as any).ceu || 0) < 1);
+
+    let res = `🎓 *Chapter Education Units (CEU) Audit (${orgName})*\n\n` +
+      `🏆 *Top CEU Achievers:*\n`;
+    sortedCeu.slice(0, 5).forEach((m, idx) => {
+      const name = getMemberName(m);
+      const ceu = m.CEU || (m as any).ceu || 0;
+      res += `${idx + 1}. *${name}* — ${formatDecimal(ceu, 1)} CEUs/wk\n`;
+    });
+
+    if (lowCeu.length > 0) {
+      res += `\n⚠️ *Members Needing CEU Completion (${lowCeu.length} Members):*\n`;
+      lowCeu.slice(0, 5).forEach((m, idx) => {
+        const name = getMemberName(m);
+        const phone = getMemberPhone(m);
+        res += `• *${name}* (📱 ${phone})\n`;
+      });
+    }
+
+    res += `\n❓ *Would you like me to generate a BNI Business Builder podcast recommendation message for them?*`;
+    return res;
+  }
+
+  // 14. Report Batches List Query
+  if (lower.includes('report') || lower.includes('batches') || lower.includes('uploaded')) {
+    const reports = availableReports.length > 0 ? availableReports : ['Latest PALMS Upload'];
+    let res = `📊 *Available Chapter Performance Reports (${orgName})*\n\n`;
+    reports.forEach((rep, idx) => {
+      res += `${idx + 1}. 📄 *${rep}*\n`;
+    });
+    res += `\n❓ *Would you like me to inspect details for a specific report or compare two reports side-by-side?*`;
+    return res;
+  }
+
+  // 15. Top Scorer / Lowest Scorer Lookup Query
+  if (lower.includes('highest') || lower.includes('top scorer') || lower.includes('best score') || lower.includes('top member') || lower.includes('who is #1')) {
+    const sorted = [...members].sort((a, b) => getMemberScore(b) - getMemberScore(a));
+    if (sorted.length > 0) {
+      const topM = sorted[0];
+      const name = getMemberName(topM);
+      const score = getMemberScore(topM);
+      const zone = getMemberZone(topM);
+      const phone = getMemberPhone(topM);
+      return `🏆 *Top Chapter Performer: ${name}*\n` +
+        `*Chapter:* ${orgName}\n\n` +
+        `• *PALMS Score:* 🟢 *${score}/100 pts* (${zone} Zone)\n` +
+        `• *Phone Contact:* ${phone}\n` +
+        `• *1-to-1 Meetings:* ${formatDecimal(topM.OneToOnes || (topM as any).one_to_ones || 0, 1)}/wk\n` +
+        `• *Referrals Given:* ${formatDecimal(topM.ReferralsGivenRate ?? topM.RGT ?? (topM as any).referrals_given ?? 0, 1)}/wk\n` +
+        `• *TYFCB Business:* ${formatCurrency(topM.TYFCB || (topM as any).tyfcb || 0)}\n\n` +
+        `❓ *Would you like to draft a WhatsApp message to congratulate ${name}?*`;
+    }
+  }
+
+  if (lower.includes('lowest') || lower.includes('bottom') || lower.includes('lowest score')) {
+    const sorted = [...members].sort((a, b) => getMemberScore(a) - getMemberScore(b));
+    if (sorted.length > 0) {
+      const botM = sorted[0];
+      const name = getMemberName(botM);
+      const score = getMemberScore(botM);
+      const zone = getMemberZone(botM);
+      const phone = getMemberPhone(botM);
+      return `🔴 *Member Needing Highest Support: ${name}*\n` +
+        `*Chapter:* ${orgName}\n\n` +
+        `• *PALMS Score:* 🔴 *${score}/100 pts* (${zone} Zone)\n` +
+        `• *Phone Contact:* ${phone}\n` +
+        `• *1-to-1 Meetings:* ${formatDecimal(botM.OneToOnes || (botM as any).one_to_ones || 0, 1)}/wk\n\n` +
+        `❓ *Would you like me to generate a 1-to-1 mentorship invitation template for ${name}?*`;
+    }
+  }
+
+  // 16. Intelligent Disambiguation & Counter-Question on Unmatched / Vague Queries
+  const sampleMembers = members.slice(0, 3).map(m => `*${getMemberName(m)}*`).join(', ');
+
+  return `📊 *Chapter AI Intelligence Overview for ${firstName}*\n` +
     `*Chapter:* ${orgName} | *Active Members:* ${total}\n\n` +
     `• *PALMS Average Score:* ${formatDecimal(avg, 1)} / 100 pts\n` +
     `• *Zone Distribution:* 🟢 ${g} Green | 🟡 ${a} Amber | 🔴 ${r} Red\n` +
     `• *Closed Revenue (TYFCB):* ${formatCurrency(tyfcb)}\n\n` +
-    `❓ *What specific detail would you like me to look up for ${orgName}? (e.g. type "Green members", "TYFCB", or type any member's name)*`;
+    `💡 *I can look up any data for you. Would you like to:* \n` +
+    `1. 🟢 View *Green Zone Leaders*\n` +
+    `2. 🔴 View *Red Zone Support List*\n` +
+    `3. 👤 Inspect a specific member (e.g. ${sampleMembers || 'Abhay Goenka'})\n` +
+    `4. 📄 View *Report Batches* & comparison\n\n` +
+    `❓ *What would you like me to analyze for ${orgName}?*`;
 }

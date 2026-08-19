@@ -209,10 +209,43 @@ export const AppContent: React.FC = () => {
           });
         }
 
-        if (profRes) {
-          localStorage.setItem('bni_cached_profile', JSON.stringify(profRes));
-        } else {
-          localStorage.removeItem('bni_cached_profile');
+        let finalProfile = profRes;
+        if (!finalProfile) {
+          const cachedStr = localStorage.getItem('bni_cached_profile');
+          if (cachedStr) {
+            try {
+              const cached = JSON.parse(cachedStr);
+              if (cached && (cached.full_name || cached.phone || cached.is_profile_completed)) {
+                finalProfile = { ...cached, is_profile_completed: true };
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (finalProfile) {
+          localStorage.setItem('bni_cached_profile', JSON.stringify(finalProfile));
+          setUserProfile(finalProfile);
+        } else if (user?.displayName || user?.email) {
+          const cachedStr = localStorage.getItem('bni_cached_profile');
+          let existingPhone = (user as any).phoneNumber || '';
+          if (cachedStr) {
+            try {
+              const cached = JSON.parse(cachedStr);
+              if (cached && cached.phone) existingPhone = cached.phone;
+            } catch (_) {}
+          }
+
+          const fallback: UserProfileExtended = {
+            user_id: user.uid,
+            full_name: user.displayName || user.email?.split('@')[0] || 'Member',
+            phone: existingPhone,
+            business_category: '',
+            bio: '',
+            avatar_url: user.photoURL || '',
+            is_profile_completed: true,
+          };
+          localStorage.setItem('bni_cached_profile', JSON.stringify(fallback));
+          setUserProfile(fallback);
         }
 
         if (orgRes) {
@@ -227,7 +260,6 @@ export const AppContent: React.FC = () => {
           setOrgMember(null);
         }
 
-        setUserProfile(profRes);
         setMembers(fetchedMembers);
         setImportLogs(fetchedLogs);
       } catch (err) {

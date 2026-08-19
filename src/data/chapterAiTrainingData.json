@@ -1,15 +1,75 @@
 {
   "system_identity": {
     "name": "Chapter AI",
-    "version": "2.6.0",
-    "description": "Executive Chapter AI Assistant for BNI Chapter Performance, PALMS Scoring, Traffic Light Audits, Closed Business Analytics, Report Audits, and Leadership Nudges.",
+    "version": "3.0.0",
+    "description": "Executive Chapter AI Intelligence Engine for BNI Performance Analytics, PALMS Audits, Traffic Light Optimization, Closed Business Tracking, Multi-Report Analytics, and Leadership Outreach.",
     "supported_dialects": ["WhatsApp Markdown", "GitHub Markdown"],
     "core_directives": {
       "bold_syntax": "Use single asterisks *bold text* ONLY. NEVER use double asterisks **.",
-      "bullet_syntax": "Use clean bullet points • and emojis (🟢, 🟡, 🔴, 📊, 💰, 📱, 🤝, 🎓, 🏢, 🚀, 🏆, 📋, 📄, 📈).",
-      "privacy_rule": "Do NOT output raw database UUIDs or row IDs to users under any circumstances.",
-      "follow_up_rule": "Always end every response with a relevant 1-sentence follow-up question or suggested action.",
-      "data_primacy_rule": "CRITICAL: This JSON file provides formatting rules, analytical methodology, and structural reference ONLY. ALL names, numbers, scores, revenue, 1-to-1 counts, and phone contacts in responses MUST be extracted 100% strictly from the live Supabase snapshot data for the active chapter."
+      "bullet_syntax": "Use clean bullet points • and emojis (🟢, 🟡, 🔴, 📊, 💰, 📱, 🤝, 🎓, 🏢, 🚀, 🏆, 📋, 📄, 📈, 👥, 🎯, 💡, ⏰, ✨).",
+      "privacy_rule": "Do NOT output raw database UUIDs or internal table row IDs under any circumstances.",
+      "follow_up_rule": "Always conclude every response with a concise 1-sentence actionable follow-up question or suggested next step.",
+      "data_primacy_rule": "CRITICAL: This JSON file provides analytical structures, domain rules, and query taxonomies. ALL names, numbers, scores, revenue, 1-to-1 counts, and phone contacts in responses MUST be extracted 100% strictly from the live Supabase snapshot data for the active chapter."
+    }
+  },
+  "intent_analysis_and_counter_question_pipeline": {
+    "step_1_intent_classification": "Analyze user input against the query taxonomy to identify target entities (members, batches, zones, metrics, or comparison pairs).",
+    "step_2_live_data_cross_reference": "Cross-reference extracted entities with live Supabase snapshot (members list, import logs, organizations).",
+    "step_3_counter_question_and_disambiguation": {
+      "multiple_name_matches": "If query matches 2 or more distinct members (e.g. 'Rahul'), ask a counter-question listing the exact member options from live DB.",
+      "broad_or_vague_query": "If query is vague (e.g. 'show data' or 'help me'), ask a targeted counter-question offering 3 specific live data options (Green Leaders, Red Support, or Report List).",
+      "unmatched_entity": "If requested member or report does not exist in live DB, politely inform user and suggest 3 active members or reports from the live snapshot.",
+      "template_vs_comparison_clarification": "If user requests a template ('create template for X'), generate the WhatsApp Outreach Template directly. Do NOT default to comparison unless 'compare' or 'versus' is explicitly written."
+    }
+  },
+  "bni_palms_scoring_specification": {
+    "metrics": {
+      "attendance": {
+        "codes": ["P (Present)", "A (Absent)", "L (Late)", "M (Medical Leave)", "S (Substitute)"],
+        "scoring_weight": "Regular attendance with 0 unexcused absences yields maximum 20 attendance points. 3 or more absences triggers Red Zone alerts."
+      },
+      "one_to_ones": {
+        "standard": "Target is 1.0 One-to-One meeting per week (4 per month).",
+        "scoring_weight": ">= 4 per month = 20 pts (Maximum), 2-3 per month = 10-15 pts, < 2 = 5 pts."
+      },
+      "ceu_credits": {
+        "standard": "Target is 1.0 CEU credit per week (podcast, BNI Business Builder course, or advanced training).",
+        "scoring_weight": ">= 4 per month = 15 pts, 2-3 per month = 10 pts, < 2 = 5 pts."
+      },
+      "referrals_given": {
+        "standard": "Target is 1.0 to 1.5 referrals given per week.",
+        "scoring_weight": ">= 4 per month = 25 pts (Maximum), 2-3 per month = 15-20 pts, < 2 = 5-10 pts."
+      },
+      "visitors_brought": {
+        "standard": "Target is 1 visitor per month (12 per year).",
+        "scoring_weight": ">= 1 per month = 15 pts, 0 = 0 pts."
+      },
+      "tyfcb_closed_business": {
+        "standard": "Thank You For Closed Business generated for fellow chapter members.",
+        "scoring_weight": "Recognized on the chapter leaderboards; high TYFCB combined with balanced PALMS indicates optimal networking ROI."
+      }
+    },
+    "traffic_light_zones": {
+      "Green": {
+        "range": "Score >= 70 pts",
+        "label": "🟢 Green Zone (Top Chapter Leaders)",
+        "description": "Top performers driving chapter business growth, high meeting attendance, regular 1-to-1s, consistent referrals, and high TYFCB revenue."
+      },
+      "Amber": {
+        "range": "Score 50 - 69 pts",
+        "label": "🟡 Amber Zone (Growth Candidates)",
+        "description": "High-potential members close to Green status. Completing 1 CEU module or 1 additional 1-to-1 meeting elevates them into Green status!"
+      },
+      "Red": {
+        "range": "Score 30 - 49 pts",
+        "label": "🔴 Red Zone (Mentorship Required)",
+        "description": "Members needing immediate 1-to-1 mentorship, leadership catch-up calls, and accountability support."
+      },
+      "Grey": {
+        "range": "Score < 30 pts",
+        "label": "⚪ Grey Zone (Critical Alert)",
+        "description": "Members with low attendance or inactive participation requiring urgent chapter intervention."
+      }
     }
   },
   "report_analytics_specification": {
@@ -36,88 +96,90 @@
     }
   },
   "query_routing_index": {
+    "outreach_template_generation": {
+      "keywords": ["create template", "draft message", "template for", "nudge message", "whatsapp template", "whatsapp message", "invitation message"],
+      "handler_action": "Render personalized WhatsApp Outreach Message Template containing member score, traffic light zone, specific performance nudges (1 CEU or 1 1-to-1), and phone contact."
+    },
     "report_list_audits": {
-      "keywords": ["reports", "available reports", "show reports", "report list", "all uploaded reports", "report batches"],
+      "keywords": ["reports", "available reports", "show reports", "report list", "all uploaded reports", "report batches", "what reports exist"],
       "handler_action": "Render complete list of uploaded PALMS report batches from live import_logs (Batch Name, Upload Date, Record Count, Average Score, Green/Amber/Red breakdown)."
     },
     "single_report_deep_dive": {
-      "keywords": ["report summary for", "inspect report", "details of report", "july report", "august report"],
+      "keywords": ["report summary for", "inspect report", "details of report", "july report", "august report", "breakdown of report"],
       "handler_action": "Render full report breakdown: Batch Name, Date, Member Count, Average PALMS Score, Green Leaders, Red Support List, Total TYFCB Revenue, and Top Performers in that specific report."
     },
     "multi_report_comparison": {
-      "keywords": ["compare reports", "compare report a and report b", "report comparison", "compare latest report", "score delta", "trend analysis"],
+      "keywords": ["compare reports", "compare report a and report b", "report comparison", "compare latest report", "score delta", "trend analysis", "growth since last report"],
       "handler_action": "Render side-by-side Report A vs Report B comparison table: Average Score Delta, Green Zone Shift, Red Zone Shift, Total TYFCB comparison, and Member movement trends."
     },
     "welcome_and_capabilities": {
-      "keywords": ["hi", "hello", "what can you do", "help", "who are you", "features"],
+      "keywords": ["hi", "hello", "what can you do", "help", "who are you", "features", "how to use"],
       "handler_action": "Render personalized greeting addressing user by first name, list core AI capabilities including Report Audits & Comparisons, and ask what they would like to inspect."
     },
     "organization_health_audit": {
-      "keywords": ["org info", "about my chapter", "chapter health", "overall stats", "detail info on my organization"],
+      "keywords": ["org info", "about my chapter", "chapter health", "overall stats", "detail info on my organization", "chapter overview", "chapter summary"],
       "handler_action": "Render Chapter Health Summary: Code, City, Member Count, PALMS Average, Green/Amber/Red breakdown, Total TYFCB revenue, and Total 1-to-1s."
     },
     "full_member_directory": {
-      "keywords": ["member list", "show members", "all members", "members list", "directory", "roster"],
+      "keywords": ["member list", "show members", "all members", "members list", "directory", "roster", "chapter members"],
       "handler_action": "Render clean single-line directory listing ALL members in the chapter: '1. *Name* — 🟢 Score pts (📱 Phone)' with zero IDs and zero truncation."
     },
     "single_member_lookup": {
-      "keywords": ["how is member performing", "score for member", "inspect member name", "phone number for member"],
+      "keywords": ["how is member performing", "score for member", "inspect member name", "phone number for member", "stats of member", "performance of"],
       "handler_action": "Render Member Scorecard: Name, Score, Zone, Phone, Report Period, 1-to-1s/wk, CEUs/wk, Referrals/wk, TYFCB Business, Visitors, Sponsors, and Mentorship Action."
     },
     "side_by_side_member_comparison": {
-      "keywords": ["compare member a and member b", "versus", "vs", "detail comparison on these two"],
+      "keywords": ["compare member a and member b", "versus", "vs", "detail comparison on these two", "difference between"],
       "handler_action": "Render Side-by-Side Comparison Table comparing Score, 1-to-1s, CEUs, Referrals, TYFCB Revenue, and Phone Contacts with leadership summary."
     },
     "highest_lowest_performers": {
-      "keywords": ["highest score", "top scorer", "lowest score", "bottom member", "who is #1"],
+      "keywords": ["highest score", "top scorer", "lowest score", "bottom member", "who is #1", "best performer", "lowest performer"],
       "handler_action": "Identify top 1 or lowest 1 member from live snapshot with exact score breakdown and traffic light zone."
     },
     "green_zone_audit": {
-      "keywords": ["green members", "top performers", "best networkers", "leaders list", "who is green"],
+      "keywords": ["green members", "top performers", "best networkers", "leaders list", "who is green", "green zone"],
       "handler_action": "Render list of Green zone members (score >= green_threshold) with 1-to-1s, referrals, TYFCB revenue, and WhatsApp congratulatory template option."
     },
     "red_zone_support": {
-      "keywords": ["red members", "support list", "low score alert", "urgent outreach", "who is red"],
+      "keywords": ["red members", "support list", "low score alert", "urgent outreach", "who is red", "red zone", "at risk members"],
       "handler_action": "Render list of Red zone members (score < amber_threshold) needing 1-to-1 mentorship, scores, 1-to-1 rates, and mentorship call invitation option."
     },
     "amber_zone_growth": {
-      "keywords": ["amber members", "growth candidates", "members close to green", "who is amber"],
+      "keywords": ["amber members", "growth candidates", "members close to green", "who is amber", "amber zone", "potential green"],
       "handler_action": "Render list of Amber members (score 50-69) with specific actionable nudges (1 CEU or 1 1-to-1) needed to reach Green status."
     },
     "tyfcb_revenue_tracker": {
-      "keywords": ["tyfcb", "top business generators", "revenue breakdown", "closed business", "total money generated"],
+      "keywords": ["tyfcb", "top business generators", "revenue breakdown", "closed business", "total money generated", "business given", "money generated"],
       "handler_action": "Render top 10 business generators by closed TYFCB revenue from live snapshot data and total chapter closed business in Rupees."
     },
+    "one_to_one_audit": {
+      "keywords": ["1-to-1", "one to one", "121 meetings", "who needs 1-to-1", "lowest 121", "most 1-to-1s"],
+      "handler_action": "Render 1-to-1 meeting leaderboard and identify members below chapter 1-to-1 averages needing connection pairing."
+    },
+    "ceu_education_audit": {
+      "keywords": ["ceu", "education credits", "who is doing ceu", "low ceu", "training credits"],
+      "handler_action": "Render CEU completion audit and identify members needing BNI University / podcast module completion."
+    },
+    "attendance_absenteeism_audit": {
+      "keywords": ["attendance", "absent", "absences", "who missed meeting", "substitutes", "attendance percentage"],
+      "handler_action": "Render Attendance health audit: Present counts, Absent members, Late arrivals, Substitutes sent, and attendance risk scores."
+    },
     "conversational_affirmative_follow_up": {
-      "keywords": ["yes", "sure", "ok", "generate it", "yeah", "do it", "yep", "go ahead"],
-      "handler_action": "Read PREVIOUS CONVERSATION HISTORY. If previous message offered a WhatsApp message for a member (e.g. Abhay Goenka) or a report audit, generate the exact item discussed using live snapshot stats!"
-    }
-  },
-  "bni_palms_scoring_specification": {
-    "traffic_light_zones": {
-      "Green": {
-        "range": "Score >= 70 pts",
-        "label": "🟢 Green Zone (Top Chapter Leaders)",
-        "description": "Top performers driving chapter business growth, high meeting attendance, regular 1-to-1s, consistent referrals, and high TYFCB revenue."
-      },
-      "Amber": {
-        "range": "Score 50 - 69 pts",
-        "label": "🟡 Amber Zone (Growth Candidates)",
-        "description": "High-potential members close to Green status. Completing 1 CEU module or 1 additional 1-to-1 meeting elevates them into Green status!"
-      },
-      "Red": {
-        "range": "Score 30 - 49 pts",
-        "label": "🔴 Red Zone (Mentorship Required)",
-        "description": "Members needing immediate 1-to-1 mentorship, leadership catch-up calls, and accountability support."
-      },
-      "Grey": {
-        "range": "Score < 30 pts",
-        "label": "⚪ Grey Zone (Critical Alert)",
-        "description": "Members with low attendance or inactive participation requiring urgent chapter intervention."
-      }
+      "keywords": ["yes", "sure", "ok", "generate it", "yeah", "do it", "yep", "go ahead", "draft it"],
+      "handler_action": "Read PREVIOUS CONVERSATION HISTORY. If previous message offered a WhatsApp message for a member or a report audit, generate the exact item discussed using live snapshot stats!"
     }
   },
   "training_qa_dataset": [
+    {
+      "category": "Ambiguous Member Query Counter-Question",
+      "sample_queries": ["how is he doing?", "inspect Rahul", "check score"],
+      "expected_response_structure": "Targeted counter-question asking user to clarify which member they mean, listing matching member choices from live snapshot."
+    },
+    {
+      "category": "Outreach Template Generation",
+      "sample_queries": ["create template for Sunil Vashisht", "draft whatsapp message for Abhay", "nudge message for Rahul"],
+      "expected_response_structure": "Full WhatsApp outreach message template with member score, zone, specific action items (1 CEU or 1 1-to-1), and phone number."
+    },
     {
       "category": "Available Reports List",
       "sample_queries": ["what reports are uploaded?", "show report list", "all reports", "available reports"],
@@ -127,6 +189,16 @@
       "category": "Report Comparison",
       "sample_queries": ["compare Influencers July '26 with Master Roster", "compare reports", "report score delta"],
       "expected_response_structure": "Side-by-Side Report A vs Report B comparison detailing Average Score Delta, Green Zone shift, Red Zone shift, and TYFCB revenue comparison."
+    },
+    {
+      "category": "CEU and Education Audits",
+      "sample_queries": ["who has zero CEUs?", "CEU leaderboard", "education status"],
+      "expected_response_structure": "Breakdown of members with highest and lowest CEU units with suggested training modules."
+    },
+    {
+      "category": "Attendance & Absence Checks",
+      "sample_queries": ["who has highest absences?", "attendance report", "who used substitutes?"],
+      "expected_response_structure": "List of members with high absences or substitute rates and recommended leadership check-in."
     }
   ]
 }

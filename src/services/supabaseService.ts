@@ -53,27 +53,37 @@ export const supabaseService = {
     }
   },
 
+  // High-Speed Memory Cache for Org Snapshot
+  _orgSnapshotCache: null as { orgId: string; data: any; timestamp: number } | null,
+
   // Real-time Read-Only Supabase Org Snapshot for Chapter AI (All tables & fields for orgId)
-  async getCompleteOrgSnapshot(orgId: string): Promise<{
+  async getCompleteOrgSnapshot(orgId: string, forceRefresh: boolean = false): Promise<{
     organization: any;
     members: any[];
     importLogs: any[];
     templates: any[];
   }> {
     try {
+      if (!forceRefresh && this._orgSnapshotCache && this._orgSnapshotCache.orgId === orgId && (Date.now() - this._orgSnapshotCache.timestamp < 15000)) {
+        return this._orgSnapshotCache.data;
+      }
+
       const [orgRes, membersRes, logsRes, templatesRes] = await Promise.all([
         supabase.from('organizations').select('*').eq('id', orgId).maybeSingle(),
-        supabase.from('members').select('*').eq('org_id', orgId).order('name', { ascending: true }),
-        supabase.from('import_logs').select('*').eq('org_id', orgId).order('created_at', { ascending: false }),
-        supabase.from('outreach_templates').select('*').eq('org_id', orgId),
+        supabase.from('members').select('id, name, phone, email, score, traffic_light, present, absent, substitute, medical, one_to_ones, ceu, referrals_given, tyfcb, batch_name, org_id').eq('org_id', orgId).order('name', { ascending: true }),
+        supabase.from('import_logs').select('id, org_id, file_name, batch_name, total_records, green_count, amber_count, red_count, avg_score, created_at').eq('org_id', orgId).order('created_at', { ascending: false }),
+        supabase.from('outreach_templates').select('id, org_id, name, status_target, message_template').eq('org_id', orgId),
       ]);
 
-      return {
+      const result = {
         organization: orgRes.data || null,
         members: membersRes.data || [],
         importLogs: logsRes.data || [],
         templates: templatesRes.data || [],
       };
+
+      this._orgSnapshotCache = { orgId, data: result, timestamp: Date.now() };
+      return result;
     } catch (err) {
       console.warn('Failed to fetch complete org snapshot:', err);
       return { organization: null, members: [], importLogs: [], templates: [] };
@@ -100,6 +110,25 @@ export const supabaseService = {
     } catch {
       return [];
     }
+  },
+
+  subscribeToAIChatHistory(orgId: string, onUpdate: () => void) {
+    const channelName = `ai_chat_realtime_${orgId}_${Date.now()}`;
+    return supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'ai_chat_history',
+          filter: `org_id=eq.${orgId}`,
+        },
+        () => {
+          onUpdate();
+        }
+      )
+      .subscribe();
   },
 
   async getAIChatSessions(orgId: string): Promise<Array<{ session_id: string; last_text: string; created_at: string; msg_count: number }>> {
@@ -370,7 +399,7 @@ export const supabaseService = {
         .eq('user_id', userId)
         .maybeSingle();
 
-      // Fallback: search profile by email if UID changed
+      // Fallback 1: search profile by email if UID changed
       if (!data && userEmail) {
         const { data: emailData } = await supabase
           .from('profiles')
@@ -382,16 +411,54 @@ export const supabaseService = {
           data = emailData;
           await supabase
             .from('profiles')
-            .update({ user_id: userId })
+            .update({ user_id: userId, is_profile_completed: true })
             .eq('id', emailData.id);
         }
       }
 
+      // Check localStorage cache for existing phone number if DB phone is empty
+      const cachedStr = localStorage.getItem('bni_cached_profile');
+      let cachedPhone = '';
+      if (cachedStr) {
+        try {
+          const cached = JSON.parse(cachedStr);
+          if (cached && cached.phone) cachedPhone = cached.phone;
+        } catch (_) {}
+      }
+
+      // Fallback 2: Check localStorage cache if DB data is missing
+      if (!data && cachedStr) {
+        try {
+          const cached = JSON.parse(cachedStr);
+          if (cached && (cached.full_name || cached.phone || cached.is_profile_completed)) {
+            await this.saveUserProfile({
+              ...cached,
+              user_id: userId,
+              is_profile_completed: true,
+            });
+            return {
+              user_id: userId,
+              full_name: cached.full_name || 'Member',
+              phone: cached.phone || cachedPhone || '',
+              business_category: cached.business_category || '',
+              bio: cached.bio || '',
+              avatar_url: cached.avatar_url || '',
+              is_profile_completed: true,
+            };
+          }
+        } catch (e) {
+          console.warn('Failed to parse cached profile:', e);
+        }
+      }
+
       if (!data) return null;
+
+      const finalPhone = data.phone || cachedPhone || '';
+
       return {
         user_id: userId,
         full_name: data.full_name || '',
-        phone: data.phone || '',
+        phone: finalPhone,
         business_category: data.business_category || data.chapter_role || '',
         bio: data.bio || '',
         avatar_url: data.avatar_url || '',
@@ -400,6 +467,13 @@ export const supabaseService = {
       };
     } catch (e) {
       console.error('Error fetching user profile:', e);
+      const cachedStr = localStorage.getItem('bni_cached_profile');
+      if (cachedStr) {
+        try {
+          const cached = JSON.parse(cachedStr);
+          if (cached) return { ...cached, is_profile_completed: true };
+        } catch (_) {}
+      }
       return null;
     }
   },
@@ -407,14 +481,40 @@ export const supabaseService = {
   async saveUserProfile(profile: Partial<UserProfileExtended> & { user_id: string }): Promise<boolean> {
     try {
       const p = profile as any;
+      
+      // Preserve existing phone number if new phone number is empty
+      const cachedStr = localStorage.getItem('bni_cached_profile');
+      let existingPhone = '';
+      if (cachedStr) {
+        try {
+          const cached = JSON.parse(cachedStr);
+          if (cached && cached.phone) existingPhone = cached.phone;
+        } catch (_) {}
+      }
+
+      const safePhone = (profile.phone && profile.phone.trim().length > 0) ? profile.phone.trim() : existingPhone;
+
+      // Save to localStorage immediately as fail-safe backup
+      const profileToSave: UserProfileExtended = {
+        user_id: profile.user_id,
+        full_name: profile.full_name || '',
+        phone: safePhone,
+        business_category: p.business_category || p.category || '',
+        bio: profile.bio || '',
+        avatar_url: profile.avatar_url || '',
+        is_profile_completed: true,
+        updated_at: new Date().toISOString(),
+      };
+      localStorage.setItem('bni_cached_profile', JSON.stringify(profileToSave));
+
       const { error: rpcError } = await supabase.rpc('save_user_profile', {
         p_user_id: profile.user_id,
         p_full_name: profile.full_name || '',
-        p_phone: profile.phone || '',
+        p_phone: safePhone,
         p_chapter_role: p.bni_chapter || '',
-        p_business_category: p.category || '',
+        p_business_category: p.category || p.business_category || '',
         p_avatar_url: profile.avatar_url || '',
-        p_is_profile_completed: profile.is_profile_completed ?? true,
+        p_is_profile_completed: true,
       });
 
       if (rpcError) {
@@ -424,11 +524,11 @@ export const supabaseService = {
           .upsert({
             user_id: profile.user_id,
             full_name: profile.full_name || '',
-            phone: profile.phone || '',
+            phone: safePhone,
             chapter_role: p.bni_chapter || '',
-            business_category: p.category || '',
+            business_category: p.category || p.business_category || '',
             avatar_url: profile.avatar_url || '',
-            is_profile_completed: profile.is_profile_completed ?? true,
+            is_profile_completed: true,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
 
