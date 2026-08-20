@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript)
 
 Handychapter is a multi-tenant, role-based web application designed for BNI Chapter Directors, Owners, Admins, and Members to track weekly **PALMS** (Present, Absent, Substitute, Medical, Referrals, Visitors, TYFCB) statistics, compute 100-point Traffic Light scores, and manage organization team permissions.
---- 
+---
 ## 🌟 Key Features
 
 * **🖥️ Responsive 240px Sidebar & Mobile Drawer**:
