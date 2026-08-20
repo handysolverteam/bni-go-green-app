@@ -23,7 +23,7 @@ export function analyzeLocalChapterQuery(
   const greenThreshold = org?.green_threshold || 70;
   const amberThreshold = org?.amber_threshold || 50;
 
-  const availableReports = importLogs.map(l => l.batch_name).filter(Boolean);
+  const availableReports = importLogs.map(l => l.batch_name).filter((b: string) => Boolean(b) && b !== 'Master Roster');
 
   // Helper functions
   const getMemberName = (m: any) => m.Name || m.name || 'Member';

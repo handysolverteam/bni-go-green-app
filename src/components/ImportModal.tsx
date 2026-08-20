@@ -23,7 +23,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, existingBatchN
   const [parsedMembers, setParsedMembers] = useState<Member[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const isDuplicateBatchName = batchName.trim().length > 0 && existingBatchNames.some(
+  const isReservedName = batchName.trim().toLowerCase() === 'master roster';
+
+  const isDuplicateBatchName = !isReservedName && batchName.trim().length > 0 && existingBatchNames.some(
     existing => existing.trim().toLowerCase() === batchName.trim().toLowerCase()
   );
 
@@ -31,6 +33,11 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, existingBatchN
     if (!file) return;
     const rawFileName = file.name;
     let defaultBatch = rawFileName.replace(/\.[^/.]+$/, '');
+
+    // Prevent default batch name from colliding with Master Roster
+    if (defaultBatch.trim().toLowerCase() === 'master roster') {
+      defaultBatch = 'Traffic Light Report';
+    }
 
     // If batch name already exists, auto-suggest unique counter (e.g. Report #2)
     if (existingBatchNames && existingBatchNames.some(name => name.toLowerCase() === defaultBatch.toLowerCase())) {
@@ -204,15 +211,15 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, existingBatchN
                   isDuplicateBatchName ? 'border-amber-500/60 focus:border-amber-400 ring-1 ring-amber-500/30' : ''
                 }`}
               />
-              {isDuplicateBatchName ? (
+              {isReservedName ? (
+                <p className="text-[11px] font-semibold text-rose-400">
+                  ❌ "Master Roster" is a reserved name for the chapter member directory. Please enter a different report name (e.g. "August 2026 Report").
+                </p>
+              ) : isDuplicateBatchName ? (
                 <p className="text-[11px] font-semibold text-amber-300">
                   ⚠️ A report named "{batchName}" already exists. Importing will update/overwrite this report. Change the name above (e.g. add a date or number) to save as a separate report card.
                 </p>
-              ) : (
-                <p className="text-[11px] text-slate-400">
-                  
-                </p>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -231,15 +238,6 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, existingBatchN
 
           {/* Footer Actions */}
         <div className="p-2.5 sm:p-3 border-t border-white/10 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
-          {/* Sample download option disabled/removed */}
-          {/* <button
-            onClick={handleDownloadSample}
-            className="flex items-center space-x-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            <span>Download 17-Header Sample Excel</span>
-          </button> */}
-
           <div className="flex items-center space-x-2 w-full sm:w-auto">
             <button
               onClick={onClose}
@@ -249,7 +247,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, existingBatchN
             </button>
             <button
               onClick={handleConfirmImport}
-              disabled={parsedMembers.length === 0 || !batchName.trim()}
+              disabled={parsedMembers.length === 0 || !batchName.trim() || isReservedName}
               className="w-1/2 sm:w-auto px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all disabled:opacity-40"
             >
               Confirm ({parsedMembers.length})

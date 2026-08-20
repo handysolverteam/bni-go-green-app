@@ -126,12 +126,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return members.filter(m => isUserSelf(m));
   }, [members, isUserSelf]);
 
-  // Unique report names/batches where this logged-in user is present
+  // Unique report names/batches where this logged-in user is present (excluding Master Roster)
   const selfUserReports = useMemo(() => {
     const map = new Map<string, Member>();
     selfMemberEntries.forEach(m => {
       const bName = m.batch_name || 'Latest Report';
-      if (!map.has(bName)) {
+      if (bName !== 'Master Roster' && !map.has(bName)) {
         map.set(bName, m);
       }
     });

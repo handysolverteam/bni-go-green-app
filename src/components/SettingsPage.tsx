@@ -244,9 +244,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
               placeholder="+91"
               className="w-full px-4 py-2.5 rounded-xl glass-input text-xs font-bold text-emerald-300 border-emerald-500/40"
             />
-            <p className="text-[11px] text-slate-400">
-              Default: <strong>+91</strong> (India). Applied to 10-digit mobile numbers for WhatsApp outreach.
-            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -258,9 +255,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
               placeholder="Go Green"
               className="w-full px-4 py-2.5 rounded-xl glass-input text-xs font-bold text-emerald-300 border-emerald-500/40"
             />
-            <p className="text-[11px] text-slate-400">
-              Default: <strong>Go Green</strong>. Replaces 'Handychapter Score' in outreach headers.
-            </p>
           </div>
         </div>
 
