@@ -101,12 +101,12 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   const [delaySeconds, setDelaySeconds] = useState(5);
   const [statuses, setStatuses] = useState<Record<string, 'pending' | 'sent' | 'failed' | 'skipped'>>({});
 
-  // Extract unique reports
+  // Extract unique reports (excluding Master Roster to match Reports Dashboard & Trends)
   const availableReports = useMemo(() => {
     const reportMap = new Map<string, { batch_name: string; file_name?: string; created_at?: string; membersCount: number; green: number; amber: number; red: number; grey: number }>();
 
     importLogs.forEach(l => {
-      if (l.batch_name) {
+      if (l.batch_name && l.batch_name !== 'Master Roster') {
         const batchMembers = members.filter(m => m.batch_name === l.batch_name);
         reportMap.set(l.batch_name, {
           batch_name: l.batch_name,
@@ -122,7 +122,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
     });
 
     members.forEach(m => {
-      if (m.batch_name && !reportMap.has(m.batch_name)) {
+      if (m.batch_name && m.batch_name !== 'Master Roster' && !reportMap.has(m.batch_name)) {
         const batchMembers = members.filter(bm => bm.batch_name === m.batch_name);
         reportMap.set(m.batch_name, {
           batch_name: m.batch_name,
