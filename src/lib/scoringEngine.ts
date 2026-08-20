@@ -17,8 +17,8 @@ export const DEFAULTS: ScoringConfig = {
   },
   ceu: {
     thresholds: [
-      { t: 0.5, pts: 5 },
-      { t: 1.0, pts: 10 },
+      { t: 0.000001, pts: 5 },
+      { t: 0.500001, pts: 10 },
     ],
   },
   oneToOnes: {

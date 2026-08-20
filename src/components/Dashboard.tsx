@@ -738,21 +738,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                   {/* Card Action Buttons: Stacked Vertically on All Screens */}
                   <div className="pt-3 border-t border-white/10 flex flex-col items-stretch gap-2 w-full">
-                    {/* Button 1: Open Report & Members Table inside Dashboard */}
+                    {/* Button 1: Open Report & Members Table inside Dashboard (Primary Solid Glowing Button) */}
                     <button
                       onClick={(e) => { e.stopPropagation(); setActiveReportName(report.batch_name || null); }}
-                      className="w-full py-3 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-sm flex items-center justify-center space-x-2 border border-white/10 transition-all min-h-[44px] shadow-sm active:scale-[0.99]"
+                      className="w-full py-3 px-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-sm flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.01] transition-all min-h-[44px] active:scale-[0.98] cursor-pointer"
                     >
-                      <Eye className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <Eye className="w-4 h-4 text-slate-950 stroke-[2.5] shrink-0" />
                       <span>Open Report & Members ({report.total_records || 0})</span>
                     </button>
 
-                    {/* Button 2: Start WhatsApp Outreach */}
+                    {/* Button 2: Start WhatsApp Outreach (Subtle Secondary Button) */}
                     <button
                       onClick={(e) => { e.stopPropagation(); onOpenNudges(report.batch_name || undefined); }}
-                      className="w-full py-3 px-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm flex items-center justify-center space-x-2 shadow-md shadow-emerald-500/20 hover:scale-[1.01] transition-all min-h-[44px] active:scale-[0.99]"
+                      className="w-full py-2.5 px-3.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white font-bold text-xs flex items-center justify-center space-x-2 border border-white/10 hover:border-emerald-500/30 transition-all min-h-[40px] active:scale-[0.99] cursor-pointer"
                     >
-                      <MessageSquare className="w-4 h-4 shrink-0" />
+                      <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       <span>Start WhatsApp Outreach</span>
                     </button>
                   </div>

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { UserProfileExtended, Organization, OrgMember } from '../types';
 import { GlassCard } from './GlassCard';
-import { User, ShieldCheck, Building2, Save, Check, Copy, Camera, Upload, Link, Share2 } from 'lucide-react';
+import { User, ShieldCheck, Building2, Save, Check, Camera, Upload, Link } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useToast } from '../context/ToastContext';
-import { getWhatsAppUrl, formatPhoneWithCountryCode } from '../lib/whatsappUtils';
+import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
+import { OrgShareWidget } from './OrgShareWidget';
 
 interface ProfilePageProps {
   profile: UserProfileExtended | null;
@@ -24,42 +25,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
 
   const [isLoading, setIsLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
-
-  const handleCopyCode = () => {
-    if (org?.code) {
-      navigator.clipboard.writeText(org.code);
-      setCopiedCode(true);
-      showToast('Chapter invite code copied to clipboard!', 'info');
-      setTimeout(() => setCopiedCode(false), 2000);
-    }
-  };
-
-  const handleShareInviteCode = () => {
-    if (!org?.code) return;
-    const orgName = org.name || 'our chapter';
-    const joinUrl = `https://www.handychapter.com/?join=${encodeURIComponent(org.code)}`;
-    const inviteMsg = `🤝 *Join ${orgName} on HandyChapter!*
-
-Connect with our chapter to view performance reports, scores, and outreach tracking.
-
-Tap the link below to automatically join:
-${joinUrl}`;
-
-    if (navigator.share) {
-      navigator.share({
-        title: `Join ${orgName} on HandyChapter`,
-        text: inviteMsg,
-      }).catch(() => {
-        const url = getWhatsAppUrl('', inviteMsg);
-        window.open(url, '_blank');
-      });
-    } else {
-      const url = getWhatsAppUrl('', inviteMsg);
-      window.open(url, '_blank');
-    }
-    showToast('Sharing invite link!', 'info');
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -166,30 +131,7 @@ ${joinUrl}`;
           </div>
 
           {/* Org Code Widget */}
-          {org?.code && (
-            <div className="p-3 rounded-2xl bg-slate-900/90 border border-emerald-500/30 flex items-center space-x-3">
-              <div>
-                <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Chapter Invite Code</div>
-                <div className="text-base font-black text-emerald-400 tracking-widest">{org.code}</div>
-              </div>
-              <div className="flex items-center space-x-1.5 shrink-0">
-                <button
-                  onClick={handleCopyCode}
-                  className="p-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 transition-all shrink-0 active:scale-95 flex items-center justify-center"
-                  title="Copy Invite Code"
-                >
-                  {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                </button>
-                <button
-                  onClick={handleShareInviteCode}
-                  className="p-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black transition-all shrink-0 active:scale-95 flex items-center justify-center shadow-md shadow-emerald-500/20"
-                  title="Share Invite Code"
-                >
-                  <Share2 className="w-4 h-4 text-slate-950" />
-                </button>
-              </div>
-            </div>
-          )}
+          <OrgShareWidget org={org} defaultCountryCode={org?.default_country_code || '+91'} />
         </div>
       </GlassCard>
 

@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Organization, OrgMember, UserRole, Member, UserProfileExtended } from '../types';
 import { GlassCard } from './GlassCard';
-import { Building2, Copy, Check, Users, ShieldCheck, Crown, Shield, Loader2, UserCheck, Search, Phone, Calendar, Edit3, Save, X, FileSpreadsheet, Upload, CheckCircle2, Share2, Trash2, UserPlus } from 'lucide-react';
+import { Building2, Users, ShieldCheck, Crown, Shield, Loader2, UserCheck, Search, Phone, Calendar, Edit3, Save, X, FileSpreadsheet, Upload, CheckCircle2, Trash2, UserPlus } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { findBestMatchingMember } from '../lib/nameMatcher';
-import { arePhoneNumbersMatching, formatPhoneWithCountryCode, getWhatsAppUrl } from '../lib/whatsappUtils';
+import { arePhoneNumbersMatching, formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 import { UniversalModal } from './UniversalModal';
 import { AddMemberModal } from './AddMemberModal';
 import { scoreMember } from '../lib/scoringEngine';
+import { OrgShareWidget } from './OrgShareWidget';
 import * as XLSX from 'xlsx';
 
 interface OrganizationTabProps {
@@ -32,7 +33,6 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
   const { user } = useAuth();
   const { showToast } = useToast();
   const [members, setMembers] = useState<OrgMember[]>([]);
-  const [copiedCode, setCopiedCode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   // Roster Members State & Modal Editing
@@ -124,37 +124,6 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
       unsubscribe();
     };
   }, [org]);
-
-  const handleCopyCode = () => {
-    if (org?.code) {
-      navigator.clipboard.writeText(org.code);
-      setCopiedCode(true);
-      showToast('6-digit organization code copied to clipboard!', 'info');
-      setTimeout(() => setCopiedCode(false), 2000);
-    }
-  };
-
-  const handleShareInviteWhatsApp = () => {
-    if (!org?.code) return;
-    const orgName = org.name || 'our organization';
-    const siteUrl = 'https://www.handychapter.com';
-    const inviteMsg = `Hi! Join ${orgName} on HandyChapter!\n\nWebsite: ${siteUrl}\nOrganization Join Code: ${org.code}\n\nEnter this 6-digit code after logging in to connect with our team!`;
-
-    if (navigator.share) {
-      navigator.share({
-        title: `Join ${orgName} on HandyChapter`,
-        text: inviteMsg,
-        url: siteUrl,
-      }).catch(() => {
-        const url = getWhatsAppUrl('', inviteMsg, defaultCountryCode);
-        window.open(url, '_blank');
-      });
-    } else {
-      const url = getWhatsAppUrl('', inviteMsg, defaultCountryCode);
-      window.open(url, '_blank');
-    }
-    showToast('Sharing invite code!', 'info');
-  };
 
   const handleRoleChange = async (targetUserId: string, newRole: UserRole) => {
     if (!org?.id || !isAdminOrOwner) return;
@@ -477,28 +446,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
           </div>
 
           {/* 6-Digit Code Badge */}
-          <div className="bg-slate-900/90 border border-emerald-500/30 p-3 sm:p-4 rounded-2xl flex items-center justify-between sm:justify-end space-x-4 shrink-0 shadow-inner">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Invite 6-Digit Code</span>
-              <span className="font-mono text-xl sm:text-2xl font-black text-emerald-400 tracking-widest">{org.code}</span>
-            </div>
-            <div className="flex items-center space-x-1.5 shrink-0">
-              <button
-                onClick={handleCopyCode}
-                className="p-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 transition-all shrink-0 active:scale-95 flex items-center justify-center"
-                title="Copy Invite Code"
-              >
-                {copiedCode ? <Check className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5" />}
-              </button>
-              <button
-                onClick={handleShareInviteWhatsApp}
-                className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black transition-all shrink-0 active:scale-95 flex items-center justify-center shadow-md shadow-emerald-500/20"
-                title="Share Invite Code via WhatsApp"
-              >
-                <Share2 className="w-5 h-5 text-slate-950" />
-              </button>
-            </div>
-          </div>
+          <OrgShareWidget org={org} defaultCountryCode={org.default_country_code || '+91'} />
         </div>
 
         {/* Info Grid */}
@@ -607,7 +555,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
               <tr>
                 <th className="px-4 py-3">Member Email</th>
                 <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3 text-right">Role Access Control</th>
+                {isAdminOrOwner && <th className="px-4 py-3 text-right">Role Access Control</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/50 dark:divide-white/5 bg-white/40 dark:bg-slate-950/40">
@@ -616,12 +564,12 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                   <tr key={idx} className="animate-pulse border-b border-slate-200/50 dark:border-white/5">
                     <td className="px-4 py-3.5"><div className="h-4 bg-slate-200 dark:bg-slate-800/80 rounded-md w-48" /></td>
                     <td className="px-4 py-3.5"><div className="h-5 bg-emerald-500/20 rounded-full w-16" /></td>
-                    <td className="px-4 py-3.5 text-right"><div className="h-7 bg-slate-200 dark:bg-slate-800/60 rounded-xl w-24 ml-auto" /></td>
+                    {isAdminOrOwner && <td className="px-4 py-3.5 text-right"><div className="h-7 bg-slate-200 dark:bg-slate-800/60 rounded-xl w-24 ml-auto" /></td>}
                   </tr>
                 ))
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={isAdminOrOwner ? 3 : 2} className="px-4 py-6 text-center text-slate-500">
                     No team members found in this organization. Share your invite code to invite members!
                   </td>
                 </tr>
@@ -652,20 +600,22 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                         </span>
                       </td>
 
-                      <td className="px-4 py-3 text-right">
-                        {isAdminOrOwner && m.role !== 'owner' ? (
-                          <select
-                            value={m.role}
-                            onChange={(e) => handleRoleChange(m.user_id, e.target.value as UserRole)}
-                            className="px-2 py-1 rounded-lg text-xs font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/15 cursor-pointer"
-                          >
-                            <option value="member">Member</option>
-                            <option value="admin">Admin</option>
-                          </select>
-                        ) : (
-                          <span className="text-[11px] text-slate-500">Fixed</span>
-                        )}
-                      </td>
+                      {isAdminOrOwner && (
+                        <td className="px-4 py-3 text-right">
+                          {m.role !== 'owner' ? (
+                            <select
+                              value={m.role}
+                              onChange={(e) => handleRoleChange(m.user_id, e.target.value as UserRole)}
+                              className="px-2 py-1 rounded-lg text-xs font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/15 cursor-pointer"
+                            >
+                              <option value="member">Member</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          ) : (
+                            <span className="text-[11px] text-slate-500">Fixed</span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })
