@@ -1,20 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { UserProfile } from '../types';
+import { signInWithGoogleFirebase, signOutFirebase, firebaseAuth, deleteFirebaseAccount } from '../lib/firebase';
 import { supabase, signInWithGoogleSupabase, signOutSupabase } from '../lib/supabase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { supabaseService } from '../services/supabaseService';
-
-/** Maps a Supabase auth user onto the app's UserProfile shape. */
-const toUserProfile = (sbUser: any): UserProfile | null => {
-  if (!sbUser) return null;
-  const meta = sbUser.user_metadata || {};
-  return {
-    uid: sbUser.id,
-    email: sbUser.email || null,
-    displayName: meta.full_name || meta.name || sbUser.email?.split('@')[0] || 'Member',
-    photoURL: meta.avatar_url || meta.picture || meta.photo_url || meta.avatar || null,
-    provider: 'supabase',
-  };
-};
 
 export interface DeleteAccountResult {
   ok: boolean;
@@ -63,26 +52,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loggingOutRef = useRef(false);
 
   useEffect(() => {
-    // Supabase is the sole identity provider, so auth.uid() resolves inside Postgres
-    // and Row Level Security can actually scope data per user. (Firebase-authenticated
-    // requests arrived as the `anon` role with auth.uid() = NULL, which made RLS
-    // impossible to enforce.)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (loggingOutRef.current) {
-        setUser(null);
+    // Failsafe: the app blocks on a splash while `loading` is true, so if neither provider
+    // ever reports back (misconfigured Firebase, offline, blocked third-party storage) we
+    // must still resolve — otherwise the splash hangs forever instead of offering sign-in.
+    const failsafe = setTimeout(() => setLoading(false), 5000);
+
+    // 1. Check Firebase Auth State
+    const unsubscribeFirebase = onAuthStateChanged(firebaseAuth, (fbUser) => {
+      clearTimeout(failsafe);
+      if (fbUser) {
+        setUser({
+          uid: fbUser.uid,
+          email: fbUser.email,
+          displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Member',
+          photoURL: fbUser.photoURL || null,
+          provider: 'google',
+        });
+        setLoading(false);
+      } else if (!loggingOutRef.current) {
+        // 2. Check Supabase Auth State if Firebase is null (skip while logging out)
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (loggingOutRef.current) {
+            setUser(null);
+            setLoading(false);
+            return;
+          }
+          if (session?.user) {
+            const googleAvatar =
+              session.user.user_metadata?.avatar_url ||
+              session.user.user_metadata?.picture ||
+              session.user.user_metadata?.photo_url ||
+              session.user.user_metadata?.avatar ||
+              null;
+
+            setUser({
+              uid: session.user.id,
+              email: session.user.email || null,
+              displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Director',
+              photoURL: googleAvatar,
+              provider: 'supabase',
+            });
+          } else {
+            setUser(null);
+          }
+          setLoading(false);
+        });
       } else {
-        setUser(toUserProfile(session?.user));
+        setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (loggingOutRef.current) return;
-      setUser(toUserProfile(session?.user));
-      setLoading(false);
+      if (session?.user && !firebaseAuth.currentUser) {
+        const googleAvatar =
+          session.user.user_metadata?.avatar_url ||
+          session.user.user_metadata?.picture ||
+          session.user.user_metadata?.photo_url ||
+          session.user.user_metadata?.avatar ||
+          null;
+
+        setUser({
+          uid: session.user.id,
+          email: session.user.email || null,
+          displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Director',
+          photoURL: googleAvatar,
+          provider: 'supabase',
+        });
+      }
     });
 
     return () => {
+      clearTimeout(failsafe);
+      unsubscribeFirebase();
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -90,12 +133,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async () => {
     setLoading(true);
     try {
-      // Redirects away and back; onAuthStateChange picks up the session on return.
+      await signInWithGoogleFirebase();
+    } catch (fbErr) {
+      console.warn('Firebase login attempt failed/fallback to Supabase OAuth:', fbErr);
       await signInWithGoogleSupabase();
-    } catch (err) {
-      console.error('Google sign-in failed:', err);
+    } finally {
       setLoading(false);
-      throw err;
     }
   };
 
@@ -105,6 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       clearCachedAppData();
 
+      await signOutFirebase();
       await signOutSupabase();
       setUser(null);
     } catch (err) {
@@ -135,16 +179,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loggingOutRef.current = true;
       clearCachedAppData();
 
-      // Deleting a Supabase auth user requires the service_role admin API, which must never
-      // reach the browser — so it runs in the `delete-user` Edge Function (see
-      // supabase/functions/delete-user). If that function is not deployed the app data is
-      // still gone, but the login survives; report that rather than pretend otherwise.
+      // Firebase users can be deleted straight from the browser. Supabase users cannot —
+      // that needs the service_role admin API — so they go through the `delete-user` Edge
+      // Function instead (supabase/functions/delete-user). If neither path succeeds the app
+      // data is still gone but the login survives; report that rather than pretend.
       let loginRetained = false;
       try {
-        const { error: fnError } = await supabase.functions.invoke('delete-user');
-        if (fnError) {
-          console.error('delete-user Edge Function failed:', fnError);
-          loginRetained = true;
+        const deleted = await deleteFirebaseAccount();
+        if (!deleted) {
+          const { error: fnError } = await supabase.functions.invoke('delete-user');
+          if (fnError) {
+            console.error('delete-user Edge Function failed:', fnError);
+            loginRetained = true;
+          }
         }
       } catch (authErr: any) {
         console.error('Auth account deletion failed:', authErr);
@@ -152,6 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
+        await signOutFirebase();
         await signOutSupabase();
       } catch {}
 

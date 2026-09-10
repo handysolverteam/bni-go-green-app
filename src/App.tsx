@@ -37,6 +37,31 @@ const parseHash = () => {
   return { tab: 'dashboard' as NavigationTab, report: null };
 };
 
+/** Full-screen boot splash, shown while auth or chapter data is still resolving. */
+const BootSplash: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }) => {
+  const isLight = localStorage.getItem('bni_theme_mode') === 'light' || document.body.classList.contains('light-mode');
+  return (
+    <div className={`min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4 transition-colors ${
+      isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#080d19] text-white'
+    }`}>
+      <div className="relative">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] animate-pulse shadow-lg shadow-emerald-500/20">
+          <div className={`w-full h-full rounded-[14px] flex items-center justify-center ${
+            isLight ? 'bg-white' : 'bg-[#080d19]'
+          }`}>
+            <img src="/icons/icon.svg" alt="Handychapter Logo" className="w-10 h-10 rounded-xl object-cover" />
+          </div>
+        </div>
+        <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping absolute -top-1 -right-1" />
+      </div>
+      <div className="space-y-1">
+        <h3 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>{title}</h3>
+        <p className={`text-xs font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>{subtitle}</p>
+      </div>
+    </div>
+  );
+};
+
 export const AppContent: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const { showToast } = useToast();
@@ -463,34 +488,21 @@ export const AppContent: React.FC = () => {
     setIsSyncing(false);
   };
 
-  // 1. Unauthenticated / Login Process -> Always show LoginPage
+  // 1. Auth state is still being restored. Firebase/Supabase resolve a persisted session
+  //    asynchronously, so `user` is briefly null on EVERY load — returning LoginPage here
+  //    flashed the sign-in screen at users who were already signed in.
+  if (authLoading) {
+    return <BootSplash title="Signing you in..." subtitle="Restoring your session" />;
+  }
+
+  // 2. Genuinely unauthenticated -> Login page
   if (!user) {
     return <LoginPage />;
   }
 
-  // 2. User is Logged In (user != null) but Org Verification is in progress -> Verifying Splash
+  // 3. User is Logged In (user != null) but Org Verification is in progress -> Verifying Splash
   if (isInitializing || !isDataLoaded) {
-    const isLight = localStorage.getItem('bni_theme_mode') === 'light' || document.body.classList.contains('light-mode');
-    return (
-      <div className={`min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4 transition-colors ${
-        isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#080d19] text-white'
-      }`}>
-        <div className="relative">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] animate-pulse shadow-lg shadow-emerald-500/20">
-            <div className={`w-full h-full rounded-[14px] flex items-center justify-center ${
-              isLight ? 'bg-white' : 'bg-[#080d19]'
-            }`}>
-              <img src="/icons/icon.svg" alt="Handychapter Logo" className="w-10 h-10 rounded-xl object-cover" />
-            </div>
-          </div>
-          <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping absolute -top-1 -right-1" />
-        </div>
-        <div className="space-y-1">
-          <h3 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Verifying Organization...</h3>
-          <p className={`text-xs font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Checking chapter membership & credentials</p>
-        </div>
-      </div>
-    );
+    return <BootSplash title="Verifying Organization..." subtitle="Checking chapter membership & credentials" />;
   }
 
   // 3. Authenticated & Verified, but NO Organization -> Org Onboarding Screen

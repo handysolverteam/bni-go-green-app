@@ -21,6 +21,7 @@ export default defineConfig({
         manualChunks: {
           'vendor-xlsx': ['xlsx'],
           'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-firebase': ['firebase/app', 'firebase/auth'],
           'vendor-icons': ['lucide-react'],
         },
       },
