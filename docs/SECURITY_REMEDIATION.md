@@ -114,11 +114,49 @@ first. Options:
 | **B. Firebase → Supabase JWT bridge** | Edge Function mints a Supabase-signed JWT from a verified Firebase token | Keeps the current login UX; adds infrastructure and a token-refresh path. |
 | **C. Server-side data access** | All DB access moves behind Edge Functions that verify the Firebase token and use `service_role` | Most secure and most work; the client stops talking to PostgREST directly. |
 
-**Recommended: A**, then apply the policies below.
+**Option A was chosen and is now implemented in code.**
 
-### Policies to apply once auth is resolved (option A)
+### Done in code (option A)
 
-Not yet applied — these lock out Firebase-authenticated users until the migration is done.
+- [x] `AuthContext` uses Supabase as the sole identity provider; the Firebase login path,
+      `src/lib/firebase.ts` and the `firebase` dependency are removed (−160 kB bundle)
+- [x] Account deletion moved to `supabase/functions/delete-user` — deleting an auth user
+      needs `service_role`, which must never reach the browser. The function verifies the
+      caller's own JWT and re-checks the sole-owner rule server-side, so the guard cannot
+      be bypassed by calling the API directly.
+- [x] Fixed a **silently broken** recovery path in `fetchUserProfile()`: it queried
+      `profiles.email` and `profiles.id`, and **neither column exists**, so re-linking a
+      profile after an identity change always failed. It now uses `user_id` as the key and
+      falls back to mapping through `org_members.user_email`.
+- [x] `supabase/migrations/002_add_profiles_email.sql` — adds and backfills `profiles.email`
+- [x] `supabase/migrations/003_enable_rls.sql` — the real policies
+
+### ⚠️ Migration order — this changes how every user logs in
+
+Because `org_members.user_id` and `profiles.user_id` hold **Firebase UIDs**, and Supabase
+Auth issues different ids, users must be re-linked by email. Run in this order:
+
+1. Apply `002_add_profiles_email.sql`, then check for unlinkable rows:
+   `SELECT user_id, full_name FROM public.profiles WHERE email IS NULL;`
+   Anyone listed there will have to redo onboarding — resolve them manually first.
+2. Deploy the app with Supabase-only auth. On each user's next sign-in, the fallback in
+   `fetchUserProfile()` / `fetchUserOrganization()` re-stamps their rows with the new uid.
+3. Confirm every user has signed in at least once:
+   `SELECT user_id, email FROM public.profiles;` — user_ids should now be UUIDs, not
+   Firebase UIDs.
+4. Only then apply `003_enable_rls.sql`. Applying it earlier locks out anyone not yet
+   re-linked, because `auth.uid()` will not match their stored `user_id`.
+5. Deploy the Edge Function: `supabase functions deploy delete-user`.
+6. Re-run the exposure check — it must now return nothing:
+   ```bash
+   curl "$URL/rest/v1/members?select=*&limit=1" -H "apikey: $ANON"
+   ```
+
+Also update **Supabase → Authentication → URL Configuration** with the production redirect
+URL, and **Google Cloud Console → OAuth client** with Supabase's callback URL, or sign-in
+will fail in production.
+
+### The policies in `003_enable_rls.sql`
 
 ```sql
 -- Replace the permissive policies

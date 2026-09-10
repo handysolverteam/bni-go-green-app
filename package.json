@@ -1,5 +1,5 @@
 {
-  "name": "bni-go-green-app",
+  "name": "Handychapter   ",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -13,7 +13,6 @@
     "@supabase/supabase-js": "^2.49.1",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
-    "firebase": "^11.4.0",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

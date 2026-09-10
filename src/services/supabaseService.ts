@@ -568,7 +568,9 @@ export const supabaseService = {
         .eq('user_id', userId)
         .maybeSingle();
 
-      // Fallback 1: search profile by email if UID changed
+      // Fallback 1: re-link a profile whose user_id predates the current identity provider.
+      // profiles has no `id` column (user_id is the primary key), and `email` only exists
+      // after the 002 migration — an older deployment silently failed both lookups here.
       if (!data && userEmail) {
         const { data: emailData } = await supabase
           .from('profiles')
@@ -581,7 +583,38 @@ export const supabaseService = {
           await supabase
             .from('profiles')
             .update({ user_id: userId, is_profile_completed: true })
-            .eq('id', emailData.id);
+            .eq('user_id', emailData.user_id);
+        }
+      }
+
+      // Fallback 1b: org_members carries the email even on pre-migration databases,
+      // so it can map an old auth UID onto the current one.
+      if (!data && userEmail) {
+        const { data: legacyMembership } = await supabase
+          .from('org_members')
+          .select('user_id')
+          .eq('user_email', userEmail)
+          .neq('user_id', userId)
+          .maybeSingle();
+
+        if (legacyMembership?.user_id) {
+          const { data: legacyProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', legacyMembership.user_id)
+            .maybeSingle();
+
+          if (legacyProfile) {
+            await supabase
+              .from('profiles')
+              .update({ user_id: userId, is_profile_completed: true })
+              .eq('user_id', legacyMembership.user_id);
+            await supabase
+              .from('org_members')
+              .update({ user_id: userId })
+              .eq('user_id', legacyMembership.user_id);
+            data = { ...legacyProfile, user_id: userId };
+          }
         }
       }
 
