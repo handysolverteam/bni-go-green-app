@@ -4,8 +4,17 @@ import { scoreMember } from '../lib/scoringEngine';
 import { UNIVERSAL_DEFAULT_TEMPLATE_TEXT } from '../lib/outreachUtils';
 import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://oleckbfrkpmoikpkjcpa.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
+// No hardcoded fallbacks: a baked-in key survives rotation, and the truncated placeholder that
+// used to live here would connect with an invalid credential and fail in confusing ways.
+// Misconfiguration must fail loudly instead.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing Supabase configuration. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file (see .env.example).'
+  );
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 

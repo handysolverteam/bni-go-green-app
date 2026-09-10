@@ -145,28 +145,27 @@ npm run preview   # preview the production bundle locally
 
 ## 5. Credentials & Environment Variables
 
-> **⚠️ SECURITY WARNING:** The `.env` file contains **live production secrets** including a Supabase **service_role** key and **secret key**. These grant full database access. **Do NOT commit `.env`** (it is gitignored). Share it only with the successor / owner via a private channel. **Rotate the service_role key in Supabase Dashboard if this file is ever leaked.**
+> **⚠️ SECURITY WARNING:** The `.env` file contains **live production secrets** including a Supabase **service_role** key and **secret key**. These grant full database access, bypassing Row Level Security. **Never commit `.env`.** Share it only with the successor / owner via a password manager or another private channel.
+>
+> **`.env` was tracked in git until it was untracked in this change, so every key it ever held is recoverable from history and must be rotated.** Follow `docs/SECURITY_REMEDIATION.md` before treating this project as secure.
 
-### 5.1 Full `.env` (live values, project: `oleckbfrkpmoikpkjcpa`)
+### 5.1 Credentials — NOT stored in this document
 
-```env
-# ===== Firebase Credentials (from HandyLeads / handydash) =====
-VITE_FIREBASE_API_KEY=AIzaSyAO0wKilYOs8dbxwW1DmgqdRWLLCRk3_cQ
-VITE_FIREBASE_AUTH_DOMAIN=handydash-75858.firebaseapp.com
-VITE_FIREBASE_DATABASE_URL=https://handydash-75858-b95d2.asia-southeast1.firebasedatabase.app
-VITE_FIREBASE_PROJECT_ID=handydash-75858-b95d2
-VITE_FIREBASE_STORAGE_BUCKET=handydash-75858.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=18967278229
-VITE_FIREBASE_APP_ID=1:18967278229:android:5525673f431d1f0bb4619c
-VITE_GOOGLE_WEB_CLIENT_ID=18967278229-rq5dr7gs5l34mqdg1435g1iuttuvhj5q.apps.googleusercontent.com
+> **Live secrets were previously pasted into this section and are therefore present in this
+> repository's git history.** They have been removed here. Treat every key committed before
+> this change as compromised and rotate it — see `docs/SECURITY_REMEDIATION.md`.
 
-# ===== Supabase Credentials (BNI Go Green App Project: oleckbfrkpmoikpkjcpa) =====
-VITE_SUPABASE_URL=https://oleckbfrkpmoikpkjcpa.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sZWNrYmZya3Btb2lrcGtqY3BhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0MTc2OTIsImV4cCI6MjEwMTk5MzY5Mn0.l05oUES0-QeGp2zGJwWWYs7SxXQn2JXLIlQtGCuOdas
-VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sZWNrYmZya3Btb2lrcGtqY3BhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjQxNzY5MiwiZXhwIjoyMTAxOTkzNjkyfQ.eqOWw3drcIogsw4yTk5_omTd269D2AdYueppecJ10oA
-VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_SrpEhw3Mj6-SgRpZ4I3fcA_by0KHGDr
-VITE_SUPABASE_SECRET_KEY=sb_secret_Y603PT6nmlxhYxvVNOjW5g_Ccwc5kqM
-```
+Credentials live **only** in the untracked local `.env` file (see `.env.example` for the
+required variable names) and in the hosting provider's environment-variable settings.
+
+| Where to get each value | Source |
+|---|---|
+| `VITE_FIREBASE_*`, `VITE_GOOGLE_WEB_CLIENT_ID` | Firebase Console → Project Settings |
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Supabase Dashboard → Project Settings → API |
+| `VITE_GEMINI_API_KEY` | Google AI Studio (see remediation doc — this must move server-side) |
+
+**Never paste real key values into this file, any doc, or any commit.** Hand them over through
+a password manager or another private channel.
 
 ### 5.2 `.env.example` (safe template)
 
