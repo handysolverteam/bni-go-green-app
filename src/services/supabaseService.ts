@@ -383,6 +383,158 @@ export const supabaseService = {
     }
   },
 
+  /**
+   * Checks whether a user is allowed to leave an organization.
+   * A sole owner may not abandon a chapter that still has other people in it —
+   * doing so would leave nobody able to manage settings or roles.
+   */
+  async checkLeaveEligibility(orgId: string, userId: string, userEmail?: string | null): Promise<{
+    canLeave: boolean;
+    reason?: string;
+    memberCount: number;
+    ownerCount: number;
+    isSoleOwner: boolean;
+  }> {
+    try {
+      const { data, error } = await supabase
+        .from('org_members')
+        .select('user_id, user_email, role')
+        .eq('org_id', orgId);
+
+      if (error || !data) {
+        return { canLeave: false, reason: 'Could not verify chapter membership. Check your connection.', memberCount: 0, ownerCount: 0, isSoleOwner: false };
+      }
+
+      const isSelf = (row: any) =>
+        row.user_id === userId || (Boolean(userEmail) && row.user_email === userEmail);
+
+      const owners = data.filter(r => r.role === 'owner');
+      const others = data.filter(r => !isSelf(r));
+      const iAmOwner = data.some(r => isSelf(r) && r.role === 'owner');
+      const isSoleOwner = iAmOwner && owners.length === 1;
+
+      // Last person standing — nobody else is affected, so let them go.
+      if (others.length === 0) {
+        return { canLeave: true, memberCount: data.length, ownerCount: owners.length, isSoleOwner };
+      }
+
+      if (isSoleOwner) {
+        return {
+          canLeave: false,
+          reason: 'You are the only Owner of this chapter. Promote another member to Owner in the Chapter tab before you leave, otherwise nobody will be able to manage it.',
+          memberCount: data.length,
+          ownerCount: owners.length,
+          isSoleOwner: true,
+        };
+      }
+
+      return { canLeave: true, memberCount: data.length, ownerCount: owners.length, isSoleOwner: false };
+    } catch (e) {
+      console.error('checkLeaveEligibility exception:', e);
+      return { canLeave: false, reason: 'Could not verify chapter membership.', memberCount: 0, ownerCount: 0, isSoleOwner: false };
+    }
+  },
+
+  /**
+   * Removes the current user's membership from one organization.
+   * Deletes by user_id AND user_email, because fetchUserOrganization() falls back to an
+   * email lookup — leaving an email-matched row behind would silently re-join them on reload.
+   * Chapter PALMS data is left untouched; only the personal link is removed.
+   */
+  async leaveOrganization(orgId: string, userId: string, userEmail?: string | null): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const eligibility = await this.checkLeaveEligibility(orgId, userId, userEmail);
+      if (!eligibility.canLeave) {
+        return { ok: false, error: eligibility.reason || 'You cannot leave this chapter right now.' };
+      }
+
+      const { error } = await supabase
+        .from('org_members')
+        .delete()
+        .eq('org_id', orgId)
+        .eq('user_id', userId);
+
+      if (error) return { ok: false, error: error.message };
+
+      // Clear any stale email-matched row that would trigger the auto-heal re-join
+      if (userEmail) {
+        await supabase
+          .from('org_members')
+          .delete()
+          .eq('org_id', orgId)
+          .eq('user_email', userEmail);
+      }
+
+      // Unlink (but keep) any roster row that pointed at this user
+      await supabase
+        .from('members')
+        .update({ user_id: null })
+        .eq('org_id', orgId)
+        .eq('user_id', userId);
+
+      return { ok: true };
+    } catch (e: any) {
+      console.error('leaveOrganization exception:', e);
+      return { ok: false, error: e.message || 'Failed to leave organization.' };
+    }
+  },
+
+  /**
+   * Deletes the user's personal data across every chapter they belong to.
+   * Chapter-owned data (roster members, imported reports, org AI chat history) is preserved —
+   * it belongs to the chapter, not to this account.
+   * Blocks if the user is the sole Owner of any chapter that still has other members.
+   */
+  async deleteUserAccount(userId: string, userEmail?: string | null): Promise<{ ok: boolean; error?: string; blockedOrgs?: string[] }> {
+    try {
+      const { data: memberships } = await supabase
+        .from('org_members')
+        .select('org_id, organization:organizations(name)')
+        .or(userEmail ? `user_id.eq.${userId},user_email.eq.${userEmail}` : `user_id.eq.${userId}`);
+
+      const orgIds = Array.from(new Set((memberships || []).map((m: any) => m.org_id).filter(Boolean)));
+
+      // Verify every chapter can be safely left before deleting anything
+      const blockedOrgs: string[] = [];
+      for (const orgId of orgIds) {
+        const eligibility = await this.checkLeaveEligibility(orgId, userId, userEmail);
+        if (!eligibility.canLeave) {
+          const match: any = (memberships || []).find((m: any) => m.org_id === orgId);
+          blockedOrgs.push(match?.organization?.name || 'your chapter');
+        }
+      }
+
+      if (blockedOrgs.length > 0) {
+        return {
+          ok: false,
+          blockedOrgs,
+          error: `You are the only Owner of ${blockedOrgs.join(', ')}. Promote another member to Owner before deleting your account.`,
+        };
+      }
+
+      // Unlink roster rows, keeping the chapter's PALMS data intact
+      await supabase.from('members').update({ user_id: null }).eq('user_id', userId);
+
+      // Personal outreach history
+      await supabase.from('outreach_logs').delete().eq('user_id', userId);
+
+      // Memberships (by id and by email, mirroring the auto-heal lookup)
+      await supabase.from('org_members').delete().eq('user_id', userId);
+      if (userEmail) {
+        await supabase.from('org_members').delete().eq('user_email', userEmail);
+      }
+
+      // Finally the profile itself
+      const { error: profileError } = await supabase.from('profiles').delete().eq('user_id', userId);
+      if (profileError) return { ok: false, error: profileError.message };
+
+      return { ok: true };
+    } catch (e: any) {
+      console.error('deleteUserAccount exception:', e);
+      return { ok: false, error: e.message || 'Failed to delete account data.' };
+    }
+  },
+
   async updateOrgMemberRole(orgId: string, userId: string, newRole: string): Promise<boolean> {
     try {
       const { error } = await supabase

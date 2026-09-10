@@ -153,6 +153,46 @@ export const AppContent: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
+  // Holds the teardown for the active members realtime channel. Without this, leaving an
+  // org keeps the old subscription alive and it overwrites the roster with the old chapter's data.
+  const unsubscribeMembersRef = React.useRef<(() => void) | null>(null);
+
+  const subscribeToOrgMembers = (orgId: string) => {
+    unsubscribeMembersRef.current?.();
+    unsubscribeMembersRef.current = supabaseService.subscribeToMembers(orgId, async () => {
+      const fresh = await supabaseService.fetchMembers(orgId);
+      setMembers(fresh);
+    });
+  };
+
+  React.useEffect(() => () => unsubscribeMembersRef.current?.(), []);
+
+  /** Loads scoring config, roster and report logs for an org, and (re)opens its realtime channel. */
+  const hydrateOrgData = async (targetOrg: Organization, userId: string) => {
+    const [settingsRes, dbMembers, dbLogs] = await Promise.all([
+      supabaseService.fetchOrgSettings(targetOrg.id, userId),
+      supabaseService.fetchMembers(targetOrg.id),
+      supabaseService.fetchImportLogs(targetOrg.id),
+    ]);
+
+    if (settingsRes && settingsRes.scoringConfig) {
+      setScoringConfig(settingsRes.scoringConfig);
+    } else {
+      setScoringConfig({
+        trafficLight: {
+          green: targetOrg.green_threshold || 70,
+          amber: targetOrg.amber_threshold || 50,
+          red: targetOrg.red_threshold || 30,
+        }
+      });
+    }
+
+    subscribeToOrgMembers(targetOrg.id);
+
+    // Re-score fetched members with active custom org scoring configuration
+    return { members: dbMembers.map(m => scoreMember(m)), logs: dbLogs };
+  };
+
   // 1. On Auth Load: Fetch Org & Profile with background revalidation & localStorage sync
   useEffect(() => {
     if (!user?.uid) {
@@ -181,32 +221,9 @@ export const AppContent: React.FC = () => {
           localStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
           localStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
 
-          const [settingsRes, dbMembers, dbLogs] = await Promise.all([
-            supabaseService.fetchOrgSettings(orgRes.org.id, user.uid),
-            supabaseService.fetchMembers(orgRes.org.id),
-            supabaseService.fetchImportLogs(orgRes.org.id),
-          ]);
-
-          if (settingsRes && settingsRes.scoringConfig) {
-            setScoringConfig(settingsRes.scoringConfig);
-          } else {
-            setScoringConfig({
-              trafficLight: {
-                green: orgRes.org.green_threshold || 70,
-                amber: orgRes.org.amber_threshold || 50,
-                red: orgRes.org.red_threshold || 30,
-              }
-            });
-          }
-
-          // Re-score fetched members with active custom org scoring configuration
-          fetchedMembers = dbMembers.map(m => scoreMember(m));
-          fetchedLogs = dbLogs;
-
-          supabaseService.subscribeToMembers(orgRes.org.id, async () => {
-            const fresh = await supabaseService.fetchMembers(orgRes.org.id);
-            setMembers(fresh);
-          });
+          const hydrated = await hydrateOrgData(orgRes.org, user.uid);
+          fetchedMembers = hydrated.members;
+          fetchedLogs = hydrated.logs;
         }
 
         let finalProfile = profRes;
@@ -275,12 +292,53 @@ export const AppContent: React.FC = () => {
   }, [user]);
 
   // Handle Org Created / Joined
-  const handleOrgJoined = (data: { org: Organization; member: OrgMember }) => {
+  const handleOrgJoined = async (data: { org: Organization; member: OrgMember }) => {
     localStorage.setItem('bni_cached_org', JSON.stringify(data.org));
     localStorage.setItem('bni_cached_org_member', JSON.stringify(data.member));
     setOrg(data.org);
     setOrgMember(data.member);
     showToast(`Joined ${data.org.name}! Org Code: ${data.org.code}`, 'success');
+
+    // Auth state has not changed, so the init effect will not re-run — load the new
+    // chapter's data here so switching chapters does not land on an empty dashboard.
+    if (!user?.uid) return;
+    setIsSyncing(true);
+    try {
+      const hydrated = await hydrateOrgData(data.org, user.uid);
+      setMembers(hydrated.members);
+      setImportLogs(hydrated.logs);
+    } catch (err) {
+      console.error('Failed to load joined organization data:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  /**
+   * Leaves the current chapter and drops the user back to the onboarding screen,
+   * where they can create or join another one.
+   */
+  const handleLeaveOrganization = async (): Promise<{ ok: boolean; error?: string }> => {
+    if (!org?.id || !user?.uid) return { ok: false, error: 'No active chapter.' };
+
+    const result = await supabaseService.leaveOrganization(org.id, user.uid, user.email);
+    if (!result.ok) return result;
+
+    // Stop the old chapter's realtime channel before clearing its data
+    unsubscribeMembersRef.current?.();
+    unsubscribeMembersRef.current = null;
+
+    ['bni_cached_org', 'bni_cached_org_member', 'bni_cached_members', 'bni_cached_import_logs', 'bni_active_report']
+      .forEach(key => { try { localStorage.removeItem(key); } catch {} });
+
+    setMembers([]);
+    setImportLogs([]);
+    setSelectedMember(null);
+    setOrgMember(null);
+    setOrg(null);
+    navigateTo('dashboard');
+    showToast('You have left the chapter. Create or join another to continue.', 'info');
+    return { ok: true };
   };
 
   // Handle Profile Completed
@@ -533,6 +591,8 @@ export const AppContent: React.FC = () => {
             org={org}
             orgMember={orgMember}
             onProfileUpdated={(updated) => setUserProfile(updated)}
+            onLeaveOrganization={handleLeaveOrganization}
+            onNavigateToChapter={() => navigateTo('org')}
           />
         )}
 

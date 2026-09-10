@@ -1,14 +1,23 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { UserProfile } from '../types';
-import { signInWithGoogleFirebase, signOutFirebase, firebaseAuth } from '../lib/firebase';
+import { signInWithGoogleFirebase, signOutFirebase, firebaseAuth, deleteFirebaseAccount } from '../lib/firebase';
 import { supabase, signInWithGoogleSupabase, signOutSupabase } from '../lib/supabase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { supabaseService } from '../services/supabaseService';
+
+export interface DeleteAccountResult {
+  ok: boolean;
+  error?: string;
+  /** True when app data was deleted but the identity provider account could not be removed client-side. */
+  loginRetained?: boolean;
+}
 
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<DeleteAccountResult>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -16,7 +25,26 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   loginWithGoogle: async () => {},
   logout: async () => {},
+  deleteAccount: async () => ({ ok: false }),
 });
+
+/** Cached keys wiped on sign-out and account deletion. */
+const CACHE_KEYS = [
+  'bni_cached_org',
+  'bni_cached_org_member',
+  'bni_cached_profile',
+  'bni_cached_members',
+  'bni_cached_import_logs',
+  'bni_active_tab',
+  'bni_active_report',
+];
+
+export const clearCachedAppData = () => {
+  CACHE_KEYS.forEach(key => {
+    try { localStorage.removeItem(key); } catch {}
+  });
+  try { sessionStorage.clear(); } catch {}
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -111,13 +139,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     loggingOutRef.current = true;
     try {
-      localStorage.removeItem('bni_cached_org');
-      localStorage.removeItem('bni_cached_org_member');
-      localStorage.removeItem('bni_cached_profile');
-      localStorage.removeItem('bni_cached_members');
-      localStorage.removeItem('bni_cached_import_logs');
-      localStorage.removeItem('bni_active_tab');
-      sessionStorage.clear();
+      clearCachedAppData();
 
       await signOutFirebase();
       await signOutSupabase();
@@ -131,8 +153,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Deletes the user's personal data, then their login, then signs them out.
+   * Data is removed first: if the auth deletion fails the user can retry, whereas
+   * deleting the login first would strand orphaned rows nobody can reach.
+   */
+  const deleteAccount = async (): Promise<DeleteAccountResult> => {
+    if (!user?.uid) return { ok: false, error: 'You are not signed in.' };
+
+    setLoading(true);
+    try {
+      const dataResult = await supabaseService.deleteUserAccount(user.uid, user.email);
+      if (!dataResult.ok) {
+        setLoading(false);
+        return { ok: false, error: dataResult.error };
+      }
+
+      loggingOutRef.current = true;
+      clearCachedAppData();
+
+      // Supabase-authenticated users cannot be deleted from the browser (that needs the
+      // service_role admin API), so their login survives — report it rather than pretend.
+      let loginRetained = false;
+      try {
+        const deleted = await deleteFirebaseAccount();
+        loginRetained = !deleted;
+      } catch (authErr: any) {
+        console.error('Auth account deletion failed:', authErr);
+        loginRetained = true;
+      }
+
+      try {
+        await signOutFirebase();
+        await signOutSupabase();
+      } catch {}
+
+      setUser(null);
+      return { ok: true, loginRetained };
+    } catch (err: any) {
+      console.error('Delete account error:', err);
+      return { ok: false, error: err?.message || 'Failed to delete account.' };
+    } finally {
+      setLoading(false);
+      loggingOutRef.current = false;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

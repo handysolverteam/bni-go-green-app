@@ -1,5 +1,12 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut as firebaseSignOut,
+  deleteUser,
+  reauthenticateWithPopup,
+} from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -27,4 +34,27 @@ export async function signInWithGoogleFirebase() {
 
 export async function signOutFirebase() {
   return firebaseSignOut(firebaseAuth);
+}
+
+/**
+ * Permanently deletes the signed-in Firebase auth user.
+ * Firebase rejects deletion on a stale session ('auth/requires-recent-login'),
+ * so we re-authenticate through the Google popup once and retry.
+ * Returns false when there is no Firebase user (e.g. the Supabase OAuth path).
+ */
+export async function deleteFirebaseAccount(): Promise<boolean> {
+  const current = firebaseAuth.currentUser;
+  if (!current) return false;
+
+  try {
+    await deleteUser(current);
+    return true;
+  } catch (error: any) {
+    if (error?.code === 'auth/requires-recent-login') {
+      await reauthenticateWithPopup(current, googleProvider);
+      await deleteUser(firebaseAuth.currentUser || current);
+      return true;
+    }
+    throw error;
+  }
 }

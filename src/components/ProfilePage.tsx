@@ -6,15 +6,25 @@ import { supabaseService } from '../services/supabaseService';
 import { useToast } from '../context/ToastContext';
 import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 import { OrgShareWidget } from './OrgShareWidget';
+import { AccountDangerZone } from './AccountDangerZone';
 
 interface ProfilePageProps {
   profile: UserProfileExtended | null;
   org: Organization | null;
   orgMember: OrgMember | null;
   onProfileUpdated: (updated: UserProfileExtended) => void;
+  onLeaveOrganization?: () => Promise<{ ok: boolean; error?: string }>;
+  onNavigateToChapter?: () => void;
 }
 
-export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMember, onProfileUpdated }) => {
+export const ProfilePage: React.FC<ProfilePageProps> = ({
+  profile,
+  org,
+  orgMember,
+  onProfileUpdated,
+  onLeaveOrganization,
+  onNavigateToChapter,
+}) => {
   const { showToast } = useToast();
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [phone, setPhone] = useState(profile?.phone || '');
@@ -229,6 +239,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ profile, org, orgMembe
           </div>
         </form>
       </GlassCard>
+
+      {/* Account & Membership Danger Zone */}
+      {onLeaveOrganization && (
+        <AccountDangerZone
+          org={org}
+          orgMember={orgMember}
+          userEmail={orgMember?.user_email}
+          onLeaveOrganization={onLeaveOrganization}
+          onGoToChapterTab={onNavigateToChapter}
+        />
+      )}
     </div>
   );
 };
