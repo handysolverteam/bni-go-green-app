@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { GlassCard } from './GlassCard';
-import { ShieldCheck, Lock, ArrowRight, Zap, CheckCircle2, Heart } from 'lucide-react';
+import { ShieldCheck, Lock, ArrowRight, Zap, CheckCircle2, Heart, Smartphone } from 'lucide-react';
+import { PhoneloginScreen } from '../auth/components/PhoneloginScreen';
 
 export const LoginPage: React.FC = () => {
   const { loginWithGoogle, loading } = useAuth();
@@ -40,7 +41,7 @@ export const LoginPage: React.FC = () => {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">Handychapter</span>
           </h1>
           <p className="text-xs text-slate-400 max-w-xs mx-auto">
-            100-Point Score Engine & WhatsApp Direct Outreach
+            100-Point Score Engine &amp; WhatsApp Direct Outreach
           </p>
         </div>
 
@@ -48,7 +49,7 @@ export const LoginPage: React.FC = () => {
         <GlassCard glow className="p-6 sm:p-8 space-y-6 text-center border-white/10 shadow-2xl">
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-white">Director Portal</h2>
-            <p className="text-xs text-slate-400">Secure single sign-on via Google</p>
+            <p className="text-xs text-slate-400">Sign in with Google or Mobile Phone Number</p>
           </div>
 
           {errorMsg && (
@@ -57,7 +58,8 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
 
-          <div className="space-y-3 pt-2">
+          <div className="space-y-4 pt-1">
+            {/* Original Google Sign In Button */}
             <button
               onClick={handleGoogleLogin}
               disabled={loading || isAuthenticating}
@@ -88,13 +90,18 @@ export const LoginPage: React.FC = () => {
               <span>{loading || isAuthenticating ? 'Signing in with Google...' : 'Continue with Google'}</span>
               {!(loading || isAuthenticating) && <ArrowRight className="w-4 h-4 ml-1 text-slate-600" />}
             </button>
-          </div>
 
-          {/* Security Banner */}
-          {/* <div className="pt-4 border-t border-white/10 flex items-center justify-center space-x-2 text-[11px] text-slate-400">
-            <Lock className="w-3.5 h-3.5 text-emerald-400" />
-            <span>256-bit SSL Encrypted &bull; Direct Google OAuth</span>
-          </div> */}
+            {/* Divider */}
+            <div className="relative flex items-center justify-center my-3">
+              <div className="w-full border-t border-slate-800" />
+              <span className="absolute bg-[#0a0f1d] px-3 text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">
+                OR
+              </span>
+            </div>
+
+            {/* Embedded Phone OTP Sign In Form */}
+            <PhoneloginScreen embedded />
+          </div>
         </GlassCard>
 
         {/* Footer */}
@@ -123,3 +130,4 @@ export const LoginPage: React.FC = () => {
     </div>
   );
 };
+
