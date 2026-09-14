@@ -200,5 +200,6 @@ export interface UserProfile {
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
-  provider: 'google' | 'email' | 'supabase';
+  phoneNumber?: string | null;
+  provider: 'google' | 'email' | 'phone' | 'supabase';
 }

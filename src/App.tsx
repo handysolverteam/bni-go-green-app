@@ -269,7 +269,8 @@ export const AppContent: React.FC = () => {
           setUserProfile(finalProfile);
         } else if (user?.displayName || user?.email) {
           const cachedStr = localStorage.getItem('bni_cached_profile');
-          let existingPhone = (user as any).phoneNumber || '';
+          // Phone sign-in already verified this number, so pre-fill it for onboarding.
+          let existingPhone = user.phoneNumber || '';
           if (cachedStr) {
             try {
               const cached = JSON.parse(cachedStr);

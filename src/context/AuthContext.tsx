@@ -1,9 +1,31 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { UserProfile } from '../types';
-import { signInWithGoogleFirebase, signOutFirebase, firebaseAuth, deleteFirebaseAccount } from '../lib/firebase';
+import {
+  signInWithGoogleFirebase,
+  signOutFirebase,
+  firebaseAuth,
+  deleteFirebaseAccount,
+  sendPhoneOtp,
+  confirmPhoneOtp,
+  clearRecaptcha,
+} from '../lib/firebase';
 import { supabase, signInWithGoogleSupabase, signOutSupabase } from '../lib/supabase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, type ConfirmationResult, type User as FirebaseUser } from 'firebase/auth';
 import { supabaseService } from '../services/supabaseService';
+
+/** Maps a Firebase auth user onto the app's UserProfile shape. */
+const fromFirebaseUser = (fbUser: FirebaseUser): UserProfile => {
+  const isPhone = fbUser.providerData.some((p) => p.providerId === 'phone');
+  return {
+    uid: fbUser.uid,
+    email: fbUser.email,
+    // Phone accounts carry no displayName or email, so the number is the only human label.
+    displayName: fbUser.displayName || fbUser.email?.split('@')[0] || fbUser.phoneNumber || 'Member',
+    photoURL: fbUser.photoURL || null,
+    phoneNumber: fbUser.phoneNumber || null,
+    provider: isPhone ? 'phone' : 'google',
+  };
+};
 
 export interface DeleteAccountResult {
   ok: boolean;
@@ -16,6 +38,12 @@ interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
+  /** Sends an SMS code to an E.164 number. Call verifyPhoneOtp() next. */
+  requestPhoneOtp: (e164Phone: string) => Promise<void>;
+  /** Completes phone sign-in with the code from the SMS. */
+  verifyPhoneOtp: (code: string) => Promise<void>;
+  /** Discards a pending OTP challenge (e.g. the user went back to edit the number). */
+  cancelPhoneOtp: () => void;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<DeleteAccountResult>;
 }
@@ -24,6 +52,9 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   loginWithGoogle: async () => {},
+  requestPhoneOtp: async () => {},
+  verifyPhoneOtp: async () => {},
+  cancelPhoneOtp: () => {},
   logout: async () => {},
   deleteAccount: async () => ({ ok: false }),
 });
@@ -50,6 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const loggingOutRef = useRef(false);
+  const phoneConfirmationRef = useRef<ConfirmationResult | null>(null);
 
   useEffect(() => {
     // Failsafe: the app blocks on a splash while `loading` is true, so if neither provider
@@ -61,13 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribeFirebase = onAuthStateChanged(firebaseAuth, (fbUser) => {
       clearTimeout(failsafe);
       if (fbUser) {
-        setUser({
-          uid: fbUser.uid,
-          email: fbUser.email,
-          displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Member',
-          photoURL: fbUser.photoURL || null,
-          provider: 'google',
-        });
+        setUser(fromFirebaseUser(fbUser));
         setLoading(false);
       } else if (!loggingOutRef.current) {
         // 2. Check Supabase Auth State if Firebase is null (skip while logging out)
@@ -142,11 +168,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Step 1 of phone sign-in. The ConfirmationResult is held in a ref rather than state
+   * because it is a non-serialisable handle used only by the verify step, and re-rendering
+   * on it would serve no purpose.
+   */
+  const requestPhoneOtp = async (e164Phone: string) => {
+    const confirmation = await sendPhoneOtp(e164Phone);
+    phoneConfirmationRef.current = confirmation;
+  };
+
+  /**
+   * Step 2 of phone sign-in. onAuthStateChanged picks the session up from here.
+   *
+   * Deliberately does NOT touch the global `loading` flag: App renders a full-screen splash
+   * while it is true, which would unmount the OTP form mid-verification and discard the
+   * entered code and error message on a wrong entry. The form shows its own spinner.
+   */
+  const verifyPhoneOtp = async (code: string) => {
+    const confirmation = phoneConfirmationRef.current;
+    if (!confirmation) {
+      throw new Error('That verification session has expired. Request a new code.');
+    }
+
+    await confirmPhoneOtp(confirmation, code);
+    phoneConfirmationRef.current = null;
+  };
+
+  const cancelPhoneOtp = () => {
+    phoneConfirmationRef.current = null;
+    clearRecaptcha();
+  };
+
   const logout = async () => {
     setLoading(true);
     loggingOutRef.current = true;
     try {
       clearCachedAppData();
+      cancelPhoneOtp();
 
       await signOutFirebase();
       await signOutSupabase();
@@ -215,7 +274,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout, deleteAccount }}>
+    <AuthContext.Provider
+      value={{ user, loading, loginWithGoogle, requestPhoneOtp, verifyPhoneOtp, cancelPhoneOtp, logout, deleteAccount }}
+    >
       {children}
     </AuthContext.Provider>
   );
