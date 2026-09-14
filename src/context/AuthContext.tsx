@@ -20,6 +20,7 @@ import {
 import { supabase, signInWithGoogleSupabase, signOutSupabase } from '../lib/supabase';
 import { onAuthStateChanged, type ConfirmationResult, type User as FirebaseUser } from 'firebase/auth';
 import { supabaseService } from '../services/supabaseService';
+import { clearInviteCodeFromUrl } from '../lib/inviteCode';
 
 /** Maps a Firebase auth user onto the app's UserProfile shape. */
 const fromFirebaseUser = (fbUser: FirebaseUser): UserProfile => {
@@ -92,6 +93,9 @@ const CACHE_KEYS = [
   'bni_cached_import_logs',
   'bni_active_tab',
   'bni_active_report',
+  // An invite code must never outlive the session that received it, or the next account
+  // signing in on this browser gets offered someone else's chapter.
+  'pending_join_code',
 ];
 
 export const clearCachedAppData = () => {
@@ -99,6 +103,9 @@ export const clearCachedAppData = () => {
     try { localStorage.removeItem(key); } catch {}
   });
   try { sessionStorage.clear(); } catch {}
+  // The address bar outlives the session too: an invite code left in the query string
+  // would be offered to whichever account signs in next on this browser.
+  clearInviteCodeFromUrl();
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

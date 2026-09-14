@@ -6,6 +6,7 @@ import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Organization, OrgMember } from '../types';
+import { consumeInviteCode } from '../lib/inviteCode';
 
 interface OrgOnboardingScreenProps {
   onOrgJoined: (data: { org: Organization; member: OrgMember }) => void;
@@ -27,13 +28,17 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   React.useEffect(() => {
-    const urlCode = new URLSearchParams(window.location.search).get('join') ||
-                    new URLSearchParams(window.location.search).get('join_code') ||
-                    new URLSearchParams(window.location.search).get('code');
-    const pendingCode = urlCode || localStorage.getItem('pending_join_code');
+    // Reading consumes the code, clearing it from both the URL and storage.
+    //
+    // An invite code is a one-shot hint from a shared link, not durable state. Nothing
+    // used to clear it: the localStorage key was read but never removed, and the query
+    // string survived every refresh because the app only rewrites the hash. So after
+    // leaving a chapter the old code kept reappearing in the Join field, and it persisted
+    // through sign-out to whichever account signed in next on the same browser.
+    const pendingCode = consumeInviteCode();
 
-    if (pendingCode && pendingCode.trim()) {
-      const cleanCode = pendingCode.trim().toUpperCase();
+    if (pendingCode) {
+      const cleanCode = pendingCode.toUpperCase();
       setMode('join');
       setCode(cleanCode);
       showToast(`Auto-filled invite code "${cleanCode}"! Click Join to connect.`, 'info');

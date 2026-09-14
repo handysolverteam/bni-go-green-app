@@ -18,6 +18,7 @@ import { ExistingAccountNotice, type ExistingAccountMatch } from './components/E
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
+import { clearInviteCodeFromUrl, clearPendingInviteCode } from './lib/inviteCode';
 
 const parseHash = () => {
   const raw = decodeURIComponent(window.location.hash.replace('#', ''));
@@ -369,6 +370,11 @@ export const AppContent: React.FC = () => {
 
     ['bni_cached_org', 'bni_cached_org_member', 'bni_cached_members', 'bni_cached_import_logs', 'bni_active_report']
       .forEach(key => { try { localStorage.removeItem(key); } catch {} });
+
+    // Drop any invite code still in storage or the address bar, so the chapter they just
+    // left is not handed straight back to them on the onboarding screen.
+    clearPendingInviteCode();
+    clearInviteCodeFromUrl();
 
     setMembers([]);
     setImportLogs([]);
