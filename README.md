@@ -29,7 +29,7 @@ Handychapter is a multi-tenant, role-based web application designed for BNI Chap
 
 ---
 
-## 🗄️ Supabase Complete Database Schema
+## 🗄️ Supabase Complete Database Schema.
 
 Run this SQL in your **Supabase Dashboard $\rightarrow$ SQL Editor**:
 
