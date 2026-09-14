@@ -560,6 +560,57 @@ export const supabaseService = {
   },
 
   // --- USER PROFILE METHODS ---
+  /**
+   * Looks for an EXISTING profile that already claims this phone number, under a different
+   * auth account. Used to catch the duplicate-account case: someone who signed up with
+   * Google and later signs in by phone gets a fresh Firebase uid, and would otherwise be
+   * dropped into onboarding as a stranger to their own chapter.
+   *
+   * Matches on the last 10 digits so stored formats ("+91 98765 43210", "919876543210")
+   * all compare equal. Returns null if nothing matches, or if the lookup is not permitted
+   * — under per-user RLS a brand new account can read nobody else's profile, so this
+   * degrades to "no hint" rather than failing the sign-in.
+   */
+  async findProfileByPhone(phone: string, excludeUserId: string): Promise<{
+    user_id: string;
+    full_name: string;
+    email?: string | null;
+  } | null> {
+    try {
+      const last10 = (phone || '').replace(/\D/g, '').slice(-10);
+      if (last10.length < 10) return null;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, full_name, phone')
+        .ilike('phone', `%${last10}%`)
+        .limit(5);
+
+      if (error || !data?.length) return null;
+
+      const match = data.find((row: any) => row.user_id && row.user_id !== excludeUserId);
+      if (!match) return null;
+
+      // profiles has no email column, so the address (for "sign in with Google as ...")
+      // comes from the membership row.
+      const { data: membership } = await supabase
+        .from('org_members')
+        .select('user_email')
+        .eq('user_id', match.user_id)
+        .limit(1)
+        .maybeSingle();
+
+      return {
+        user_id: match.user_id,
+        full_name: match.full_name || 'your account',
+        email: membership?.user_email || null,
+      };
+    } catch (e) {
+      console.error('findProfileByPhone exception:', e);
+      return null;
+    }
+  },
+
   async fetchUserProfile(userId: string, userEmail?: string | null): Promise<UserProfileExtended | null> {
     try {
       let { data } = await supabase

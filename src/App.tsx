@@ -14,6 +14,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
 import { TrendsTab } from './components/TrendsTab';
 import { ChatTab } from './components/ChatTab';
+import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
@@ -178,6 +179,9 @@ export const AppContent: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
+  // Set when a phone sign-in lands on a number that already belongs to another account.
+  const [duplicateAccount, setDuplicateAccount] = useState<ExistingAccountMatch | null>(null);
+
   // Holds the teardown for the active members realtime channel. Without this, leaving an
   // org keeps the old subscription alive and it overwrites the roster with the old chapter's data.
   const unsubscribeMembersRef = React.useRef<(() => void) | null>(null);
@@ -301,6 +305,15 @@ export const AppContent: React.FC = () => {
           localStorage.removeItem('bni_cached_org_member');
           setOrg(null);
           setOrgMember(null);
+
+          // A phone sign-in with no chapter is either a genuinely new user or someone who
+          // already has an account under Google — Firebase issues a different uid per
+          // method, so the second one arrives looking like a stranger. Check before letting
+          // them build a parallel chapter under the duplicate.
+          if (user.provider === 'phone' && user.phoneNumber && !profRes) {
+            const match = await supabaseService.findProfileByPhone(user.phoneNumber, user.uid);
+            if (match) setDuplicateAccount({ full_name: match.full_name, email: match.email });
+          }
         }
 
         setMembers(fetchedMembers);
@@ -506,7 +519,19 @@ export const AppContent: React.FC = () => {
     return <BootSplash title="Verifying Organization..." subtitle="Checking chapter membership & credentials" />;
   }
 
-  // 3. Authenticated & Verified, but NO Organization -> Org Onboarding Screen
+  // 3a. Signed in by phone, but this number already belongs to another account. Steer them
+  //     back before they build a parallel chapter under the duplicate uid.
+  if (duplicateAccount) {
+    return (
+      <ExistingAccountNotice
+        match={duplicateAccount}
+        phoneNumber={user.phoneNumber}
+        onContinueAnyway={() => setDuplicateAccount(null)}
+      />
+    );
+  }
+
+  // 3b. Authenticated & Verified, but NO Organization -> Org Onboarding Screen
   if (!org) {
     return <OrgOnboardingScreen onOrgJoined={handleOrgJoined} />;
   }

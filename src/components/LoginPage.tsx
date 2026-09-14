@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { GlassCard } from './GlassCard';
-import { ShieldCheck, Lock, ArrowRight, Zap, CheckCircle2, Heart, Smartphone } from 'lucide-react';
+import { ArrowRight, Zap, Heart, Info } from 'lucide-react';
 import { PhoneloginScreen } from '../auth/components/PhoneloginScreen';
 
 export const LoginPage: React.FC = () => {
@@ -101,6 +101,16 @@ export const LoginPage: React.FC = () => {
 
             {/* Embedded Phone OTP Sign In Form */}
             <PhoneloginScreen embedded />
+
+            {/* Google and phone create separate accounts unless linked, so returning users
+                need the method they originally signed up with. */}
+            <div className="pt-1 flex items-start gap-1.5 text-left text-[11px] text-slate-400">
+              <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+              <span>
+                Already have an account? Sign in the same way you did before. You can add the
+                other method afterwards from <span className="font-bold text-slate-300">Profile &rarr; Sign-in Methods</span>.
+              </span>
+            </div>
           </div>
         </GlassCard>
 
