@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 import { OrgShareWidget } from './OrgShareWidget';
 import { AccountDangerZone } from './AccountDangerZone';
+import { SignInMethodsCard } from './SignInMethodsCard';
 
 interface ProfilePageProps {
   profile: UserProfileExtended | null;
@@ -239,6 +240,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           </div>
         </form>
       </GlassCard>
+
+      {/* Linked sign-in methods */}
+      <SignInMethodsCard />
 
       {/* Account & Membership Danger Zone */}
       {onLeaveOrganization && (

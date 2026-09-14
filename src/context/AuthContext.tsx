@@ -8,6 +8,14 @@ import {
   sendPhoneOtp,
   confirmPhoneOtp,
   clearRecaptcha,
+  getLinkedProviders,
+  startPhoneLink,
+  confirmPhoneLink,
+  linkGoogleToCurrentUser,
+  unlinkProvider,
+  reloadFirebaseUser,
+  PROVIDER_GOOGLE,
+  PROVIDER_PHONE,
 } from '../lib/firebase';
 import { supabase, signInWithGoogleSupabase, signOutSupabase } from '../lib/supabase';
 import { onAuthStateChanged, type ConfirmationResult, type User as FirebaseUser } from 'firebase/auth';
@@ -15,15 +23,19 @@ import { supabaseService } from '../services/supabaseService';
 
 /** Maps a Firebase auth user onto the app's UserProfile shape. */
 const fromFirebaseUser = (fbUser: FirebaseUser): UserProfile => {
-  const isPhone = fbUser.providerData.some((p) => p.providerId === 'phone');
+  const providers = getLinkedProviders(fbUser);
+  // An account can hold both methods once linked; Google is the richer identity, so it
+  // wins the single `provider` label while `providers` carries the full truth.
+  const isPhoneOnly = providers.includes(PROVIDER_PHONE) && !providers.includes(PROVIDER_GOOGLE);
   return {
     uid: fbUser.uid,
     email: fbUser.email,
-    // Phone accounts carry no displayName or email, so the number is the only human label.
+    // Phone-only accounts carry no displayName or email, so the number is the only label.
     displayName: fbUser.displayName || fbUser.email?.split('@')[0] || fbUser.phoneNumber || 'Member',
     photoURL: fbUser.photoURL || null,
     phoneNumber: fbUser.phoneNumber || null,
-    provider: isPhone ? 'phone' : 'google',
+    providers,
+    provider: isPhoneOnly ? 'phone' : 'google',
   };
 };
 
@@ -44,6 +56,14 @@ interface AuthContextType {
   verifyPhoneOtp: (code: string) => Promise<void>;
   /** Discards a pending OTP challenge (e.g. the user went back to edit the number). */
   cancelPhoneOtp: () => void;
+  /** Sends an SMS code to attach a number to the CURRENT account (not a new sign-in). */
+  requestPhoneLink: (e164Phone: string) => Promise<void>;
+  /** Completes attaching the phone number with the SMS code. */
+  confirmPhoneLinkCode: (code: string) => Promise<void>;
+  /** Attaches a Google identity to the current account. */
+  linkGoogle: () => Promise<void>;
+  /** Detaches a sign-in method; refuses to remove the last one. */
+  unlinkMethod: (providerId: string) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<DeleteAccountResult>;
 }
@@ -55,6 +75,10 @@ const AuthContext = createContext<AuthContextType>({
   requestPhoneOtp: async () => {},
   verifyPhoneOtp: async () => {},
   cancelPhoneOtp: () => {},
+  requestPhoneLink: async () => {},
+  confirmPhoneLinkCode: async () => {},
+  linkGoogle: async () => {},
+  unlinkMethod: async () => {},
   logout: async () => {},
   deleteAccount: async () => ({ ok: false }),
 });
@@ -200,6 +224,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearRecaptcha();
   };
 
+  /**
+   * Linking mutates the current user in place, which does NOT re-fire onAuthStateChanged,
+   * so provider data must be pulled explicitly or the UI keeps showing the old methods.
+   */
+  const refreshLinkedProviders = async () => {
+    const fresh = await reloadFirebaseUser();
+    if (fresh) setUser(fromFirebaseUser(fresh));
+  };
+
+  const requestPhoneLink = async (e164Phone: string) => {
+    phoneConfirmationRef.current = await startPhoneLink(e164Phone);
+  };
+
+  const confirmPhoneLinkCode = async (code: string) => {
+    const confirmation = phoneConfirmationRef.current;
+    if (!confirmation) {
+      throw new Error('That verification session has expired. Request a new code.');
+    }
+
+    await confirmPhoneLink(confirmation, code);
+    phoneConfirmationRef.current = null;
+    await refreshLinkedProviders();
+  };
+
+  const linkGoogle = async () => {
+    await linkGoogleToCurrentUser();
+    await refreshLinkedProviders();
+  };
+
+  const unlinkMethod = async (providerId: string) => {
+    await unlinkProvider(providerId);
+    await refreshLinkedProviders();
+  };
+
   const logout = async () => {
     setLoading(true);
     loggingOutRef.current = true;
@@ -275,7 +333,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, loginWithGoogle, requestPhoneOtp, verifyPhoneOtp, cancelPhoneOtp, logout, deleteAccount }}
+      value={{
+        user,
+        loading,
+        loginWithGoogle,
+        requestPhoneOtp,
+        verifyPhoneOtp,
+        cancelPhoneOtp,
+        requestPhoneLink,
+        confirmPhoneLinkCode,
+        linkGoogle,
+        unlinkMethod,
+        logout,
+        deleteAccount,
+      }}
     >
       {children}
     </AuthContext.Provider>

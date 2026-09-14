@@ -8,8 +8,15 @@ import {
   reauthenticateWithPopup,
   RecaptchaVerifier,
   signInWithPhoneNumber,
+  linkWithPhoneNumber,
+  linkWithPopup,
+  unlink,
   type ConfirmationResult,
+  type User as FirebaseUser,
 } from 'firebase/auth';
+
+export const PROVIDER_GOOGLE = 'google.com';
+export const PROVIDER_PHONE = 'phone';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -149,7 +156,89 @@ export function describeAuthError(error: any): string {
     case 'auth/popup-closed-by-user':
     case 'auth/cancelled-popup-request':
       return 'Sign-in was cancelled.';
+    case 'auth/provider-already-linked':
+      return 'That sign-in method is already on this account.';
+    case 'auth/credential-already-in-use':
+    case 'auth/account-exists-with-different-credential':
+      // Two separate accounts already exist. Merging them needs the Admin SDK, so the
+      // honest answer is that one has to go — we cannot silently combine them here.
+      return 'That already belongs to a different Handychapter account. Sign in to that account instead, or remove it there before adding it here.';
+    case 'auth/requires-recent-login':
+      return 'For security, please sign out and sign back in, then try again.';
+    case 'auth/no-such-provider':
+      return 'That sign-in method is not on this account.';
     default:
       return error?.message || 'Authentication failed. Please try again.';
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Account linking — one account, multiple sign-in methods                    */
+/* -------------------------------------------------------------------------- */
+
+/** Provider ids currently attached to the signed-in account. */
+export function getLinkedProviders(user: FirebaseUser | null): string[] {
+  return user?.providerData.map((p) => p.providerId) ?? [];
+}
+
+/**
+ * Starts attaching a phone number to the CURRENT account.
+ *
+ * This differs from sendPhoneOtp(): that one signs a user in (creating a separate
+ * account for the number), whereas this adds the number to the account already signed in.
+ */
+export async function startPhoneLink(e164Phone: string): Promise<ConfirmationResult> {
+  const current = firebaseAuth.currentUser;
+  if (!current) throw new Error('You must be signed in to add a phone number.');
+
+  clearRecaptcha();
+  recaptchaVerifier = new RecaptchaVerifier(firebaseAuth, RECAPTCHA_CONTAINER_ID, {
+    size: 'invisible',
+  });
+
+  try {
+    return await linkWithPhoneNumber(current, e164Phone, recaptchaVerifier);
+  } catch (error) {
+    clearRecaptcha();
+    throw error;
+  }
+}
+
+/** Completes phone linking with the SMS code. */
+export async function confirmPhoneLink(confirmation: ConfirmationResult, code: string) {
+  const result = await confirmation.confirm(code);
+  clearRecaptcha();
+  return result.user;
+}
+
+/** Attaches a Google identity to the current account via popup. */
+export async function linkGoogleToCurrentUser() {
+  const current = firebaseAuth.currentUser;
+  if (!current) throw new Error('You must be signed in to add Google sign-in.');
+
+  const result = await linkWithPopup(current, googleProvider);
+  return result.user;
+}
+
+/**
+ * Detaches a sign-in method. Refuses to remove the last one, which would leave the
+ * account unreachable.
+ */
+export async function unlinkProvider(providerId: string) {
+  const current = firebaseAuth.currentUser;
+  if (!current) throw new Error('You must be signed in to change sign-in methods.');
+
+  if (getLinkedProviders(current).length <= 1) {
+    throw new Error('This is your only sign-in method. Add another before removing it.');
+  }
+
+  return unlink(current, providerId);
+}
+
+/** Pulls fresh provider data after a link/unlink, which does not re-fire onAuthStateChanged. */
+export async function reloadFirebaseUser(): Promise<FirebaseUser | null> {
+  const current = firebaseAuth.currentUser;
+  if (!current) return null;
+  await current.reload();
+  return firebaseAuth.currentUser;
 }
