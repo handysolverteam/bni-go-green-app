@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { GlassCard } from './GlassCard';
+import { ConfirmationModal } from './ConfirmationModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { AlertTriangle, ArrowRight, UserCheck } from 'lucide-react';
+import { AlertTriangle, ArrowRight, UserCheck, Trash2 } from 'lucide-react';
 
 export interface ExistingAccountMatch {
   full_name: string;
@@ -29,6 +30,9 @@ const maskEmail = (email?: string | null): string => {
  * Shown when someone signs in by phone and that number already belongs to a different
  * account. Firebase has already created the second account by this point, so the goal is
  * to steer them back before they build a parallel chapter under it.
+ *
+ * Signing out and deleting the duplicate are kept as separate actions: nothing is removed
+ * unless the user explicitly asks and confirms.
  */
 export const ExistingAccountNotice: React.FC<ExistingAccountNoticeProps> = ({
   match,
@@ -38,26 +42,39 @@ export const ExistingAccountNotice: React.FC<ExistingAccountNoticeProps> = ({
   const { deleteAccount, logout } = useAuth();
   const { showToast } = useToast();
   const [isSwitching, setIsSwitching] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  /**
-   * Removes the duplicate account that was just created, then returns to sign-in.
-   * Deleting it avoids leaving an empty orphan behind; if that fails we still sign out,
-   * because getting them back to the login screen is the point.
-   */
-  const handleUseExisting = async () => {
+  /** Simply returns to sign-in. Nothing is deleted — the duplicate is left as it is. */
+  const handleSignOut = async () => {
     setIsSwitching(true);
     try {
-      const result = await deleteAccount();
-      if (!result.ok) {
-        console.warn('Could not remove duplicate account:', result.error);
-        await logout();
-      }
+      await logout();
       showToast('Signed out. Please sign in with Google instead.', 'info');
     } catch (err) {
-      console.error('Switch to existing account failed:', err);
-      await logout();
+      console.error('Sign out failed:', err);
+      showToast('Could not sign out. Please try again.', 'error');
     } finally {
       setIsSwitching(false);
+    }
+  };
+
+  /** Removes the duplicate account, but only ever from the explicit confirmed action. */
+  const handleDeleteDuplicate = async () => {
+    setIsDeleting(true);
+    try {
+      const result = await deleteAccount();
+      if (result.ok) {
+        showToast('Duplicate account deleted. Sign in with Google to continue.', 'success');
+        setShowDeleteConfirm(false);
+      } else {
+        showToast(result.error || 'Could not delete this account.', 'error');
+      }
+    } catch (err: any) {
+      console.error('Delete duplicate failed:', err);
+      showToast(err?.message || 'Could not delete this account.', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -105,28 +122,46 @@ export const ExistingAccountNotice: React.FC<ExistingAccountNoticeProps> = ({
 
           <button
             type="button"
-            onClick={handleUseExisting}
-            disabled={isSwitching}
+            onClick={handleSignOut}
+            disabled={isSwitching || isDeleting}
             className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
           >
             {isSwitching ? (
               <>
                 <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                <span>Switching...</span>
+                <span>Signing out...</span>
               </>
             ) : (
               <>
-                <span>Sign in with Google instead</span>
+                <span>Sign out &amp; use Google</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
 
+          {/* Deleting is a separate, explicitly labelled action — never a side effect of
+              signing out, which would destroy an account behind the user's back. */}
+          <div className="pt-3 border-t border-white/10 space-y-2.5">
+            <p className="text-[11px] text-slate-400 font-medium">
+              This phone sign-in created an empty second account. Signing out leaves it in
+              place, which is harmless. You can remove it if you would rather not keep it:
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isSwitching || isDeleting}
+              className="w-full py-2.5 px-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-bold text-xs border border-rose-500/30 flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete this duplicate account</span>
+            </button>
+          </div>
+
           <div className="pt-3 border-t border-white/10 text-center">
             <button
               type="button"
               onClick={onContinueAnyway}
-              disabled={isSwitching}
+              disabled={isSwitching || isDeleting}
               className="text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
             >
               This is not me — continue with a separate account
@@ -134,6 +169,21 @@ export const ExistingAccountNotice: React.FC<ExistingAccountNoticeProps> = ({
           </div>
         </GlassCard>
       </div>
+
+      <ConfirmationModal
+        isOpen={showDeleteConfirm}
+        type="delete"
+        title="Delete Duplicate Account?"
+        message={
+          `This permanently deletes the empty account just created for ${phoneNumber || 'this number'}. ` +
+          `The existing account belonging to ${match.full_name} is NOT affected — its chapter, ` +
+          `reports and members stay exactly as they are. You will be returned to the sign-in screen.`
+        }
+        confirmText="Delete Duplicate"
+        onConfirm={handleDeleteDuplicate}
+        onClose={() => setShowDeleteConfirm(false)}
+        isLoading={isDeleting}
+      />
     </div>
   );
 };
