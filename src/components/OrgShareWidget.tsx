@@ -22,13 +22,18 @@ export const OrgShareWidget: React.FC<OrgShareWidgetProps> = ({
 
   const orgName = org.name || 'our chapter';
   const joinUrl = `https://www.handychapter.com/?join=${encodeURIComponent(org.code)}`;
-  const inviteMsg = `🤝 *Join ${orgName} on HandyChapter!*
+  // Body WITHOUT the link. navigator.share() appends `url` itself, so putting the link in
+  // `text` as well made most share targets (WhatsApp included) render it twice.
+  const inviteBody = `🤝 *Join ${orgName} on HandyChapter!*
 
 Connect with our chapter to view performance reports, scores, and outreach tracking.
 
 Organization Join Code: ${org.code}
 
-Tap the link below to automatically join:
+Tap the link below to automatically join:`;
+
+  // The WhatsApp deep link takes a single text blob, so that path carries the link inline.
+  const inviteMsg = `${inviteBody}
 ${joinUrl}`;
 
   const handleCopyLinkWithCode = () => {
@@ -38,21 +43,30 @@ ${joinUrl}`;
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleShareWhatsApp = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: `Join ${orgName} on HandyChapter`,
-        text: inviteMsg,
-        url: joinUrl,
-      }).catch(() => {
-        const url = getWhatsAppUrl('', inviteMsg, defaultCountryCode);
-        window.open(url, '_blank');
-      });
-    } else {
-      const url = getWhatsAppUrl('', inviteMsg, defaultCountryCode);
-      window.open(url, '_blank');
-    }
+  const openWhatsAppFallback = () => {
+    const url = getWhatsAppUrl('', inviteMsg, defaultCountryCode);
+    window.open(url, '_blank');
     showToast('Sharing invite link!', 'info');
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!navigator.share) {
+      openWhatsAppFallback();
+      return;
+    }
+
+    navigator.share({
+      title: `Join ${orgName} on HandyChapter`,
+      text: inviteBody,
+      url: joinUrl,
+    })
+      .then(() => showToast('Sharing invite link!', 'info'))
+      .catch((err) => {
+        // Dismissing the native share sheet rejects with AbortError — that is the user
+        // declining to share, not a failure, so do not force WhatsApp open behind them.
+        if (err?.name === 'AbortError') return;
+        openWhatsAppFallback();
+      });
   };
 
   return (
