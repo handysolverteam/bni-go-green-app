@@ -9,7 +9,8 @@ import { Organization, OrgMember } from '../types';
 import { consumeInviteCode } from '../lib/inviteCode';
 
 interface OrgOnboardingScreenProps {
-  onOrgJoined: (data: { org: Organization; member: OrgMember }) => void;
+  /** May be async: the spinner is held until the chapter's data has actually loaded. */
+  onOrgJoined: (data: { org: Organization; member: OrgMember }) => void | Promise<void>;
 }
 
 export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJoined }) => {
@@ -37,11 +38,11 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     // through sign-out to whichever account signed in next on the same browser.
     const pendingCode = consumeInviteCode();
 
-    if (pendingCode) {
-      const cleanCode = pendingCode.toUpperCase();
+    const inviteCode = pendingCode?.replace(/\D/g, '') || '';
+    if (inviteCode.length === 6) {
       setMode('join');
-      setCode(cleanCode);
-      showToast(`Auto-filled invite code "${cleanCode}"! Click Join to connect.`, 'info');
+      setCode(inviteCode);
+      showToast(`Auto-filled invite code "${inviteCode}"! Click Join to connect.`, 'info');
     }
   }, []);
 
@@ -67,7 +68,9 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
 
       if (res) {
         showToast(`Organization "${res.org.name}" created! Code: ${res.org.code}`, 'success');
-        onOrgJoined(res);
+        // Awaited so the button keeps spinning until the chapter's data is loaded, rather
+        // than dropping the user onto an empty dashboard that fills in a moment later.
+        await onOrgJoined(res);
       } else {
         const msg = 'Failed to create organization in database.';
         setErrorMsg(msg);
@@ -86,7 +89,9 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     e.preventDefault();
     if (!user?.uid) return;
 
-    if (!code.trim() || code.trim().length < 6) {
+    // Codes are always 6 digits; strip anything a paste may have carried in.
+    const cleanCode = code.replace(/\D/g, '');
+    if (cleanCode.length !== 6) {
       showToast('Please enter a valid 6-digit chapter code', 'error');
       return;
     }
@@ -95,14 +100,14 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     setErrorMsg(null);
     try {
       const res: any = await supabaseService.joinOrganization(
-        code.trim(),
+        cleanCode,
         user.uid,
         user.email || undefined
       );
 
       if (res && 'org' in res) {
         showToast(`Joined organization "${res.org.name}"!`, 'success');
-        onOrgJoined({ org: res.org, member: res.member });
+        await onOrgJoined({ org: res.org, member: res.member });
       } else {
         const msg = res?.error || 'Invalid 6-digit organization code.';
         setErrorMsg(msg);
@@ -222,7 +227,8 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
                   maxLength={6}
                   placeholder="e.g. 789210"
                   value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  inputMode="numeric"
                   className="w-full px-3.5 py-3 rounded-xl glass-input text-center text-lg font-black tracking-widest text-emerald-400"
                 />
                 <p className="text-[11px] text-slate-400 text-center">Ask your Chapter Owner or Admin for the 6-digit code</p>

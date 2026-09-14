@@ -139,7 +139,15 @@ export const AppContent: React.FC = () => {
     }
   });
 
-  const [isInitializing, setIsInitializing] = useState(true);
+  // Returning users already hold org, profile, members and reports in localStorage (the
+  // useState initialisers above read them). Blocking on the network anyway meant staring at
+  // "Verifying Organization..." on every single load while perfectly good data sat unused.
+  // With a cached session, render immediately and revalidate in the background.
+  const hasCachedSession = React.useRef(
+    Boolean(localStorage.getItem('bni_cached_org') && localStorage.getItem('bni_cached_profile'))
+  ).current;
+
+  const [isInitializing, setIsInitializing] = useState(!hasCachedSession);
 
   // Members, Import Logs & Selected Member (Hydrated instantly from SWR localStorage)
   const [members, setMembersState] = useState<Member[]>(() => {
@@ -178,7 +186,7 @@ export const AppContent: React.FC = () => {
 
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(hasCachedSession);
 
   // Set when a phone sign-in lands on a number that already belongs to another account.
   const [duplicateAccount, setDuplicateAccount] = useState<ExistingAccountMatch | null>(null);
@@ -231,7 +239,9 @@ export const AppContent: React.FC = () => {
       return;
     }
 
-    if (!hasVerifiedRef.current) {
+    // Only block the UI when there is nothing cached to show. A cached session revalidates
+    // silently underneath the already-rendered app.
+    if (!hasVerifiedRef.current && !hasCachedSession) {
       setIsInitializing(true);
       setIsDataLoaded(false);
     }
