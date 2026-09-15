@@ -29,6 +29,15 @@ const firebaseConfig = {
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+// Dev-only: prints which Firebase project the app is actually talking to. This project has
+// switched Firebase projects before (see git history of .env), and a console-vs-app mismatch
+// there looks identical to "I enabled it but it's not working" — a Firebase Console tab left
+// open on the wrong project. One glance here rules that out immediately. Silent in production.
+if (import.meta.env.DEV) {
+  console.info('[Firebase] Active project:', firebaseConfig.projectId);
+}
+
 export const firebaseAuth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -150,7 +159,9 @@ export function describeAuthError(error: any): string {
     case 'auth/captcha-check-failed':
       return 'Verification check failed. Reload the page and try again.';
     case 'auth/operation-not-allowed':
-      return 'Phone sign-in is not enabled for this project.';
+      return `Phone sign-in is not enabled for this project (${firebaseConfig.projectId}). ` +
+        `Enable it in Firebase Console → Authentication → Sign-in method → Phone, ` +
+        `making sure that project matches — not an old or different one.`;
     case 'auth/unauthorized-domain':
       return 'This domain is not authorised for sign-in. Add it in Firebase Console → Authentication → Settings → Authorized domains.';
     case 'auth/popup-closed-by-user':
