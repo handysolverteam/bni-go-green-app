@@ -283,11 +283,19 @@ export const AppContent: React.FC = () => {
     const initUserData = async () => {
       try {
         // Fetch Org and User Profile concurrently
+        if (import.meta.env.DEV) {
+          console.info('[InviteFlow] initUserData starting for', user.uid, 'URL:', window.location.href);
+        }
+
         const [orgRes, profRes] = await Promise.all([
           supabaseService.fetchUserOrganization(user.uid, user.email),
           supabaseService.fetchUserProfile(user.uid, user.email),
         ]);
-        if (cancelled) return;
+        if (cancelled) {
+          if (import.meta.env.DEV) console.info('[InviteFlow] invocation cancelled after org/profile fetch — a newer one is running');
+          return;
+        }
+        if (import.meta.env.DEV) console.info('[InviteFlow] fetchUserOrganization result:', orgRes ? `already in ${orgRes.org.name}` : 'no org');
         // Clears any stale flag left behind by an invocation that got cancelled mid-join.
         setIsJoiningViaInvite(false);
 
@@ -298,10 +306,16 @@ export const AppContent: React.FC = () => {
         let resolvedOrgRes = orgRes;
         if (!resolvedOrgRes) {
           const inviteCode = consumeInviteCode()?.replace(/\D/g, '');
+          if (import.meta.env.DEV) console.info('[InviteFlow] consumeInviteCode() ->', inviteCode || '(none found)');
           if (inviteCode && inviteCode.length === 6) {
+            if (import.meta.env.DEV) console.info('[InviteFlow] attempting auto-join with code', inviteCode);
             setIsJoiningViaInvite(true);
             const joinResult: any = await supabaseService.joinOrganization(inviteCode, user.uid, user.email || undefined);
-            if (cancelled) return;
+            if (cancelled) {
+              if (import.meta.env.DEV) console.info('[InviteFlow] invocation cancelled after join call — a newer one is running');
+              return;
+            }
+            if (import.meta.env.DEV) console.info('[InviteFlow] joinOrganization result:', joinResult);
             setIsJoiningViaInvite(false);
             if (joinResult && 'org' in joinResult) {
               resolvedOrgRes = { org: joinResult.org, member: joinResult.member };
@@ -367,6 +381,10 @@ export const AppContent: React.FC = () => {
           };
           localStorage.setItem('bni_cached_profile', JSON.stringify(fallback));
           setUserProfile(fallback);
+        }
+
+        if (import.meta.env.DEV) {
+          console.info('[InviteFlow] final resolvedOrgRes before setOrg:', resolvedOrgRes ? resolvedOrgRes.org.name : 'null (will show Create/Join screen)');
         }
 
         if (resolvedOrgRes) {

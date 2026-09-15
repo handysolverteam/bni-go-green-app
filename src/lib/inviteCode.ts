@@ -47,6 +47,9 @@ export function clearInviteCodeFromUrl() {
  */
 export function persistInviteCodeForAuthRedirect() {
   const urlCode = readInviteCodeFromUrl();
+  if (import.meta.env.DEV) {
+    console.info('[InviteFlow] LoginPage mount — URL invite code:', urlCode || '(none)', '| full URL:', window.location.href);
+  }
   if (!urlCode) return;
   try {
     localStorage.setItem(PENDING_JOIN_CODE_KEY, urlCode);
@@ -83,5 +86,9 @@ export function consumeInviteCode(): string | null {
   clearInviteCodeFromUrl();
 
   const code = urlCode || storedCode;
-  return code && code.trim() ? code.trim() : null;
+  const result = code && code.trim() ? code.trim() : null;
+  if (import.meta.env.DEV) {
+    console.info('[InviteFlow] consumeInviteCode() — urlCode:', urlCode || '(none)', '| storedCode:', storedCode || '(none)', '-> returning:', result || '(none)');
+  }
+  return result;
 }
