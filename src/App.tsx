@@ -266,6 +266,16 @@ export const AppContent: React.FC = () => {
       setIsDataLoaded(false);
     }
 
+    // Guards against a stale invocation applying its results after a newer one has already
+    // started. This effect previously had no cleanup, so React.StrictMode's dev-only
+    // double-invoke ran initUserData() twice concurrently: the first call would consume the
+    // invite code and start a real (slow) join API request, while the second found the code
+    // already gone, skipped the join entirely, and committed org=null faster than the first
+    // call's join could finish — landing the user on the manual Create/Join screen despite
+    // the join succeeding moments later in the background. Every await below re-checks this
+    // before touching state, so only the LAST invocation's outcome is ever applied.
+    let cancelled = false;
+
     const initUserData = async () => {
       try {
         // Fetch Org and User Profile concurrently
@@ -273,6 +283,7 @@ export const AppContent: React.FC = () => {
           supabaseService.fetchUserOrganization(user.uid, user.email),
           supabaseService.fetchUserProfile(user.uid, user.email),
         ]);
+        if (cancelled) return;
 
         // A referral link (?join=CODE) should take a new or org-less user straight to the
         // chapter dashboard, not park them on the manual create-or-join screen with the code
@@ -283,6 +294,7 @@ export const AppContent: React.FC = () => {
           const inviteCode = consumeInviteCode()?.replace(/\D/g, '');
           if (inviteCode && inviteCode.length === 6) {
             const joinResult: any = await supabaseService.joinOrganization(inviteCode, user.uid, user.email || undefined);
+            if (cancelled) return;
             if (joinResult && 'org' in joinResult) {
               resolvedOrgRes = { org: joinResult.org, member: joinResult.member };
               showToast(`Joined ${joinResult.org.name} via invite link!`, 'success');
@@ -304,6 +316,7 @@ export const AppContent: React.FC = () => {
           localStorage.setItem('bni_cached_org_member', JSON.stringify(resolvedOrgRes.member));
 
           const hydrated = await hydrateOrgData(resolvedOrgRes.org, user.uid);
+          if (cancelled) return;
           fetchedMembers = hydrated.members;
           fetchedLogs = hydrated.logs;
         }
@@ -365,22 +378,33 @@ export const AppContent: React.FC = () => {
           // them build a parallel chapter under the duplicate.
           if (user.provider === 'phone' && user.phoneNumber && !profRes) {
             const match = await supabaseService.findProfileByPhone(user.phoneNumber, user.uid);
+            if (cancelled) return;
             if (match) setDuplicateAccount({ full_name: match.full_name, email: match.email });
           }
         }
 
+        if (cancelled) return;
         setMembers(fetchedMembers);
         setImportLogs(fetchedLogs);
       } catch (err) {
+        if (cancelled) return;
         console.error('Initialization error:', err);
       } finally {
-        hasVerifiedRef.current = true;
-        setIsInitializing(false);
-        setIsDataLoaded(true);
+        // A `return` inside the try block above still runs this finally — without this guard,
+        // a cancelled invocation would flip isInitializing/isDataLoaded off regardless, which
+        // is exactly what let a stale invocation win the render race in the first place.
+        if (!cancelled) {
+          hasVerifiedRef.current = true;
+          setIsInitializing(false);
+          setIsDataLoaded(true);
+        }
       }
     };
 
     initUserData();
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   // Handle Org Created / Joined
