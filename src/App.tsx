@@ -18,7 +18,7 @@ import { ExistingAccountNotice, type ExistingAccountMatch } from './components/E
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
-import { clearInviteCodeFromUrl, clearPendingInviteCode } from './lib/inviteCode';
+import { clearInviteCodeFromUrl, clearPendingInviteCode, consumeInviteCode } from './lib/inviteCode';
 
 const parseHash = () => {
   const raw = decodeURIComponent(window.location.hash.replace('#', ''));
@@ -204,6 +204,26 @@ export const AppContent: React.FC = () => {
   };
 
   React.useEffect(() => () => unsubscribeMembersRef.current?.(), []);
+
+  // Handles an invite link (?join=CODE) visited by someone who ALREADY belongs to a chapter.
+  // OrgOnboardingScreen's own prefill effect only ever mounts when org is null, so without
+  // this, the code just sat unused in the URL forever and nothing told the user why clicking
+  // their invite link appeared to do nothing.
+  useEffect(() => {
+    if (isInitializing || !isDataLoaded || !user || !org) return;
+
+    const code = consumeInviteCode()?.replace(/\D/g, '');
+    if (!code) return;
+
+    if (code === org.code) {
+      showToast(`You're already a member of ${org.name}.`, 'info');
+    } else {
+      showToast(
+        `You're already in ${org.name}. Leave it from Profile → Danger Zone before joining another chapter.`,
+        'info'
+      );
+    }
+  }, [isInitializing, isDataLoaded, user, org]);
 
   /** Loads scoring config, roster and report logs for an org, and (re)opens its realtime channel. */
   const hydrateOrgData = async (targetOrg: Organization, userId: string) => {

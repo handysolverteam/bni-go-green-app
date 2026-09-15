@@ -35,6 +35,26 @@ export function clearInviteCodeFromUrl() {
   );
 }
 
+/**
+ * Copies an invite code from the URL into localStorage, WITHOUT clearing the URL.
+ *
+ * Google sign-in normally happens via a popup, which never navigates the page — the URL and
+ * its ?join= param survive untouched. But if the popup is blocked, AuthContext falls back to
+ * a full-page redirect (Supabase OAuth), whose redirectTo is the bare origin with no query
+ * string at all — the code would otherwise be silently dropped mid-login. This backup copy
+ * means consumeInviteCode() can still recover it from storage after that redirect, regardless
+ * of which sign-in path was actually taken.
+ */
+export function persistInviteCodeForAuthRedirect() {
+  const urlCode = readInviteCodeFromUrl();
+  if (!urlCode) return;
+  try {
+    localStorage.setItem(PENDING_JOIN_CODE_KEY, urlCode);
+  } catch {
+    // Storage unavailable — nothing more to do; the URL copy remains the primary path.
+  }
+}
+
 /** Forgets any stored invite code. */
 export function clearPendingInviteCode() {
   try {
