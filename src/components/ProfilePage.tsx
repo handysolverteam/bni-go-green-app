@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { UserProfileExtended, Organization, OrgMember } from '../types';
 import { GlassCard } from './GlassCard';
-import { User, ShieldCheck, Building2, Save, Check, Camera, Upload, Link } from 'lucide-react';
+import { User, ShieldCheck, Building2, Save, Check, Camera, Upload, Link, Trash2 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 import { OrgShareWidget } from './OrgShareWidget';
@@ -26,16 +27,27 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   onLeaveOrganization,
   onNavigateToChapter,
 }) => {
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [phone, setPhone] = useState(profile?.phone || '');
-  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80');
+  // No stock-photo fallback here: defaulting to a generic Unsplash headshot made "removed"
+  // indistinguishable from "never set" and gave Remove Photo nothing real to clear. Empty
+  // means genuinely unset; the render below falls back to the Google photo, then initials —
+  // same chain Sidebar.tsx already uses, so removing here matches what the rest of the app
+  // shows once there's no custom avatar_url in the database.
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || '');
   const [category, setCategory] = useState(profile?.business_category || '');
   const [bio, setBio] = useState(profile?.bio || '');
   const [showCustomUrlInput, setShowCustomUrlInput] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // What actually renders: custom avatar first, then the Google photo tied to this sign-in,
+  // then nothing (initials take over). Mirrors Sidebar.tsx's fallback chain exactly.
+  const resolvedAvatarUrl = avatarUrl || user?.photoURL || '';
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -70,7 +82,39 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     }
   };
 
+  /**
+   * Clears the custom avatar and saves immediately, matching handleFileUpload's own
+   * immediate-save behavior rather than waiting for the main form's Save button — a photo
+   * change (upload or remove) shouldn't silently revert if the user navigates away before
+   * touching the rest of the form.
+   */
+  const handleRemovePhoto = async () => {
+    if (!profile?.user_id) {
+      setAvatarUrl('');
+      return;
+    }
 
+    setIsRemovingPhoto(true);
+    const updated: UserProfileExtended = {
+      ...profile,
+      full_name: fullName.trim() || profile.full_name || 'Member',
+      phone: phone.trim() || profile.phone || '',
+      avatar_url: '',
+      business_category: category.trim() || profile.business_category || '',
+      bio: bio.trim() || profile.bio || '',
+      is_profile_completed: true,
+    };
+
+    const ok = await supabaseService.saveUserProfile(updated);
+    if (ok) {
+      setAvatarUrl('');
+      onProfileUpdated(updated);
+      showToast('Profile photo removed.', 'info');
+    } else {
+      showToast('Failed to remove photo. Check database connection.', 'error');
+    }
+    setIsRemovingPhoto(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,12 +161,18 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <div className="relative group">
-              <img
-                src={avatarUrl}
-                alt="Profile Avatar"
-                referrerPolicy="no-referrer"
-                className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500/50 shadow-lg"
-              />
+              {resolvedAvatarUrl ? (
+                <img
+                  src={resolvedAvatarUrl}
+                  alt="Profile Avatar"
+                  referrerPolicy="no-referrer"
+                  className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500/50 shadow-lg"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-slate-800 ring-2 ring-emerald-500/50 shadow-lg flex items-center justify-center text-emerald-400 font-black text-xl">
+                  {fullName ? fullName.charAt(0).toUpperCase() : 'U'}
+                </div>
+              )}
               <label className="absolute inset-0 rounded-2xl bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-all">
                 <Camera className="w-5 h-5 text-white" />
                 <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
@@ -169,6 +219,21 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             <Link className="w-4 h-4 text-teal-400" />
             <span>Image URL</span>
           </button>
+
+          {/* Only offered when there's an actual custom avatar_url to clear — if the only
+              thing showing is the Google-photo fallback, there's nothing here to remove;
+              that comes from the sign-in itself, not something this page set. */}
+          {avatarUrl && (
+            <button
+              type="button"
+              onClick={handleRemovePhoto}
+              disabled={isRemovingPhoto}
+              className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold flex items-center space-x-1.5 border border-rose-500/30 transition-all disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>{isRemovingPhoto ? 'Removing...' : 'Remove Photo'}</span>
+            </button>
+          )}
         </div>
 
         {showCustomUrlInput && (
