@@ -191,6 +191,10 @@ export const AppContent: React.FC = () => {
   // Set when a phone sign-in lands on a number that already belongs to another account.
   const [duplicateAccount, setDuplicateAccount] = useState<ExistingAccountMatch | null>(null);
 
+  // True only while the auto-join-from-invite-link network call is actually in flight, so the
+  // boot splash can say "Joining Chapter..." instead of the generic verifying message.
+  const [isJoiningViaInvite, setIsJoiningViaInvite] = useState(false);
+
   // Holds the teardown for the active members realtime channel. Without this, leaving an
   // org keeps the old subscription alive and it overwrites the roster with the old chapter's data.
   const unsubscribeMembersRef = React.useRef<(() => void) | null>(null);
@@ -284,6 +288,8 @@ export const AppContent: React.FC = () => {
           supabaseService.fetchUserProfile(user.uid, user.email),
         ]);
         if (cancelled) return;
+        // Clears any stale flag left behind by an invocation that got cancelled mid-join.
+        setIsJoiningViaInvite(false);
 
         // A referral link (?join=CODE) should take a new or org-less user straight to the
         // chapter dashboard, not park them on the manual create-or-join screen with the code
@@ -293,8 +299,10 @@ export const AppContent: React.FC = () => {
         if (!resolvedOrgRes) {
           const inviteCode = consumeInviteCode()?.replace(/\D/g, '');
           if (inviteCode && inviteCode.length === 6) {
+            setIsJoiningViaInvite(true);
             const joinResult: any = await supabaseService.joinOrganization(inviteCode, user.uid, user.email || undefined);
             if (cancelled) return;
+            setIsJoiningViaInvite(false);
             if (joinResult && 'org' in joinResult) {
               resolvedOrgRes = { org: joinResult.org, member: joinResult.member };
               showToast(`Joined ${joinResult.org.name} via invite link!`, 'success');
@@ -394,6 +402,9 @@ export const AppContent: React.FC = () => {
         // a cancelled invocation would flip isInitializing/isDataLoaded off regardless, which
         // is exactly what let a stale invocation win the render race in the first place.
         if (!cancelled) {
+          // Covers the case where joinOrganization() throws rather than resolving — the
+          // earlier reset after the await would otherwise be skipped by the jump to catch.
+          setIsJoiningViaInvite(false);
           hasVerifiedRef.current = true;
           setIsInitializing(false);
           setIsDataLoaded(true);
@@ -598,7 +609,11 @@ export const AppContent: React.FC = () => {
 
   // 3. User is Logged In (user != null) but Org Verification is in progress -> Verifying Splash
   if (isInitializing || !isDataLoaded) {
-    return <BootSplash title="Verifying Organization..." subtitle="Checking chapter membership & credentials" />;
+    return isJoiningViaInvite ? (
+      <BootSplash title="Joining Chapter..." subtitle="Connecting you to your invited chapter" />
+    ) : (
+      <BootSplash title="Verifying Organization..." subtitle="Checking chapter membership & credentials" />
+    );
   }
 
   // 3a. Signed in by phone, but this number already belongs to another account. Steer them
