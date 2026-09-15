@@ -89,13 +89,13 @@ export const ProfileOnboardingScreen: React.FC<ProfileOnboardingScreenProps> = (
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#060a12] text-slate-100 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#001D39] text-slate-100 relative overflow-hidden">
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
 
       <div className="w-full max-w-md space-y-6 z-10">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-xl shadow-emerald-500/20 mb-1">
-            <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
+            <div className="w-full h-full bg-[#001D39] rounded-[14px] flex items-center justify-center">
               <UserCheck className="w-7 h-7 text-emerald-400" />
             </div>
           </div>

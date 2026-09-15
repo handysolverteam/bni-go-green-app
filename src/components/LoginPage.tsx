@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { GlassCard } from './GlassCard';
-import { ShieldCheck, Lock, ArrowRight, Zap, CheckCircle2, Heart, Smartphone } from 'lucide-react';
+import { ArrowRight, Zap, Heart, Info } from 'lucide-react';
 import { PhoneloginScreen } from '../auth/components/PhoneloginScreen';
 
 export const LoginPage: React.FC = () => {
   const { loginWithGoogle, loading } = useAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Any ?join= invite code has already been captured and backed up by AppContent's top-level
+  // effect before this screen ever mounts, so there's nothing to do here.
 
   const handleGoogleLogin = async () => {
     setIsAuthenticating(true);
@@ -23,7 +26,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#060a12] text-slate-100">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#001D39] text-slate-100">
       {/* Subtle ambient light glows */}
       <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -32,7 +35,7 @@ export const LoginPage: React.FC = () => {
         {/* Minimal Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-400 p-[2px] shadow-xl shadow-emerald-500/20 mb-1">
-            <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
+            <div className="w-full h-full bg-[#001D39] rounded-[14px] flex items-center justify-center">
               <Zap className="w-7 h-7 text-emerald-400" />
             </div>
           </div>
@@ -94,13 +97,23 @@ export const LoginPage: React.FC = () => {
             {/* Divider */}
             <div className="relative flex items-center justify-center my-3">
               <div className="w-full border-t border-slate-800" />
-              <span className="absolute bg-[#0a0f1d] px-3 text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">
+              <span className="absolute bg-[#001D39] px-3 text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">
                 OR
               </span>
             </div>
 
             {/* Embedded Phone OTP Sign In Form */}
             <PhoneloginScreen embedded />
+
+            {/* Google and phone create separate accounts unless linked, so returning users
+                need the method they originally signed up with. */}
+            <div className="pt-1 flex items-start gap-1.5 text-left text-[11px] text-slate-400">
+              <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+              <span>
+                Already have an account? Sign in the same way you did before. You can add the
+                other method afterwards from <span className="font-bold text-slate-300">Profile &rarr; Sign-in Methods</span>.
+              </span>
+            </div>
           </div>
         </GlassCard>
 

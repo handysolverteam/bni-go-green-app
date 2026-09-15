@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GlassCard } from '../../components/GlassCard';
+import { useAuth } from '../../context/AuthContext';
+import { describeAuthError, RECAPTCHA_CONTAINER_ID } from '../../lib/firebase';
 import {
   Smartphone,
   ShieldCheck,
@@ -10,9 +12,7 @@ import {
   Heart,
   KeyRound,
   RefreshCw,
-  MessageSquare,
   AlertCircle,
-  Sparkles,
 } from 'lucide-react';
 
 interface PhoneloginScreenProps {
@@ -37,6 +37,8 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
   isLoading: externalLoading = false,
   embedded = false,
 }) => {
+  const { requestPhoneOtp, verifyPhoneOtp, cancelPhoneOtp } = useAuth();
+
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [selectedCountry, setSelectedCountry] = useState('+91');
   const [phone, setPhone] = useState('');
@@ -45,7 +47,6 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
-  const [otpChannel, setOtpChannel] = useState<'sms' | 'whatsapp'>('sms');
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -78,6 +79,8 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
 
   const cleanPhone = phone.replace(/\D/g, '');
   const fullPhoneNumber = `${selectedCountry} ${cleanPhone}`;
+  // Firebase requires strict E.164: country code + digits, no spaces or separators.
+  const e164Phone = `${selectedCountry}${cleanPhone}`;
 
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -90,13 +93,13 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
 
     setLoading(true);
     try {
-      // Simulate API call to send OTP
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await requestPhoneOtp(e164Phone);
       setStep('otp');
       setResendTimer(30);
       setOtp(['', '', '', '', '', '']);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to send OTP code. Please try again.');
+      console.error('Send OTP failed:', err);
+      setErrorMsg(describeAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -114,13 +117,14 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
 
     setLoading(true);
     try {
-      // Simulate verification API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      if (onSuccess) {
-        onSuccess(fullPhoneNumber);
-      }
+      await verifyPhoneOtp(enteredOtp);
+      // On success onAuthStateChanged swaps this screen out for the app.
+      onSuccess?.(fullPhoneNumber);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Invalid OTP code. Please check and try again.');
+      console.error('Verify OTP failed:', err);
+      setErrorMsg(describeAuthError(err));
+      setOtp(['', '', '', '', '', '']);
+      otpInputsRef.current[0]?.focus();
     } finally {
       setLoading(false);
     }
@@ -162,21 +166,30 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
     otpInputsRef.current[nextIndex]?.focus();
   };
 
-  const handleResendOtp = async (channel: 'sms' | 'whatsapp') => {
+  const handleResendOtp = async () => {
     if (!canResend || loading) return;
-    setOtpChannel(channel);
     setErrorMsg(null);
     setLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await requestPhoneOtp(e164Phone);
       setResendTimer(30);
       setCanResend(false);
       setOtp(['', '', '', '', '', '']);
+      otpInputsRef.current[0]?.focus();
     } catch (err: any) {
-      setErrorMsg('Failed to resend OTP. Please try again.');
+      console.error('Resend OTP failed:', err);
+      setErrorMsg(describeAuthError(err));
     } finally {
       setLoading(false);
     }
+  };
+
+  /** Returns to number entry, discarding the pending challenge. */
+  const handleEditNumber = () => {
+    cancelPhoneOtp();
+    setStep('phone');
+    setErrorMsg(null);
+    setOtp(['', '', '', '', '', '']);
   };
 
   const isFormLoading = loading || externalLoading;
@@ -209,10 +222,7 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
         {step === 'otp' && (
           <button
             type="button"
-            onClick={() => {
-              setStep('phone');
-              setErrorMsg(null);
-            }}
+            onClick={handleEditNumber}
             className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -267,7 +277,7 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
           <div className="flex items-center justify-between text-xs text-slate-400 pt-1 px-0.5">
             <span className="flex items-center gap-1 text-[11px]">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              Standard SMS / WhatsApp rate applies
+              Standard SMS rates apply
             </span>
           </div>
 
@@ -359,24 +369,15 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
             ) : (
               <div className="space-y-2">
                 <p className="text-xs text-slate-400">Didn't receive the code?</p>
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center justify-center">
                   <button
                     type="button"
-                    onClick={() => handleResendOtp('sms')}
+                    onClick={handleResendOtp}
                     disabled={isFormLoading}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors flex items-center gap-1.5 border border-slate-700"
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors flex items-center gap-1.5 border border-slate-700 disabled:opacity-50"
                   >
                     <RefreshCw className="w-3 h-3 text-emerald-400" />
                     <span>Resend SMS</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleResendOtp('whatsapp')}
-                    disabled={isFormLoading}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-semibold text-emerald-300 transition-colors flex items-center gap-1.5 border border-emerald-500/30"
-                  >
-                    <MessageSquare className="w-3 h-3 text-emerald-400" />
-                    <span>WhatsApp OTP</span>
                   </button>
                 </div>
               </div>
@@ -384,6 +385,10 @@ export const PhoneloginScreen: React.FC<PhoneloginScreenProps> = ({
           </div>
         </form>
       )}
+
+      {/* Invisible reCAPTCHA mounts here. Firebase needs this element present in the DOM
+          before signInWithPhoneNumber runs, so it is rendered on both steps. */}
+      <div id={RECAPTCHA_CONTAINER_ID} />
 
       {/* Footer Security Note */}
       <div className="pt-4 border-t border-white/5 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">

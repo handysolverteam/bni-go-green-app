@@ -64,12 +64,12 @@
   }
 
   body {
-    background-color: #080d19;
+    background-color: #001D39;
     color: #f1f5f9;
-    background-image: 
+    background-image:
       radial-gradient(at 0% 0%, rgba(34, 197, 94, 0.12) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
-      radial-gradient(at 50% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%);
+      radial-gradient(at 100% 0%, rgba(78, 142, 162, 0.14) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(123, 189, 232, 0.08) 0px, transparent 50%);
     background-attachment: fixed;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
@@ -113,8 +113,8 @@
 
   /* Custom Stepper Button theme overrides */
   .stepper-btn {
-    background-color: rgba(30, 41, 59, 0.8);
-    color: #cbd5e1;
+    background-color: rgba(10, 65, 116, 0.8);
+    color: #7BBDE8;
   }
   .stepper-btn:hover {
     background-color: rgba(34, 197, 94, 0.25);
@@ -147,7 +147,7 @@
 
   /* Scroll To Top Button Theme Adaptation */
   .btn-scroll-top {
-    background-color: rgba(15, 23, 42, 0.95);
+    background-color: rgba(5, 47, 87, 0.95);
     color: #34d399;
     border: 1px solid rgba(52, 211, 153, 0.4);
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(52, 211, 153, 0.2);
@@ -167,8 +167,8 @@
 
   /* Preview Box Theme Adaptation */
   .preview-box {
-    background-color: rgba(2, 6, 23, 0.7);
-    color: #e2e8f0;
+    background-color: rgba(0, 29, 57, 0.7);
+    color: #9CCBE9;
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
@@ -193,12 +193,14 @@
     color: #64748b !important;
   }
 
-  /* Background color overrides for light mode containers */
-  body.light-mode [class*="bg-[#060a12]"] {
-    background-color: transparent !important;
-  }
-
-  body.light-mode [class*="bg-[#0a0f1d]"] {
+  /* Background color overrides for light mode containers.
+     Was two separate selectors (#060a12 for outer page wrappers -> transparent, #0a0f1d for
+     smaller nested elements like logo badges and divider labels -> white+dark-text) — merged
+     to #001D39 when the navy palette redesign unified both dark literals into one class name.
+     Applying white+dark-text uniformly reads cleanly for both roles: an opaque white full-page
+     background in light mode looks as good as transparent (body's own light background is a
+     near-white f1f5f9 anyway), and it's correct for every smaller nested instance too. */
+  body.light-mode [class*="bg-[#001D39]"] {
     background-color: #ffffff !important;
     color: #0f172a !important;
   }
@@ -365,7 +367,7 @@
 }
 
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(5, 47, 87, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -377,14 +379,14 @@
 }
 
 .glass-panel-hover:hover {
-  background: rgba(30, 41, 59, 0.85);
+  background: rgba(10, 65, 116, 0.85);
   border-color: rgba(34, 197, 94, 0.3);
   transform: translateY(-2px);
   box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45), 0 0 20px rgba(34, 197, 94, 0.15);
 }
 
 .glass-input {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(5, 47, 87, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #ffffff;
   backdrop-filter: blur(8px);
@@ -404,7 +406,7 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(5, 47, 87, 0.5);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -454,9 +456,9 @@
 
 /* AI Chat Theme Adaptation Rules */
 .ai-chat-ai-bubble {
-  background-color: rgba(15, 23, 42, 0.95);
+  background-color: rgba(5, 47, 87, 0.95);
   border: 1px solid rgba(34, 197, 94, 0.3);
-  color: #f8fafc;
+  color: #DBEAF3;
 }
 
 body.light-mode .ai-chat-ai-bubble {
@@ -481,9 +483,9 @@ body.light-mode .ai-chat-user-bubble {
 }
 
 .ai-chat-option-btn {
-  background-color: rgba(30, 41, 59, 0.9);
+  background-color: rgba(10, 65, 116, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f1f5f9;
+  color: #BDD8E9;
 }
 
 .ai-chat-option-btn:hover {
@@ -505,9 +507,9 @@ body.light-mode .ai-chat-option-btn:hover {
 }
 
 .ai-chat-action-btn {
-  background-color: rgba(30, 41, 59, 0.8);
+  background-color: rgba(10, 65, 116, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #cbd5e1;
+  color: #7BBDE8;
 }
 
 body.light-mode .ai-chat-action-btn {
@@ -518,7 +520,7 @@ body.light-mode .ai-chat-action-btn {
 
 /* Chapter AI Sticky Navbar */
 .ai-chat-navbar {
-  background-color: rgba(2, 6, 23, 0.97);
+  background-color: rgba(0, 29, 57, 0.97);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -542,7 +544,7 @@ body.light-mode .ai-chat-navbar .ai-chat-nav-btn-secondary {
 
 /* Chapter AI Bottom Input Bar */
 .ai-chat-input-bar {
-  background-color: rgba(2, 6, 23, 0.97);
+  background-color: rgba(0, 29, 57, 0.97);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -556,7 +558,7 @@ body.light-mode .ai-chat-input-bar {
 
 /* Input field wrapper inside the bar */
 .ai-chat-input-wrap {
-  background-color: rgba(15, 23, 42, 0.9);
+  background-color: rgba(5, 47, 87, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -568,7 +570,7 @@ body.light-mode .ai-chat-input-wrap {
 
 /* Input text and placeholder */
 .ai-chat-input-field {
-  color: #f8fafc;
+  color: #DBEAF3;
   background: transparent;
 }
 

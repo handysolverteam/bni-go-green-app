@@ -10,6 +10,7 @@ import {
   UserCheck, ChevronRight, ChevronDown, User
 } from 'lucide-react';
 import { generateSampleExcelBuffer } from '../lib/excelParser';
+import { supabaseService } from '../services/supabaseService';
 import { useToast } from '../context/ToastContext';
 import { formatDisplayDate, formatDisplayDateTime, buildMemberTemplateData, CAT_LABELS } from '../lib/outreachUtils';
 import { levelUpPlan, trafficLight } from '../lib/scoringEngine';
@@ -313,11 +314,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  // Download Excel Report file
-  const handleDownloadReportFile = (log: ImportLog) => {
-    if (log.file_data) {
+  // Download Excel Report file.
+  // The base64 upload is no longer carried in the roster payload, so it is fetched here,
+  // only for the report actually being downloaded.
+  const handleDownloadReportFile = async (log: ImportLog) => {
+    const fileData = log.file_data || (log.id ? await supabaseService.fetchImportLogFileData(log.id) : null);
+
+    if (fileData) {
       try {
-        const binary = atob(log.file_data);
+        const binary = atob(fileData);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) {
           bytes[i] = binary.charCodeAt(i);
@@ -871,7 +876,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     >
                       <div className="flex items-center space-x-2.5 min-w-0">
                         <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shrink-0">
-                          <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center font-black text-emerald-400 text-xs">
+                          <div className="w-full h-full bg-[#001D39] rounded-[10px] flex items-center justify-center font-black text-emerald-400 text-xs">
                             {member.Name.charAt(0)}
                           </div>
                         </div>

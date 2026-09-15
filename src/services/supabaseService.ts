@@ -560,6 +560,57 @@ export const supabaseService = {
   },
 
   // --- USER PROFILE METHODS ---
+  /**
+   * Looks for an EXISTING profile that already claims this phone number, under a different
+   * auth account. Used to catch the duplicate-account case: someone who signed up with
+   * Google and later signs in by phone gets a fresh Firebase uid, and would otherwise be
+   * dropped into onboarding as a stranger to their own chapter.
+   *
+   * Matches on the last 10 digits so stored formats ("+91 98765 43210", "919876543210")
+   * all compare equal. Returns null if nothing matches, or if the lookup is not permitted
+   * — under per-user RLS a brand new account can read nobody else's profile, so this
+   * degrades to "no hint" rather than failing the sign-in.
+   */
+  async findProfileByPhone(phone: string, excludeUserId: string): Promise<{
+    user_id: string;
+    full_name: string;
+    email?: string | null;
+  } | null> {
+    try {
+      const last10 = (phone || '').replace(/\D/g, '').slice(-10);
+      if (last10.length < 10) return null;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, full_name, phone')
+        .ilike('phone', `%${last10}%`)
+        .limit(5);
+
+      if (error || !data?.length) return null;
+
+      const match = data.find((row: any) => row.user_id && row.user_id !== excludeUserId);
+      if (!match) return null;
+
+      // profiles has no email column, so the address (for "sign in with Google as ...")
+      // comes from the membership row.
+      const { data: membership } = await supabase
+        .from('org_members')
+        .select('user_email')
+        .eq('user_id', match.user_id)
+        .limit(1)
+        .maybeSingle();
+
+      return {
+        user_id: match.user_id,
+        full_name: match.full_name || 'your account',
+        email: membership?.user_email || null,
+      };
+    } catch (e) {
+      console.error('findProfileByPhone exception:', e);
+      return null;
+    }
+  },
+
   async fetchUserProfile(userId: string, userEmail?: string | null): Promise<UserProfileExtended | null> {
     try {
       let { data } = await supabase
@@ -1303,11 +1354,19 @@ export const supabaseService = {
     }
   },
 
+  /**
+   * Report batch metadata for the dashboard cards.
+   *
+   * Deliberately excludes `file_data` — the original upload stored as base64. Selecting it
+   * here made every app load download every Excel ever imported: measured at 241 KB / 2.7s
+   * against 3.3 KB / 0.6s without, growing with each new report, purely to render counts
+   * nobody had asked to download. It is fetched on demand by fetchImportLogFileData().
+   */
   async fetchImportLogs(orgId: string): Promise<any[]> {
     try {
       const { data, error } = await supabase
         .from('import_logs')
-        .select('*')
+        .select('id, org_id, user_id, file_name, batch_name, total_records, green_count, amber_count, red_count, grey_count, avg_score, created_at')
         .eq('org_id', orgId)
         .order('created_at', { ascending: false });
 
@@ -1324,11 +1383,27 @@ export const supabaseService = {
         red_count: Number(row.red_count || 0),
         grey_count: Number(row.grey_count || 0),
         avg_score: Number(row.avg_score || 0),
-        file_data: row.file_data || '',
         created_at: row.created_at || row.imported_at,
       }));
     } catch (e) {
       return [];
+    }
+  },
+
+  /** Fetches one report's stored Excel (base64) only when the user asks to download it. */
+  async fetchImportLogFileData(logId: string): Promise<string | null> {
+    try {
+      const { data, error } = await supabase
+        .from('import_logs')
+        .select('file_data')
+        .eq('id', logId)
+        .maybeSingle();
+
+      if (error || !data?.file_data) return null;
+      return data.file_data as string;
+    } catch (e) {
+      console.error('fetchImportLogFileData exception:', e);
+      return null;
     }
   },
 

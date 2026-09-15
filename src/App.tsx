@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useToast } from './context/ToastContext';
 import { LoginPage } from './components/LoginPage';
@@ -14,9 +14,11 @@ import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
 import { TrendsTab } from './components/TrendsTab';
 import { ChatTab } from './components/ChatTab';
+import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
+import { captureInviteCode, clearPendingInviteCode, clearInviteCodeFromUrl } from './lib/inviteCode';
 
 const parseHash = () => {
   const raw = decodeURIComponent(window.location.hash.replace('#', ''));
@@ -42,12 +44,12 @@ const BootSplash: React.FC<{ title: string; subtitle: string }> = ({ title, subt
   const isLight = localStorage.getItem('bni_theme_mode') === 'light' || document.body.classList.contains('light-mode');
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4 transition-colors ${
-      isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#080d19] text-white'
+      isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#001D39] text-white'
     }`}>
       <div className="relative">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] animate-pulse shadow-lg shadow-emerald-500/20">
           <div className={`w-full h-full rounded-[14px] flex items-center justify-center ${
-            isLight ? 'bg-white' : 'bg-[#080d19]'
+            isLight ? 'bg-white' : 'bg-[#001D39]'
           }`}>
             <img src="/icons/icon.svg" alt="Handychapter Logo" className="w-10 h-10 rounded-xl object-cover" />
           </div>
@@ -137,7 +139,15 @@ export const AppContent: React.FC = () => {
     }
   });
 
-  const [isInitializing, setIsInitializing] = useState(true);
+  // Returning users already hold org, profile, members and reports in localStorage (the
+  // useState initialisers above read them). Blocking on the network anyway meant staring at
+  // "Verifying Organization..." on every single load while perfectly good data sat unused.
+  // With a cached session, render immediately and revalidate in the background.
+  const hasCachedSession = React.useRef(
+    Boolean(localStorage.getItem('bni_cached_org') && localStorage.getItem('bni_cached_profile'))
+  ).current;
+
+  const [isInitializing, setIsInitializing] = useState(!hasCachedSession);
 
   // Members, Import Logs & Selected Member (Hydrated instantly from SWR localStorage)
   const [members, setMembersState] = useState<Member[]>(() => {
@@ -176,7 +186,22 @@ export const AppContent: React.FC = () => {
 
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(hasCachedSession);
+
+  // Set when a phone sign-in lands on a number that already belongs to another account.
+  const [duplicateAccount, setDuplicateAccount] = useState<ExistingAccountMatch | null>(null);
+
+  // True only while the auto-join-from-invite-link network call is actually in flight, so the
+  // boot splash can say "Joining Chapter..." instead of the generic verifying message.
+  const [isJoiningViaInvite, setIsJoiningViaInvite] = useState(false);
+
+  // True once the auto-join attempt has concluded (success OR failure) — or immediately, for
+  // anyone with no invite code, since there's nothing to wait on. isInitializing/isDataLoaded
+  // settle as soon as initUserData() resolves, which is BEFORE the auto-join effect even gets
+  // a chance to run (effects fire after the commit they're declared in has painted) — without
+  // this, the render gate below would briefly let OrgOnboardingScreen flash on screen in that
+  // gap, exactly the bug this whole redesign set out to fix.
+  const [inviteJoinSettled, setInviteJoinSettled] = useState(false);
 
   // Holds the teardown for the active members realtime channel. Without this, leaving an
   // org keeps the old subscription alive and it overwrites the roster with the old chapter's data.
@@ -191,6 +216,55 @@ export const AppContent: React.FC = () => {
   };
 
   React.useEffect(() => () => unsubscribeMembersRef.current?.(), []);
+
+  /**
+   * Invite-code capture — the single source of truth for the rest of this component.
+   *
+   * Three earlier bugs (the code persisting after leaving/logout, a React.StrictMode race
+   * losing the auto-join, and a third still-unexplained failure) all traced back to the same
+   * design flaw: the code lived in mutable global state (the URL + localStorage) that several
+   * independent effects each read-and-cleared destructively, so whichever one happened to run
+   * first "won" and the others silently found nothing. That's fundamentally racy in React,
+   * doubly so under StrictMode's deliberate double-invoking of effects.
+   *
+   * Fix: capture it ONCE, here, into a ref — stable for the rest of this component instance's
+   * life. Every consumer below reads this SAME value instead of re-reading the mutable source.
+   * There is nothing left to race over.
+   *
+   * useLayoutEffect (not useEffect) specifically: layout effects across the whole tree run
+   * before ANY passive effect fires, so this is guaranteed to complete before the auto-join
+   * effect, the "already in a chapter" effect, and initUserData's effect below — all regular
+   * useEffects in this same component. The `hasCapturedInviteRef` guard makes the capture
+   * itself idempotent, so StrictMode's dev-only double-invoke of this effect is harmless.
+   */
+  const inviteCodeRef = useRef<string | null>(null);
+  const hasCapturedInviteRef = useRef(false);
+  useLayoutEffect(() => {
+    if (hasCapturedInviteRef.current) return;
+    hasCapturedInviteRef.current = true;
+    inviteCodeRef.current = captureInviteCode();
+  }, []);
+
+  // Handles an invite link visited by someone who ALREADY belongs to a chapter. The auto-join
+  // effect below only ever attempts a join when org is null, so without this, a code visited
+  // by an existing member would just sit captured-but-unused with nothing telling the user why
+  // clicking their invite link appeared to do nothing.
+  const hasHandledExistingOrgInviteRef = useRef(false);
+  useEffect(() => {
+    if (isInitializing || !isDataLoaded || !user || !org) return;
+    const code = inviteCodeRef.current;
+    if (!code || hasHandledExistingOrgInviteRef.current) return;
+    hasHandledExistingOrgInviteRef.current = true;
+
+    if (code === org.code) {
+      showToast(`You're already a member of ${org.name}.`, 'info');
+    } else {
+      showToast(
+        `You're already in ${org.name}. Leave it from Profile → Danger Zone before joining another chapter.`,
+        'info'
+      );
+    }
+  }, [isInitializing, isDataLoaded, user, org]);
 
   /** Loads scoring config, roster and report logs for an org, and (re)opens its realtime channel. */
   const hydrateOrgData = async (targetOrg: Organization, userId: string) => {
@@ -226,10 +300,22 @@ export const AppContent: React.FC = () => {
       return;
     }
 
-    if (!hasVerifiedRef.current) {
+    // Only block the UI when there is nothing cached to show. A cached session revalidates
+    // silently underneath the already-rendered app.
+    if (!hasVerifiedRef.current && !hasCachedSession) {
       setIsInitializing(true);
       setIsDataLoaded(false);
     }
+
+    // Guards against a stale invocation applying its results after a newer one has already
+    // started. This effect previously had no cleanup, so React.StrictMode's dev-only
+    // double-invoke ran initUserData() twice concurrently: the first call would consume the
+    // invite code and start a real (slow) join API request, while the second found the code
+    // already gone, skipped the join entirely, and committed org=null faster than the first
+    // call's join could finish — landing the user on the manual Create/Join screen despite
+    // the join succeeding moments later in the background. Every await below re-checks this
+    // before touching state, so only the LAST invocation's outcome is ever applied.
+    let cancelled = false;
 
     const initUserData = async () => {
       try {
@@ -238,6 +324,7 @@ export const AppContent: React.FC = () => {
           supabaseService.fetchUserOrganization(user.uid, user.email),
           supabaseService.fetchUserProfile(user.uid, user.email),
         ]);
+        if (cancelled) return;
 
         let fetchedMembers: Member[] = [];
         let fetchedLogs: ImportLog[] = [];
@@ -247,6 +334,7 @@ export const AppContent: React.FC = () => {
           localStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
 
           const hydrated = await hydrateOrgData(orgRes.org, user.uid);
+          if (cancelled) return;
           fetchedMembers = hydrated.members;
           fetchedLogs = hydrated.logs;
         }
@@ -269,7 +357,8 @@ export const AppContent: React.FC = () => {
           setUserProfile(finalProfile);
         } else if (user?.displayName || user?.email) {
           const cachedStr = localStorage.getItem('bni_cached_profile');
-          let existingPhone = (user as any).phoneNumber || '';
+          // Phone sign-in already verified this number, so pre-fill it for onboarding.
+          let existingPhone = user.phoneNumber || '';
           if (cachedStr) {
             try {
               const cached = JSON.parse(cachedStr);
@@ -291,8 +380,6 @@ export const AppContent: React.FC = () => {
         }
 
         if (orgRes) {
-          localStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
-          localStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
           setOrg(orgRes.org);
           setOrgMember(orgRes.member);
         } else {
@@ -300,21 +387,93 @@ export const AppContent: React.FC = () => {
           localStorage.removeItem('bni_cached_org_member');
           setOrg(null);
           setOrgMember(null);
+
+          // A phone sign-in with no chapter is either a genuinely new user or someone who
+          // already has an account under Google — Firebase issues a different uid per
+          // method, so the second one arrives looking like a stranger. Check before letting
+          // them build a parallel chapter under the duplicate.
+          if (user.provider === 'phone' && user.phoneNumber && !profRes) {
+            const match = await supabaseService.findProfileByPhone(user.phoneNumber, user.uid);
+            if (cancelled) return;
+            if (match) setDuplicateAccount({ full_name: match.full_name, email: match.email });
+          }
         }
 
+        if (cancelled) return;
         setMembers(fetchedMembers);
         setImportLogs(fetchedLogs);
       } catch (err) {
+        if (cancelled) return;
         console.error('Initialization error:', err);
       } finally {
-        hasVerifiedRef.current = true;
-        setIsInitializing(false);
-        setIsDataLoaded(true);
+        // A `return` inside the try block above still runs this finally — without this guard,
+        // a cancelled invocation would flip isInitializing/isDataLoaded off regardless, which
+        // is exactly what let a stale invocation win the render race in the first place.
+        if (!cancelled) {
+          hasVerifiedRef.current = true;
+          setIsInitializing(false);
+          setIsDataLoaded(true);
+        }
       }
     };
 
     initUserData();
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
+
+  /**
+   * Auto-joins the chapter from a captured invite link once we know the user has no chapter
+   * of their own — a referral link should take a new or org-less user straight to the
+   * dashboard, not park them on the manual create-or-join screen with the code merely
+   * pre-filled. Separated from initUserData's effect (rather than woven into it, as a first
+   * attempt at this did): that entanglement was what made the earlier StrictMode race so easy
+   * to introduce. This effect owns exactly one concern — attempt the join at most once, when
+   * the moment is right — and reacts naturally to org settling to null once initUserData
+   * above has finished, rather than trying to manually sequence everything inline.
+   *
+   * hasAttemptedJoinRef makes a second invocation (StrictMode's double-invoke, or any other
+   * duplicate effect run) a true no-op rather than merely a "loses the race" risk — after a
+   * successful join, org becomes non-null, this effect's own guard (`|| org`) then skips any
+   * further run anyway, but the ref protects the network call itself regardless of ordering.
+   */
+  const hasAttemptedJoinRef = useRef(false);
+  useEffect(() => {
+    if (isInitializing || !isDataLoaded || !user || org) return;
+    const code = inviteCodeRef.current;
+    if (!code || hasAttemptedJoinRef.current) return;
+    hasAttemptedJoinRef.current = true;
+
+    (async () => {
+      setIsJoiningViaInvite(true);
+      try {
+        const joinResult: any = await supabaseService.joinOrganization(code, user.uid, user.email || undefined);
+        if (joinResult && 'org' in joinResult) {
+          const hydrated = await hydrateOrgData(joinResult.org, user.uid);
+          localStorage.setItem('bni_cached_org', JSON.stringify(joinResult.org));
+          localStorage.setItem('bni_cached_org_member', JSON.stringify(joinResult.member));
+          setOrg(joinResult.org);
+          setOrgMember(joinResult.member);
+          setMembers(hydrated.members);
+          setImportLogs(hydrated.logs);
+          showToast(`Joined ${joinResult.org.name} via invite link!`, 'success');
+        } else {
+          // Invalid/expired code: leave org null so OrgOnboardingScreen mounts normally, with
+          // this same code passed through as its prefill (see the render below) so the user
+          // sees what was tried and can retry or correct it, rather than a blank form.
+          showToast(joinResult?.error || 'That invite link is no longer valid.', 'error');
+        }
+      } catch (err) {
+        console.error('Auto-join via invite link failed:', err);
+        showToast('Something went wrong joining that chapter. Please try again manually.', 'error');
+      } finally {
+        setIsJoiningViaInvite(false);
+        setInviteJoinSettled(true);
+        clearPendingInviteCode();
+      }
+    })();
+  }, [isInitializing, isDataLoaded, user, org]);
 
   // Handle Org Created / Joined
   const handleOrgJoined = async (data: { org: Organization; member: OrgMember }) => {
@@ -355,6 +514,11 @@ export const AppContent: React.FC = () => {
 
     ['bni_cached_org', 'bni_cached_org_member', 'bni_cached_members', 'bni_cached_import_logs', 'bni_active_report']
       .forEach(key => { try { localStorage.removeItem(key); } catch {} });
+
+    // Drop any invite code still in storage or the address bar, so the chapter they just
+    // left is not handed straight back to them on the onboarding screen.
+    clearPendingInviteCode();
+    clearInviteCodeFromUrl();
 
     setMembers([]);
     setImportLogs([]);
@@ -501,13 +665,37 @@ export const AppContent: React.FC = () => {
   }
 
   // 3. User is Logged In (user != null) but Org Verification is in progress -> Verifying Splash
-  if (isInitializing || !isDataLoaded) {
-    return <BootSplash title="Verifying Organization..." subtitle="Checking chapter membership & credentials" />;
+  //
+  // inviteJoinPending extends this gate past the moment initUserData() alone would have
+  // released it: when there's a captured invite code and no org yet, the auto-join effect
+  // still needs to run (effects fire after this render has already painted) — without waiting
+  // for it too, OrgOnboardingScreen would flash on screen for that gap before the join
+  // resolves. Anyone with no invite code is unaffected, since this is false for them from the
+  // very first render.
+  const inviteJoinPending = Boolean(inviteCodeRef.current) && !org && !inviteJoinSettled;
+  if (isInitializing || !isDataLoaded || inviteJoinPending) {
+    return isJoiningViaInvite || inviteJoinPending ? (
+      <BootSplash title="Joining Chapter..." subtitle="Connecting you to your invited chapter" />
+    ) : (
+      <BootSplash title="Verifying Organization..." subtitle="Checking chapter membership & credentials" />
+    );
   }
 
-  // 3. Authenticated & Verified, but NO Organization -> Org Onboarding Screen
+  // 3a. Signed in by phone, but this number already belongs to another account. Steer them
+  //     back before they build a parallel chapter under the duplicate uid.
+  if (duplicateAccount) {
+    return (
+      <ExistingAccountNotice
+        match={duplicateAccount}
+        phoneNumber={user.phoneNumber}
+        onContinueAnyway={() => setDuplicateAccount(null)}
+      />
+    );
+  }
+
+  // 3b. Authenticated & Verified, but NO Organization -> Org Onboarding Screen
   if (!org) {
-    return <OrgOnboardingScreen onOrgJoined={handleOrgJoined} />;
+    return <OrgOnboardingScreen onOrgJoined={handleOrgJoined} prefillCode={inviteCodeRef.current} />;
   }
 
   // 4. Authenticated & Verified, Has Org, but Profile NOT Completed -> Profile Onboarding Screen

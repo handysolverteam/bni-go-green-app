@@ -433,7 +433,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
           <div className="flex items-center space-x-3 sm:space-x-4">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
-              <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
+              <div className="w-full h-full bg-[#001D39] rounded-[14px] flex items-center justify-center">
                 <Building2 className="w-6 h-6 text-emerald-400" />
               </div>
             </div>

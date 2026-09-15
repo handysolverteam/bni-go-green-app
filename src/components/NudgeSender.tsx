@@ -604,7 +604,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                         <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                           {/* Avatar directly before Name */}
                           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shrink-0 shadow-md shadow-emerald-500/20">
-                            <div className="w-full h-full bg-[#0a0f1d] rounded-full flex items-center justify-center font-black text-emerald-400 text-xs sm:text-xs">
+                            <div className="w-full h-full bg-[#001D39] rounded-full flex items-center justify-center font-black text-emerald-400 text-xs sm:text-xs">
                               {member.Name.charAt(0)}
                             </div>
                           </div>

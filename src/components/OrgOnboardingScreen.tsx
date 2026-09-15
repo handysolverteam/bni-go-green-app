@@ -8,37 +8,31 @@ import { useToast } from '../context/ToastContext';
 import { Organization, OrgMember } from '../types';
 
 interface OrgOnboardingScreenProps {
-  onOrgJoined: (data: { org: Organization; member: OrgMember }) => void;
+  /** May be async: the spinner is held until the chapter's data has actually loaded. */
+  onOrgJoined: (data: { org: Organization; member: OrgMember }) => void | Promise<void>;
+  /**
+   * An invite code AppContent already attempted to auto-join with, present here only because
+   * that attempt failed (invalid/expired code) — on success this screen never mounts at all,
+   * since `org` becomes non-null. Pre-fills the Join tab so the user can see what was tried
+   * and retry or correct it, rather than landing on a blank form with no explanation.
+   */
+  prefillCode?: string | null;
 }
 
-export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJoined }) => {
+export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJoined, prefillCode }) => {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
-  const [mode, setMode] = useState<'create' | 'join'>('create');
+  const [mode, setMode] = useState<'create' | 'join'>(prefillCode ? 'join' : 'create');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Form states
   const [orgName, setOrgName] = useState('');
   const [chapterName, setChapterName] = useState('');
   const [city, setCity] = useState('');
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(prefillCode || '');
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    const urlCode = new URLSearchParams(window.location.search).get('join') ||
-                    new URLSearchParams(window.location.search).get('join_code') ||
-                    new URLSearchParams(window.location.search).get('code');
-    const pendingCode = urlCode || localStorage.getItem('pending_join_code');
-
-    if (pendingCode && pendingCode.trim()) {
-      const cleanCode = pendingCode.trim().toUpperCase();
-      setMode('join');
-      setCode(cleanCode);
-      showToast(`Auto-filled invite code "${cleanCode}"! Click Join to connect.`, 'info');
-    }
-  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +56,9 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
 
       if (res) {
         showToast(`Organization "${res.org.name}" created! Code: ${res.org.code}`, 'success');
-        onOrgJoined(res);
+        // Awaited so the button keeps spinning until the chapter's data is loaded, rather
+        // than dropping the user onto an empty dashboard that fills in a moment later.
+        await onOrgJoined(res);
       } else {
         const msg = 'Failed to create organization in database.';
         setErrorMsg(msg);
@@ -81,7 +77,9 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     e.preventDefault();
     if (!user?.uid) return;
 
-    if (!code.trim() || code.trim().length < 6) {
+    // Codes are always 6 digits; strip anything a paste may have carried in.
+    const cleanCode = code.replace(/\D/g, '');
+    if (cleanCode.length !== 6) {
       showToast('Please enter a valid 6-digit chapter code', 'error');
       return;
     }
@@ -90,14 +88,14 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
     setErrorMsg(null);
     try {
       const res: any = await supabaseService.joinOrganization(
-        code.trim(),
+        cleanCode,
         user.uid,
         user.email || undefined
       );
 
       if (res && 'org' in res) {
         showToast(`Joined organization "${res.org.name}"!`, 'success');
-        onOrgJoined({ org: res.org, member: res.member });
+        await onOrgJoined({ org: res.org, member: res.member });
       } else {
         const msg = res?.error || 'Invalid 6-digit organization code.';
         setErrorMsg(msg);
@@ -113,13 +111,13 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#060a12] text-slate-100 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#001D39] text-slate-100 relative overflow-hidden">
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
 
       <div className="w-full max-w-md space-y-6 z-10">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-xl shadow-emerald-500/20 mb-1">
-            <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
+            <div className="w-full h-full bg-[#001D39] rounded-[14px] flex items-center justify-center">
               <Building2 className="w-7 h-7 text-emerald-400" />
             </div>
           </div>
@@ -217,7 +215,8 @@ export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJ
                   maxLength={6}
                   placeholder="e.g. 789210"
                   value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  inputMode="numeric"
                   className="w-full px-3.5 py-3 rounded-xl glass-input text-center text-lg font-black tracking-widest text-emerald-400"
                 />
                 <p className="text-[11px] text-slate-400 text-center">Ask your Chapter Owner or Admin for the 6-digit code</p>
