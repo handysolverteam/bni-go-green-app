@@ -6,45 +6,33 @@ import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Organization, OrgMember } from '../types';
-import { consumeInviteCode } from '../lib/inviteCode';
 
 interface OrgOnboardingScreenProps {
   /** May be async: the spinner is held until the chapter's data has actually loaded. */
   onOrgJoined: (data: { org: Organization; member: OrgMember }) => void | Promise<void>;
+  /**
+   * An invite code AppContent already attempted to auto-join with, present here only because
+   * that attempt failed (invalid/expired code) — on success this screen never mounts at all,
+   * since `org` becomes non-null. Pre-fills the Join tab so the user can see what was tried
+   * and retry or correct it, rather than landing on a blank form with no explanation.
+   */
+  prefillCode?: string | null;
 }
 
-export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJoined }) => {
+export const OrgOnboardingScreen: React.FC<OrgOnboardingScreenProps> = ({ onOrgJoined, prefillCode }) => {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
-  const [mode, setMode] = useState<'create' | 'join'>('create');
+  const [mode, setMode] = useState<'create' | 'join'>(prefillCode ? 'join' : 'create');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Form states
   const [orgName, setOrgName] = useState('');
   const [chapterName, setChapterName] = useState('');
   const [city, setCity] = useState('');
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(prefillCode || '');
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    // Reading consumes the code, clearing it from both the URL and storage.
-    //
-    // An invite code is a one-shot hint from a shared link, not durable state. Nothing
-    // used to clear it: the localStorage key was read but never removed, and the query
-    // string survived every refresh because the app only rewrites the hash. So after
-    // leaving a chapter the old code kept reappearing in the Join field, and it persisted
-    // through sign-out to whichever account signed in next on the same browser.
-    const pendingCode = consumeInviteCode();
-
-    const inviteCode = pendingCode?.replace(/\D/g, '') || '';
-    if (inviteCode.length === 6) {
-      setMode('join');
-      setCode(inviteCode);
-      showToast(`Auto-filled invite code "${inviteCode}"! Click Join to connect.`, 'info');
-    }
-  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

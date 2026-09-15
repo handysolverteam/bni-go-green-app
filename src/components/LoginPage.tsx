@@ -3,19 +3,14 @@ import { useAuth } from '../context/AuthContext';
 import { GlassCard } from './GlassCard';
 import { ArrowRight, Zap, Heart, Info } from 'lucide-react';
 import { PhoneloginScreen } from '../auth/components/PhoneloginScreen';
-import { persistInviteCodeForAuthRedirect } from '../lib/inviteCode';
 
 export const LoginPage: React.FC = () => {
   const { loginWithGoogle, loading } = useAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Backs up any ?join= code to storage before the user signs in. Google sign-in's popup
-  // preserves the URL on its own, but the redirect fallback (used when the popup is blocked)
-  // drops the query string entirely — this keeps the code recoverable either way.
-  React.useEffect(() => {
-    persistInviteCodeForAuthRedirect();
-  }, []);
+  // Any ?join= invite code has already been captured and backed up by AppContent's top-level
+  // effect before this screen ever mounts, so there's nothing to do here.
 
   const handleGoogleLogin = async () => {
     setIsAuthenticating(true);
