@@ -274,14 +274,36 @@ export const AppContent: React.FC = () => {
           supabaseService.fetchUserProfile(user.uid, user.email),
         ]);
 
+        // A referral link (?join=CODE) should take a new or org-less user straight to the
+        // chapter dashboard, not park them on the manual create-or-join screen with the code
+        // merely pre-filled — that screen only ever mounts once `org` is confirmed null, so
+        // this has to happen here, before that decision is made.
+        let resolvedOrgRes = orgRes;
+        if (!resolvedOrgRes) {
+          const inviteCode = consumeInviteCode()?.replace(/\D/g, '');
+          if (inviteCode && inviteCode.length === 6) {
+            const joinResult: any = await supabaseService.joinOrganization(inviteCode, user.uid, user.email || undefined);
+            if (joinResult && 'org' in joinResult) {
+              resolvedOrgRes = { org: joinResult.org, member: joinResult.member };
+              showToast(`Joined ${joinResult.org.name} via invite link!`, 'success');
+            } else {
+              // Invalid/expired code: fall through to the normal org-less flow so the user can
+              // create or join manually. The code was already consumed above, so
+              // OrgOnboardingScreen's own prefill will not re-show it — this toast is the only
+              // signal that the link didn't work.
+              showToast(joinResult?.error || 'That invite link is no longer valid.', 'error');
+            }
+          }
+        }
+
         let fetchedMembers: Member[] = [];
         let fetchedLogs: ImportLog[] = [];
 
-        if (orgRes) {
-          localStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
-          localStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
+        if (resolvedOrgRes) {
+          localStorage.setItem('bni_cached_org', JSON.stringify(resolvedOrgRes.org));
+          localStorage.setItem('bni_cached_org_member', JSON.stringify(resolvedOrgRes.member));
 
-          const hydrated = await hydrateOrgData(orgRes.org, user.uid);
+          const hydrated = await hydrateOrgData(resolvedOrgRes.org, user.uid);
           fetchedMembers = hydrated.members;
           fetchedLogs = hydrated.logs;
         }
@@ -326,11 +348,11 @@ export const AppContent: React.FC = () => {
           setUserProfile(fallback);
         }
 
-        if (orgRes) {
-          localStorage.setItem('bni_cached_org', JSON.stringify(orgRes.org));
-          localStorage.setItem('bni_cached_org_member', JSON.stringify(orgRes.member));
-          setOrg(orgRes.org);
-          setOrgMember(orgRes.member);
+        if (resolvedOrgRes) {
+          localStorage.setItem('bni_cached_org', JSON.stringify(resolvedOrgRes.org));
+          localStorage.setItem('bni_cached_org_member', JSON.stringify(resolvedOrgRes.member));
+          setOrg(resolvedOrgRes.org);
+          setOrgMember(resolvedOrgRes.member);
         } else {
           localStorage.removeItem('bni_cached_org');
           localStorage.removeItem('bni_cached_org_member');
