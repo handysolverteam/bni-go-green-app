@@ -518,7 +518,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-3.5 text-center sm:text-left">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20 shrink-0">
-              <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
+              <div className="w-full h-full bg-[#001D39] rounded-[14px] flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-emerald-400" />
               </div>
             </div>

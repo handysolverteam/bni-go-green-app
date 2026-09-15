@@ -26,7 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, memberC
           {/* Brand Logo */}
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => handleTabClick('dashboard')}>
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-lg shadow-emerald-500/20">
-              <div className="w-full h-full bg-[#0a0f1d] rounded-[10px] flex items-center justify-center">
+              <div className="w-full h-full bg-[#001D39] rounded-[10px] flex items-center justify-center">
                 <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
                   BNI
                 </span>

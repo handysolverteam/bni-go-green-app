@@ -44,12 +44,12 @@ const BootSplash: React.FC<{ title: string; subtitle: string }> = ({ title, subt
   const isLight = localStorage.getItem('bni_theme_mode') === 'light' || document.body.classList.contains('light-mode');
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4 transition-colors ${
-      isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#080d19] text-white'
+      isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#001D39] text-white'
     }`}>
       <div className="relative">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] animate-pulse shadow-lg shadow-emerald-500/20">
           <div className={`w-full h-full rounded-[14px] flex items-center justify-center ${
-            isLight ? 'bg-white' : 'bg-[#080d19]'
+            isLight ? 'bg-white' : 'bg-[#001D39]'
           }`}>
             <img src="/icons/icon.svg" alt="Handychapter Logo" className="w-10 h-10 rounded-xl object-cover" />
           </div>

@@ -26,7 +26,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#060a12] text-slate-100">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#001D39] text-slate-100">
       {/* Subtle ambient light glows */}
       <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -35,7 +35,7 @@ export const LoginPage: React.FC = () => {
         {/* Minimal Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-400 p-[2px] shadow-xl shadow-emerald-500/20 mb-1">
-            <div className="w-full h-full bg-[#0a0f1d] rounded-[14px] flex items-center justify-center">
+            <div className="w-full h-full bg-[#001D39] rounded-[14px] flex items-center justify-center">
               <Zap className="w-7 h-7 text-emerald-400" />
             </div>
           </div>
@@ -97,7 +97,7 @@ export const LoginPage: React.FC = () => {
             {/* Divider */}
             <div className="relative flex items-center justify-center my-3">
               <div className="w-full border-t border-slate-800" />
-              <span className="absolute bg-[#0a0f1d] px-3 text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">
+              <span className="absolute bg-[#001D39] px-3 text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">
                 OR
               </span>
             </div>
