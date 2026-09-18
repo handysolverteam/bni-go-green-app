@@ -14,6 +14,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
 import { TrendsTab } from './components/TrendsTab';
 import { ChatTab } from './components/ChatTab';
+import { RenewalsTab } from './components/renewals/RenewalsTab';
 import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
@@ -32,9 +33,9 @@ const parseHash = () => {
     reportName = subReport.startsWith('report/') ? subReport.replace('report/', '') : subReport;
   }
 
-  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'import', 'nudges', 'chat', 'org', 'profile', 'settings'];
+  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'import', 'nudges', 'chat', 'org', 'profile', 'settings', 'renewals'];
   if (validTabs.includes(mainTab)) {
-    return { tab: mainTab, report: ['dashboard', 'nudges'].includes(mainTab) ? (reportName || null) : null };
+    return { tab: mainTab, report: ['dashboard', 'nudges', 'renewals'].includes(mainTab) ? (reportName || null) : null };
   }
   return { tab: 'dashboard' as NavigationTab, report: null };
 };
@@ -76,7 +77,7 @@ export const AppContent: React.FC = () => {
 
   const navigateTo = (tab: NavigationTab, reportName: string | null = null) => {
     let newHash = `#${tab}`;
-    if (reportName && ['dashboard', 'nudges'].includes(tab)) {
+    if (reportName && ['dashboard', 'nudges', 'renewals'].includes(tab)) {
       newHash = `#${tab}/report/${encodeURIComponent(reportName)}`;
     }
     if (window.location.hash !== newHash) {
@@ -92,8 +93,8 @@ export const AppContent: React.FC = () => {
     }
   };
 
-  const setActiveTab = (tab: NavigationTab) => {
-    navigateTo(tab, null);
+  const setActiveTab = (tab: NavigationTab, subPath?: string) => {
+    navigateTo(tab, subPath ?? null);
   };
 
   // Listen to mobile swipe-back gesture and browser back/forward buttons & hash changes
@@ -707,7 +708,8 @@ export const AppContent: React.FC = () => {
   return (
     <SidebarLayout
       activeTab={activeTab}
-      setActiveTab={(tab) => navigateTo(tab)}
+      activeSubPath={selectedNudgeReport}
+      setActiveTab={(tab, subPath) => navigateTo(tab, subPath ?? null)}
       memberCount={members.length}
       reportCount={importLogs.length}
       org={org}
@@ -772,6 +774,10 @@ export const AppContent: React.FC = () => {
             importLogs={importLogs}
             userProfile={userProfile}
           />
+        )}
+
+        {activeTab === 'renewals' && (
+          <RenewalsTab initialView={selectedNudgeReport === 'import' ? 'import' : undefined} />
         )}
 
         {activeTab === 'org' && (

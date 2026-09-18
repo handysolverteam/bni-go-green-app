@@ -1,0 +1,61 @@
+# Per-function deploy settings. Without this file, `supabase functions deploy`
+# defaults every function to `verify_jwt = true` at the Supabase platform
+# level (a gate that runs *before* the function's own code, separate from
+# any in-function auth check).
+#
+# That default breaks these functions from a browser: CORS preflight
+# (OPTIONS) requests never carry an Authorization header, so with
+# verify_jwt = true the platform rejects the preflight itself with a non-2xx
+# status, which shows up in the browser as a CORS error ("preflight request
+# doesn't have HTTP ok status") even though the function's own OPTIONS
+# handler would have returned 200 fine.
+#
+# All of these functions already decided (see docs/BNI_RRC_MIGRATION.md,
+# Phase 3) to run without a caller-auth check, matching the rest of
+# Handychapter's current anon-key-plus-permissive-RLS posture -- so
+# verify_jwt = false here just makes the platform gate match what the
+# function code already does, not a new decision.
+#
+# `delete-user` is intentionally NOT listed here: it requires the caller's
+# real session JWT in its own code and is already deployed/working under
+# whatever verify_jwt setting it currently has on the platform -- left
+# untouched.
+#
+# Apply with: supabase functions deploy <name>   (redeploy is required --
+# this file alone doesn't change an already-deployed function's setting)
+
+[functions.import-membership-dues]
+verify_jwt = false
+
+[functions.import-palms]
+verify_jwt = false
+
+[functions.import-palms-lifetime]
+verify_jwt = false
+
+[functions.import-sponsors]
+verify_jwt = false
+
+[functions.import-trainings]
+verify_jwt = false
+
+[functions.import-traffic-lights]
+verify_jwt = false
+
+[functions.renewals-dashboard]
+verify_jwt = false
+
+[functions.renewals-palms-coverage]
+verify_jwt = false
+
+[functions.renewals-task-inbox]
+verify_jwt = false
+
+[functions.generate-renewal-tasks]
+verify_jwt = false
+
+[functions.update-renewal-task]
+verify_jwt = false
+
+[functions.update-renewal-cycle]
+verify_jwt = false

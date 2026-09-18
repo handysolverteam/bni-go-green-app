@@ -12,6 +12,8 @@ dist-ssr
 *.local
 .env
 *.json
+deno.lock
+supabase/.temp/
 !package.json
 !tsconfig.json
 !package-lock.json

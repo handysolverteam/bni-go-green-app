@@ -51,6 +51,7 @@ create extension if not exists pgcrypto;
 create or replace function renewals.set_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   new.updated_at = now();
@@ -483,12 +484,56 @@ create policy "authenticated member aliases write" on renewals.member_aliases
   for all to authenticated using (true) with check (true);
 
 -- ---------------------------------------------------------------------------
--- IMPORTANT — this migration is NOT applied automatically.
--- Review it, then apply via the Supabase Dashboard SQL editor or
--- `supabase db push`, exactly like 002/003 before it. Verify afterward with:
+-- Expose the schema to PostgREST + grant the standard Supabase roles access.
+--
+-- CREATE SCHEMA alone is not enough: a newly created schema is neither
+-- usable by anon/authenticated/service_role (Postgres GRANTs are separate
+-- from RLS) nor routable via the client/Edge Function REST API (PostgREST
+-- only serves schemas listed in its own db-schemas config) until both of
+-- these are done explicitly. Discovered the hard way in production: the
+-- client's `.schema('renewals')` calls failed with "Invalid schema:
+-- renewals" until this block was applied, even though every table above
+-- already existed. Folded back into this file so re-running it from
+-- scratch (a fresh environment, or after a rollback) doesn't reproduce the
+-- same bug for the next person.
+-- ---------------------------------------------------------------------------
+grant usage on schema renewals to anon, authenticated, service_role;
+
+grant all on all tables in schema renewals to service_role;
+grant select on all tables in schema renewals to authenticated;
+
+grant all on all sequences in schema renewals to service_role;
+
+alter default privileges in schema renewals grant all on tables to service_role;
+alter default privileges in schema renewals grant select on tables to authenticated;
+
+do $$
+declare
+  current_schemas text;
+begin
+  select coalesce(
+    (select setting from pg_settings where name = 'pgrst.db_schemas'),
+    'public'
+  ) into current_schemas;
+
+  if current_schemas !~ '(^|,)\s*renewals\s*($|,)' then
+    execute format('alter role authenticator set pgrst.db_schemas = %L', current_schemas || ', renewals');
+  end if;
+end $$;
+
+notify pgrst, 'reload config';
+notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- APPLIED to the live Handychapter project (oleckbfrkpmoikpkjcpa) on
+-- 2026-09-16 via the Supabase MCP server, in three parts: this schema/RLS
+-- migration, the grant+exposure block above (originally a separate
+-- follow-up migration, folded back in here), and the search_path hardening
+-- on set_updated_at() above. Verified with a real end-to-end write (a
+-- synthetic membership-dues import via the live import-membership-dues
+-- function), confirmed the row landed correctly, then deleted the test
+-- data. If re-running this file elsewhere (a fresh environment, or after a
+-- `DROP SCHEMA renewals CASCADE` rollback), verify afterward with:
 --   select table_name from information_schema.tables where table_schema = 'renewals';
--- and confirm 12 tables are listed, then:
---   DROP SCHEMA renewals CASCADE;
--- as a rollback drill in a branch/preview project BEFORE relying on it as a
--- real rollback path against the live project.
+-- and confirm 12 tables are listed.
 -- ---------------------------------------------------------------------------
