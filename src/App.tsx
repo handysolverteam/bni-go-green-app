@@ -14,11 +14,13 @@ import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
 import { TrendsTab } from './components/TrendsTab';
 import { ChatTab } from './components/ChatTab';
+import { RenewalsTab } from './components/renewals/RenewalsTab';
 import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
 import { captureInviteCode, clearPendingInviteCode, clearInviteCodeFromUrl } from './lib/inviteCode';
+import { startSsoHandoff, hasTriedSso, issueSsoHandoff, consumeSsoCallback, tryNextSsoPartner } from './lib/sso';
 
 const parseHash = () => {
   const raw = decodeURIComponent(window.location.hash.replace('#', ''));
@@ -32,9 +34,9 @@ const parseHash = () => {
     reportName = subReport.startsWith('report/') ? subReport.replace('report/', '') : subReport;
   }
 
-  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'import', 'nudges', 'chat', 'org', 'profile', 'settings'];
+  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'import', 'nudges', 'chat', 'org', 'profile', 'settings', 'renewals'];
   if (validTabs.includes(mainTab)) {
-    return { tab: mainTab, report: ['dashboard', 'nudges'].includes(mainTab) ? (reportName || null) : null };
+    return { tab: mainTab, report: ['dashboard', 'nudges', 'renewals'].includes(mainTab) ? (reportName || null) : null };
   }
   return { tab: 'dashboard' as NavigationTab, report: null };
 };
@@ -65,9 +67,74 @@ const BootSplash: React.FC<{ title: string; subtitle: string }> = ({ title, subt
 };
 
 export const AppContent: React.FC = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const { showToast } = useToast();
   const hasVerifiedRef = React.useRef(false);
+
+  // Cross-app SSO with bni-rrc: this app plays three roles depending on the `sso` query param
+  // (see src/lib/sso.ts for the full protocol). `ssoBusy` gates rendering while any of them is
+  // in flight, since none of them should flash the normal login/dashboard UI mid-handoff.
+  const ssoHandledRef = React.useRef(false);
+  const [ssoBusy, setSsoBusy] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).has('sso');
+  });
+
+  useEffect(() => {
+    if (ssoHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const ssoParam = params.get('sso');
+    if (!ssoParam) return;
+
+    if (ssoParam === 'logout') {
+      ssoHandledRef.current = true;
+      window.history.replaceState({}, '', window.location.pathname);
+      logout().finally(() => setSsoBusy(false));
+      return;
+    }
+
+    if (ssoParam === 'callback') {
+      ssoHandledRef.current = true;
+      const code = params.get('ssoCode');
+      const redirectHash = params.get('redirect') || '#dashboard';
+      const partnerIndex = Number(params.get('partnerIndex') || '0');
+      window.history.replaceState({}, '', window.location.pathname);
+
+      if (!code || code === 'none') {
+        if (!tryNextSsoPartner(redirectHash, partnerIndex)) {
+          setSsoBusy(false);
+        }
+        return;
+      }
+
+      consumeSsoCallback(code).then((ok) => {
+        if (ok) {
+          window.location.hash = redirectHash;
+          setSsoBusy(false);
+        } else if (!tryNextSsoPartner(redirectHash, partnerIndex)) {
+          setSsoBusy(false);
+        }
+      });
+      return;
+    }
+
+    if (ssoParam === 'issue') {
+      // Wait for Firebase to finish restoring any persisted session before answering --
+      // firebaseAuth.currentUser is unreliable until the first onAuthStateChanged fires.
+      if (authLoading) return;
+      ssoHandledRef.current = true;
+      const returnUrl = params.get('return');
+      if (returnUrl) {
+        void issueSsoHandoff(returnUrl); // navigates away on completion
+      } else {
+        setSsoBusy(false);
+      }
+      return;
+    }
+
+    ssoHandledRef.current = true;
+    setSsoBusy(false);
+  }, [authLoading, logout]);
 
   // App & Org State (Persisted in URL Hash & localStorage)
   const initialNav = parseHash();
@@ -76,7 +143,7 @@ export const AppContent: React.FC = () => {
 
   const navigateTo = (tab: NavigationTab, reportName: string | null = null) => {
     let newHash = `#${tab}`;
-    if (reportName && ['dashboard', 'nudges'].includes(tab)) {
+    if (reportName && ['dashboard', 'nudges', 'renewals'].includes(tab)) {
       newHash = `#${tab}/report/${encodeURIComponent(reportName)}`;
     }
     if (window.location.hash !== newHash) {
@@ -92,8 +159,8 @@ export const AppContent: React.FC = () => {
     }
   };
 
-  const setActiveTab = (tab: NavigationTab) => {
-    navigateTo(tab, null);
+  const setActiveTab = (tab: NavigationTab, subPath?: string) => {
+    navigateTo(tab, subPath ?? null);
   };
 
   // Listen to mobile swipe-back gesture and browser back/forward buttons & hash changes
@@ -652,6 +719,12 @@ export const AppContent: React.FC = () => {
     setIsSyncing(false);
   };
 
+  // 0. A cross-app SSO handoff (see src/lib/sso.ts) is in flight -- don't flash the normal
+  //    login/dashboard UI mid-redirect.
+  if (ssoBusy) {
+    return <BootSplash title="Signing you in..." subtitle="Connecting your Handychapter account" />;
+  }
+
   // 1. Auth state is still being restored. Firebase/Supabase resolve a persisted session
   //    asynchronously, so `user` is briefly null on EVERY load — returning LoginPage here
   //    flashed the sign-in screen at users who were already signed in.
@@ -659,8 +732,12 @@ export const AppContent: React.FC = () => {
     return <BootSplash title="Signing you in..." subtitle="Restoring your session" />;
   }
 
-  // 2. Genuinely unauthenticated -> Login page
+  // 2. Genuinely unauthenticated -> check whether a trusted sibling app already has this user
+  //    signed in before showing our own login screen.
   if (!user) {
+    if (!hasTriedSso() && startSsoHandoff()) {
+      return <BootSplash title="Signing you in..." subtitle="Checking your other Handychapter apps" />;
+    }
     return <LoginPage />;
   }
 
@@ -707,7 +784,8 @@ export const AppContent: React.FC = () => {
   return (
     <SidebarLayout
       activeTab={activeTab}
-      setActiveTab={(tab) => navigateTo(tab)}
+      activeSubPath={selectedNudgeReport}
+      setActiveTab={(tab, subPath) => navigateTo(tab, subPath ?? null)}
       memberCount={members.length}
       reportCount={importLogs.length}
       org={org}
@@ -772,6 +850,10 @@ export const AppContent: React.FC = () => {
             importLogs={importLogs}
             userProfile={userProfile}
           />
+        )}
+
+        {activeTab === 'renewals' && (
+          <RenewalsTab initialView={selectedNudgeReport === 'import' ? 'import' : undefined} />
         )}
 
         {activeTab === 'org' && (

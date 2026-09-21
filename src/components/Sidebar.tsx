@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, Sparkles, Bot } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, Sparkles, Bot, RefreshCw, UploadCloud } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { UniversalModal } from './UniversalModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
 
-export type NavigationTab = 'dashboard' | 'trends' | 'nudges' | 'chat' | 'org' | 'profile' | 'settings' | 'import';
+export type NavigationTab = 'dashboard' | 'trends' | 'nudges' | 'chat' | 'org' | 'profile' | 'settings' | 'import' | 'renewals';
 
 interface SidebarProps {
   activeTab: NavigationTab;
-  setActiveTab: (tab: NavigationTab) => void;
+  activeSubPath?: string | null;
+  setActiveTab: (tab: NavigationTab, subPath?: string) => void;
   memberCount: number;
   reportCount?: number;
   org: Organization | null;
@@ -22,6 +23,7 @@ interface SidebarProps {
 
 export const SidebarLayout: React.FC<SidebarProps> = ({
   activeTab,
+  activeSubPath = null,
   setActiveTab,
   memberCount,
   reportCount = 0,
@@ -76,6 +78,8 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
     { id: 'trends' as NavigationTab, label: 'Trends', icon: TrendingUp },
     { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare },
+    { id: 'renewals' as NavigationTab, label: 'Renewals', icon: RefreshCw },
+    { id: 'renewals' as NavigationTab, label: 'Import Data', icon: UploadCloud, subPath: 'import' },
     { id: 'org' as NavigationTab, label: 'Chapter', icon: Building2 },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
     { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Bot },
@@ -129,16 +133,20 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
           {navItems.map((item) => {
             if (item.adminOnly && !isAdminOrOwner) return null;
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            // Two nav items can share id 'renewals' (plain vs the Import
+            // sub-view) -- only distinguish by subPath for that id, so
+            // every other tab keeps its original "active whenever this tab
+            // is open, regardless of sub-report" behavior.
+            const isActive = activeTab === item.id && (item.id !== 'renewals' || (item.subPath ?? null) === activeSubPath);
 
             return (
-              <div key={item.id}>
+              <div key={`${item.id}-${item.subPath ?? ''}`}>
                 {/* Divider above Chapter AI to visually separate it at the bottom */}
                 {item.id === 'chat' && (
                   <div className="my-2 border-t border-white/10" />
                 )}
                 <button
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => setActiveTab(item.id, item.subPath)}
                   title={isCompact ? item.label : undefined}
                   className={`w-full flex items-center ${isCompact ? 'justify-center px-2' : 'justify-between px-3.5'} py-2.5 rounded-xl text-xs font-bold transition-all ${
                     isActive
@@ -326,15 +334,15 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
           {navItems.map((item) => {
             if (item.adminOnly && !isAdminOrOwner) return null;
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = activeTab === item.id && (item.id !== 'renewals' || (item.subPath ?? null) === activeSubPath);
             return (
-              <div key={item.id} className="flex items-center flex-1">
+              <div key={`${item.id}-${item.subPath ?? ''}`} className="flex items-center flex-1">
                 {/* Thin vertical separator before Chapter AI on mobile */}
                 {item.id === 'chat' && (
                   <div className="w-px h-6 bg-white/15 mx-1 shrink-0" />
                 )}
                 <button
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => setActiveTab(item.id, item.subPath)}
                   title={item.label}
                   className={`flex-1 flex items-center justify-center py-2.5 px-1 rounded-full transition-all duration-300 active:scale-90 ${
                     isActive
