@@ -59,3 +59,14 @@ verify_jwt = false
 
 [functions.update-renewal-cycle]
 verify_jwt = false
+
+# sso-issue / sso-consume (cross-app SSO bridge with bni-rrc): their Authorization header,
+# when present, carries a *Firebase* ID token, not a Supabase-issued JWT, and sso-consume
+# carries no Authorization header at all (its caller is authenticated by the one-time code in
+# the body instead). The platform-level verify_jwt gate only understands Supabase JWTs, so it
+# would reject every legitimate call outright -- same reasoning as the functions above.
+[functions.sso-issue]
+verify_jwt = false
+
+[functions.sso-consume]
+verify_jwt = false

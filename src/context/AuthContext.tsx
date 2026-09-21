@@ -21,6 +21,7 @@ import { supabase, signInWithGoogleSupabase, signOutSupabase } from '../lib/supa
 import { onAuthStateChanged, type ConfirmationResult, type User as FirebaseUser } from 'firebase/auth';
 import { supabaseService } from '../services/supabaseService';
 import { clearInviteCodeFromUrl } from '../lib/inviteCode';
+import { getSsoPartnerUrls } from '../lib/sso';
 
 /** Maps a Firebase auth user onto the app's UserProfile shape. */
 const fromFirebaseUser = (fbUser: FirebaseUser): UserProfile => {
@@ -275,6 +276,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signOutFirebase();
       await signOutSupabase();
       setUser(null);
+
+      // Best-effort: ask every trusted sibling app to sign out too, so logging out here
+      // doesn't leave a stale session on any of them. Loaded in hidden iframes rather than
+      // fetched, since each needs to run its own JS against its own local session storage.
+      for (const partnerUrl of getSsoPartnerUrls()) {
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = `${partnerUrl}/?sso=logout`;
+        document.body.appendChild(iframe);
+        setTimeout(() => iframe.remove(), 5000);
+      }
     } catch (err) {
       console.error('Logout error:', err);
       setUser(null);
