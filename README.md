@@ -16,7 +16,7 @@ Handychapter is a multi-tenant, role-based web application designed for BNI Chap
 * **🏢 6-Digit Code Organization System**:
   * **Create Organization**: Generate unique 6-digit invite code (e.g. `789210`). Creator auto-assigned `owner` role.
   * **Join Organization**: Enter 6-digit code to join chapter as `member`.
-  * **Role-Based Access Control (RBAC)**: `owner`, `admin`, `member` hierarchy.
+  * **Role-Based Access Control (RBAC)**: `owner`, `admin`, `member` hierarchy
 
 * **👤 User Profile Onboarding**:
   * Automatic post-login check: prompts user once to fill Full Name, WhatsApp, Chapter Role, Category & Bio.
@@ -144,3 +144,5 @@ CREATE POLICY "Public full access outreach_logs" ON public.outreach_logs FOR ALL
    ```
 
 Developed by **HandySolver Team**.
+
+Going to create the PR from handysolverteam account and merget with it
