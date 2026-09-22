@@ -5,7 +5,7 @@
 ![Vite](https://img.shields.io/badge/Vite-Web_Framework-646CFF?style=for-the-badge&logo=vite)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript)
 
-Handychapter is a multi-tenant, role-based web application designed for BNI Chapter Directors, Owners, Admins, and Members to track weekly **PALMS** (Present, Absent, Substitute, Medical, Referrals, Visitors, TYFCB) statistics, compute 100-point Traffic Light scores, and manage organization team permissions.
+Handychapter is a multi-tenant, role-based web application designed for BNI Chapter Directors, Owners, Admins, and Members to track weekly **PALMS** (Present, Absent, Substitute, Medical, Referrals, Visitors, TYFCB) statistics, compute 100-point Traffic Light scores, and manage organization team permissions
 --- 
 ## 🌟 Key Features
 
@@ -29,7 +29,7 @@ Handychapter is a multi-tenant, role-based web application designed for BNI Chap
 
 ---
 
-## 🗄️ Supabase Complete Database Schema
+## 🗄️ Supabase Complete Database Schema.
 
 Run this SQL in your **Supabase Dashboard $\rightarrow$ SQL Editor**:
 
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
     green_threshold INT DEFAULT 70,
     amber_threshold INT DEFAULT 50,
     red_threshold INT DEFAULT 30,
-    custom_signature TEXT DEFAULT 'Keep the momentum going! 💪',
+    custom_signature TEXT DEFAULT 'Keep the momentum going!',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
