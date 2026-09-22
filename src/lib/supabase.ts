@@ -17,20 +17,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-export async function signInWithGoogleSupabase() {
-  const currentOrigin = typeof window !== 'undefined' && window.location.origin
-    ? window.location.origin
-    : 'https://www.handychapter.com';
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: `${currentOrigin}/`,
-    },
-  });
-  if (error) throw error;
-  return data;
-}
-
+/**
+ * Firebase is the only identity provider; Supabase is the database only. Sign-out remains so
+ * sessions created by the old Google-OAuth fallback still get cleared from browsers that have
+ * one. There is deliberately no matching sign-in.
+ */
 export async function signOutSupabase() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;

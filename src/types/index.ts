@@ -203,5 +203,5 @@ export interface UserProfile {
   phoneNumber?: string | null;
   /** Provider ids linked to this account, e.g. ['google.com', 'phone']. */
   providers?: string[];
-  provider: 'google' | 'email' | 'phone' | 'supabase';
+  provider: 'google' | 'email' | 'phone';
 }

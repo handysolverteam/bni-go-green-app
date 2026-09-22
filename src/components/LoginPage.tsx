@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { GlassCard } from './GlassCard';
 import { ArrowRight, Zap, Heart, Info } from 'lucide-react';
 import { PhoneloginScreen } from '../auth/components/PhoneloginScreen';
+import { describeAuthError } from '../lib/firebase';
 
 export const LoginPage: React.FC = () => {
   const { loginWithGoogle, loading } = useAuth();
@@ -19,7 +20,7 @@ export const LoginPage: React.FC = () => {
       await loginWithGoogle();
     } catch (err: any) {
       console.error('Login error:', err);
-      setErrorMsg(err.message || 'Authentication failed. Please try again.');
+      setErrorMsg(describeAuthError(err));
     } finally {
       setIsAuthenticating(false);
     }

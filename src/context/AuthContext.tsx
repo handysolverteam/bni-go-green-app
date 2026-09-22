@@ -17,7 +17,7 @@ import {
   PROVIDER_GOOGLE,
   PROVIDER_PHONE,
 } from '../lib/firebase';
-import { supabase, signInWithGoogleSupabase, signOutSupabase } from '../lib/supabase';
+import { signOutSupabase } from '../lib/supabase';
 import { onAuthStateChanged, type ConfirmationResult, type User as FirebaseUser } from 'firebase/auth';
 import { supabaseService } from '../services/supabaseService';
 import { clearInviteCodeFromUrl } from '../lib/inviteCode';
@@ -116,85 +116,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const phoneConfirmationRef = useRef<ConfirmationResult | null>(null);
 
   useEffect(() => {
-    // Failsafe: the app blocks on a splash while `loading` is true, so if neither provider
-    // ever reports back (misconfigured Firebase, offline, blocked third-party storage) we
-    // must still resolve — otherwise the splash hangs forever instead of offering sign-in.
+    // Failsafe: the app blocks on a splash while `loading` is true, so if Firebase never
+    // reports back (misconfigured, offline, blocked third-party storage) we must still
+    // resolve — otherwise the splash hangs forever instead of offering sign-in.
     const failsafe = setTimeout(() => setLoading(false), 5000);
 
-    // 1. Check Firebase Auth State
     const unsubscribeFirebase = onAuthStateChanged(firebaseAuth, (fbUser) => {
       clearTimeout(failsafe);
-      if (fbUser) {
-        setUser(fromFirebaseUser(fbUser));
-        setLoading(false);
-      } else if (!loggingOutRef.current) {
-        // 2. Check Supabase Auth State if Firebase is null (skip while logging out)
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (loggingOutRef.current) {
-            setUser(null);
-            setLoading(false);
-            return;
-          }
-          if (session?.user) {
-            const googleAvatar =
-              session.user.user_metadata?.avatar_url ||
-              session.user.user_metadata?.picture ||
-              session.user.user_metadata?.photo_url ||
-              session.user.user_metadata?.avatar ||
-              null;
-
-            setUser({
-              uid: session.user.id,
-              email: session.user.email || null,
-              displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Director',
-              photoURL: googleAvatar,
-              provider: 'supabase',
-            });
-          } else {
-            setUser(null);
-          }
-          setLoading(false);
-        });
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (loggingOutRef.current) return;
-      if (session?.user && !firebaseAuth.currentUser) {
-        const googleAvatar =
-          session.user.user_metadata?.avatar_url ||
-          session.user.user_metadata?.picture ||
-          session.user.user_metadata?.photo_url ||
-          session.user.user_metadata?.avatar ||
-          null;
-
-        setUser({
-          uid: session.user.id,
-          email: session.user.email || null,
-          displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Director',
-          photoURL: googleAvatar,
-          provider: 'supabase',
-        });
-      }
+      setUser(fbUser ? fromFirebaseUser(fbUser) : null);
+      setLoading(false);
     });
 
     return () => {
       clearTimeout(failsafe);
       unsubscribeFirebase();
-      authListener.subscription.unsubscribe();
     };
   }, []);
 
+  /**
+   * Firebase is the only identity provider. There is deliberately no Supabase OAuth
+   * fallback: a Supabase-authenticated user has no Firebase identity, which silently broke
+   * cross-app SSO (the handoff to bni-rrc mints Firebase custom tokens, so it saw such users
+   * as signed out). A failed sign-in must surface as an error, not switch identity systems.
+   */
   const loginWithGoogle = async () => {
     setLoading(true);
     try {
       await signInWithGoogleFirebase();
-    } catch (fbErr) {
-      console.warn('Firebase login attempt failed/fallback to Supabase OAuth:', fbErr);
-      await signInWithGoogleSupabase();
     } finally {
       setLoading(false);
     }
@@ -274,6 +222,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cancelPhoneOtp();
 
       await signOutFirebase();
+      // Clears any leftover session from when Google sign-in could fall back to Supabase
+      // OAuth. Nothing creates those any more, but one may still be sitting in a browser.
       await signOutSupabase();
       setUser(null);
 
@@ -315,20 +265,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loggingOutRef.current = true;
       clearCachedAppData();
 
-      // Firebase users can be deleted straight from the browser. Supabase users cannot —
-      // that needs the service_role admin API — so they go through the `delete-user` Edge
-      // Function instead (supabase/functions/delete-user). If neither path succeeds the app
-      // data is still gone but the login survives; report that rather than pretend.
+      // Firebase users can be deleted straight from the browser. If that fails the app data
+      // is still gone but the login survives; report that rather than pretend.
       let loginRetained = false;
       try {
-        const deleted = await deleteFirebaseAccount();
-        if (!deleted) {
-          const { error: fnError } = await supabase.functions.invoke('delete-user');
-          if (fnError) {
-            console.error('delete-user Edge Function failed:', fnError);
-            loginRetained = true;
-          }
-        }
+        loginRetained = !(await deleteFirebaseAccount());
       } catch (authErr: any) {
         console.error('Auth account deletion failed:', authErr);
         loginRetained = true;

@@ -24,8 +24,7 @@ export const SignInMethodsCard: React.FC = () => {
   const [busy, setBusy] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Supabase-authenticated sessions are not Firebase accounts, so linking does not apply.
-  if (!user || user.provider === 'supabase') return null;
+  if (!user) return null;
 
   const providers = user.providers ?? [];
   const hasGoogle = providers.includes(PROVIDER_GOOGLE);
