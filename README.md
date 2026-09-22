@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
     green_threshold INT DEFAULT 70,
     amber_threshold INT DEFAULT 50,
     red_threshold INT DEFAULT 30,
-    custom_signature TEXT DEFAULT 'Keep the momentum going! 💪',
+    custom_signature TEXT DEFAULT 'Keep the momentum going!',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
