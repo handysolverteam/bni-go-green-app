@@ -167,6 +167,13 @@ export function describeAuthError(error: any): string {
     case 'auth/popup-closed-by-user':
     case 'auth/cancelled-popup-request':
       return 'Sign-in was cancelled.';
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the sign-in popup. Allow popups for this site and try again.';
+    case 'auth/web-storage-unsupported':
+      // Typically private/incognito windows with third-party cookies blocked. Worth naming
+      // explicitly: sign-in used to silently fall back to Supabase OAuth here, which left the
+      // account with no Firebase identity and broke cross-app sign-in.
+      return 'Your browser is blocking the storage sign-in needs. Enable cookies for this site, or try a normal (non-private) window.';
     case 'auth/provider-already-linked':
       return 'That sign-in method is already on this account.';
     case 'auth/credential-already-in-use':
