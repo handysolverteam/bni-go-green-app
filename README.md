@@ -144,3 +144,5 @@ CREATE POLICY "Public full access outreach_logs" ON public.outreach_logs FOR ALL
    ```
 
 Developed by **HandySolver Team**.
+
+Going to create the PR from handysolverteam account and merget with it
