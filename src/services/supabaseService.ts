@@ -493,20 +493,32 @@ export const supabaseService = {
    * Chapter-owned data (roster members, imported reports, org AI chat history) is preserved —
    * it belongs to the chapter, not to this account.
    * Blocks if the user is the sole Owner of any chapter that still has other members.
+   *
+   * MUST leave zero org_members/profiles rows matching this user_id or email behind: both
+   * fetchUserOrganization() and fetchUserProfile() have email-based "auto-heal" fallbacks
+   * (for legitimate cases like a user switching from phone to Google login, which changes
+   * their Firebase UID) that silently re-attach any row they find by email match alone, no
+   * confirmation. A leftover row after "deletion" would let that fallback resurrect a
+   * supposedly-deleted account's org membership/profile on the next sign-in — found live in
+   * production: a deleted account rejoining a chapter via an old invite link, instantly, with
+   * a fully-restored profile. Deleting by user_id alone isn't enough since the email match is
+   * an independent path; this normalizes email casing and re-verifies nothing survives.
    */
   async deleteUserAccount(userId: string, userEmail?: string | null): Promise<{ ok: boolean; error?: string; blockedOrgs?: string[] }> {
     try {
+      const normalizedEmail = userEmail?.trim().toLowerCase() || null;
+
       const { data: memberships } = await supabase
         .from('org_members')
         .select('org_id, organization:organizations(name)')
-        .or(userEmail ? `user_id.eq.${userId},user_email.eq.${userEmail}` : `user_id.eq.${userId}`);
+        .or(normalizedEmail ? `user_id.eq.${userId},user_email.ilike.${normalizedEmail}` : `user_id.eq.${userId}`);
 
       const orgIds = Array.from(new Set((memberships || []).map((m: any) => m.org_id).filter(Boolean)));
 
       // Verify every chapter can be safely left before deleting anything
       const blockedOrgs: string[] = [];
       for (const orgId of orgIds) {
-        const eligibility = await this.checkLeaveEligibility(orgId, userId, userEmail);
+        const eligibility = await this.checkLeaveEligibility(orgId, userId, normalizedEmail);
         if (!eligibility.canLeave) {
           const match: any = (memberships || []).find((m: any) => m.org_id === orgId);
           blockedOrgs.push(match?.organization?.name || 'your chapter');
@@ -527,20 +539,77 @@ export const supabaseService = {
       // Personal outreach history
       await supabase.from('outreach_logs').delete().eq('user_id', userId);
 
-      // Memberships (by id and by email, mirroring the auto-heal lookup)
+      // Memberships (by id and by email, case-insensitively, mirroring the auto-heal lookup)
       await supabase.from('org_members').delete().eq('user_id', userId);
-      if (userEmail) {
-        await supabase.from('org_members').delete().eq('user_email', userEmail);
+      if (normalizedEmail) {
+        await supabase.from('org_members').delete().ilike('user_email', normalizedEmail);
       }
 
-      // Finally the profile itself
+      // The profile itself (by user_id, and by the legacy email column if 002 has been applied)
       const { error: profileError } = await supabase.from('profiles').delete().eq('user_id', userId);
       if (profileError) return { ok: false, error: profileError.message };
+      if (normalizedEmail) {
+        // Column may not exist on databases where migration 002 hasn't been applied yet;
+        // a failure here is not fatal to the delete (nothing else depends on this column today).
+        await supabase.from('profiles').delete().ilike('email', normalizedEmail).then(null, () => {});
+      }
+
+      // Verify nothing survived that the email-based auto-heal fallbacks could still find.
+      // Re-select rather than trust the delete calls above succeeding silently (e.g. a
+      // transient error on one of several delete calls wouldn't otherwise be noticed).
+      const [{ data: survivingMembers }, { data: survivingProfile }] = await Promise.all([
+        normalizedEmail
+          ? supabase.from('org_members').select('id').or(`user_id.eq.${userId},user_email.ilike.${normalizedEmail}`).limit(1)
+          : supabase.from('org_members').select('id').eq('user_id', userId).limit(1),
+        supabase.from('profiles').select('user_id').eq('user_id', userId).maybeSingle(),
+      ]);
+
+      if ((survivingMembers && survivingMembers.length > 0) || survivingProfile) {
+        console.error('deleteUserAccount: rows survived deletion', { survivingMembers, survivingProfile });
+        return {
+          ok: false,
+          error: 'Account data could not be fully removed. Please try again or contact support.',
+        };
+      }
+
+      // Record that this email went through account deletion — the only way the invite-link
+      // auto-join flow (App.tsx) can later tell "brand new invitee" apart from "just deleted
+      // their account, using an old saved link" and ask for confirmation instead of silently
+      // rejoining them. Best-effort: a logging failure here should not block deletion itself,
+      // which has already fully succeeded at this point.
+      if (normalizedEmail) {
+        try {
+          await supabase.from('deleted_accounts').insert({ email: normalizedEmail, last_user_id: userId });
+        } catch (logErr) {
+          console.error('deleteUserAccount: failed to record deletion log (non-fatal):', logErr);
+        }
+      }
 
       return { ok: true };
     } catch (e: any) {
       console.error('deleteUserAccount exception:', e);
       return { ok: false, error: e.message || 'Failed to delete account data.' };
+    }
+  },
+
+  /**
+   * Checks whether this email has previously gone through account deletion — used by the
+   * invite-link auto-join flow to decide whether to ask for confirmation before rejoining,
+   * instead of silently auto-joining the way a first-time invite click does.
+   */
+  async wasAccountPreviouslyDeleted(email?: string | null): Promise<boolean> {
+    if (!email) return false;
+    try {
+      const { data } = await supabase
+        .from('deleted_accounts')
+        .select('id')
+        .ilike('email', email.trim().toLowerCase())
+        .limit(1)
+        .maybeSingle();
+      return Boolean(data);
+    } catch (e) {
+      console.error('wasAccountPreviouslyDeleted exception:', e);
+      return false;
     }
   },
 

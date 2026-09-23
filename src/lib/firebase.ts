@@ -18,6 +18,8 @@ import {
 export const PROVIDER_GOOGLE = 'google.com';
 export const PROVIDER_PHONE = 'phone';
 
+
+console.log("firebase api key", import.meta.env.VITE_FIREBASE_API_KEY)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
