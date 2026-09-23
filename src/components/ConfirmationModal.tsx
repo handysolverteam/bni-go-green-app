@@ -1,8 +1,8 @@
 import React from 'react';
-import { AlertTriangle, Trash2, LogOut, RotateCcw, Check } from 'lucide-react';
+import { AlertTriangle, Trash2, LogOut, RotateCcw, Check, UserPlus } from 'lucide-react';
 import { UniversalModal } from './UniversalModal';
 
-export type ConfirmationType = 'logout' | 'delete' | 'purge' | 'reset' | 'clearLogs';
+export type ConfirmationType = 'logout' | 'delete' | 'purge' | 'reset' | 'clearLogs' | 'rejoinAfterDelete';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -62,6 +62,16 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           message: message || 'Reset all category thresholds back to defaults?',
           confirmText: confirmText || 'Reset Defaults',
           confirmBtnClass: 'bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-950 font-extrabold',
+        };
+      case 'rejoinAfterDelete':
+        return {
+          icon: <UserPlus className="w-6 h-6 text-emerald-400" />,
+          title: title || 'Rejoin Chapter?',
+          message:
+            message ||
+            'This Google account previously deleted its Handychapter account. This invite link would rejoin that chapter under a fresh account — continue?',
+          confirmText: confirmText || 'Rejoin',
+          confirmBtnClass: 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 hover:from-emerald-400 hover:to-teal-400 font-extrabold',
         };
       case 'clearLogs':
       default:

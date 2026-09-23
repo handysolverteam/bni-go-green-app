@@ -16,6 +16,7 @@ import { TrendsTab } from './components/TrendsTab';
 import { ChatTab } from './components/ChatTab';
 import { RenewalsTab } from './components/renewals/RenewalsTab';
 import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
+import { ConfirmationModal } from './components/ConfirmationModal';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
@@ -270,6 +271,14 @@ export const AppContent: React.FC = () => {
   // gap, exactly the bug this whole redesign set out to fix.
   const [inviteJoinSettled, setInviteJoinSettled] = useState(false);
 
+  // Shown instead of silently auto-joining when the signed-in email has previously gone
+  // through account deletion (supabaseService.wasAccountPreviouslyDeleted) — an old invite
+  // link would otherwise let a deleted account rejoin its chapter instantly, with no
+  // confirmation, which made deletion feel like it hadn't done anything.
+  const [showRejoinConfirm, setShowRejoinConfirm] = useState(false);
+  const [isRejoining, setIsRejoining] = useState(false);
+  const pendingRejoinCodeRef = useRef<string | null>(null);
+
   // Holds the teardown for the active members realtime channel. Without this, leaving an
   // org keeps the old subscription alive and it overwrites the roster with the old chapter's data.
   const unsubscribeMembersRef = React.useRef<(() => void) | null>(null);
@@ -505,6 +514,40 @@ export const AppContent: React.FC = () => {
    * successful join, org becomes non-null, this effect's own guard (`|| org`) then skips any
    * further run anyway, but the ref protects the network call itself regardless of ordering.
    */
+  /**
+   * Actually performs the join network call — shared by the silent auto-join path (first-time
+   * invitees) and the explicit-confirm path (see showRejoinConfirm above). Only ever called
+   * with a real, non-null user in scope, since both callers already guard on that.
+   */
+  const performInviteJoin = async (code: string, joiningUser: NonNullable<typeof user>) => {
+    setIsJoiningViaInvite(true);
+    try {
+      const joinResult: any = await supabaseService.joinOrganization(code, joiningUser.uid, joiningUser.email || undefined);
+      if (joinResult && 'org' in joinResult) {
+        const hydrated = await hydrateOrgData(joinResult.org, joiningUser.uid);
+        localStorage.setItem('bni_cached_org', JSON.stringify(joinResult.org));
+        localStorage.setItem('bni_cached_org_member', JSON.stringify(joinResult.member));
+        setOrg(joinResult.org);
+        setOrgMember(joinResult.member);
+        setMembers(hydrated.members);
+        setImportLogs(hydrated.logs);
+        showToast(`Joined ${joinResult.org.name} via invite link!`, 'success');
+      } else {
+        // Invalid/expired code: leave org null so OrgOnboardingScreen mounts normally, with
+        // this same code passed through as its prefill (see the render below) so the user
+        // sees what was tried and can retry or correct it, rather than a blank form.
+        showToast(joinResult?.error || 'That invite link is no longer valid.', 'error');
+      }
+    } catch (err) {
+      console.error('Auto-join via invite link failed:', err);
+      showToast('Something went wrong joining that chapter. Please try again manually.', 'error');
+    } finally {
+      setIsJoiningViaInvite(false);
+      setInviteJoinSettled(true);
+      clearPendingInviteCode();
+    }
+  };
+
   const hasAttemptedJoinRef = useRef(false);
   useEffect(() => {
     if (isInitializing || !isDataLoaded || !user || org) return;
@@ -513,34 +556,37 @@ export const AppContent: React.FC = () => {
     hasAttemptedJoinRef.current = true;
 
     (async () => {
-      setIsJoiningViaInvite(true);
-      try {
-        const joinResult: any = await supabaseService.joinOrganization(code, user.uid, user.email || undefined);
-        if (joinResult && 'org' in joinResult) {
-          const hydrated = await hydrateOrgData(joinResult.org, user.uid);
-          localStorage.setItem('bni_cached_org', JSON.stringify(joinResult.org));
-          localStorage.setItem('bni_cached_org_member', JSON.stringify(joinResult.member));
-          setOrg(joinResult.org);
-          setOrgMember(joinResult.member);
-          setMembers(hydrated.members);
-          setImportLogs(hydrated.logs);
-          showToast(`Joined ${joinResult.org.name} via invite link!`, 'success');
-        } else {
-          // Invalid/expired code: leave org null so OrgOnboardingScreen mounts normally, with
-          // this same code passed through as its prefill (see the render below) so the user
-          // sees what was tried and can retry or correct it, rather than a blank form.
-          showToast(joinResult?.error || 'That invite link is no longer valid.', 'error');
-        }
-      } catch (err) {
-        console.error('Auto-join via invite link failed:', err);
-        showToast('Something went wrong joining that chapter. Please try again manually.', 'error');
-      } finally {
-        setIsJoiningViaInvite(false);
-        setInviteJoinSettled(true);
-        clearPendingInviteCode();
+      // A deleted account has no profile/org_members row left to signal "you were here
+      // before" — this is the only remaining signal. Ask first instead of silently
+      // rejoining; inviteJoinSettled stays false so the boot gate holds until the user
+      // actually decides (see the render gate below).
+      const previouslyDeleted = await supabaseService.wasAccountPreviouslyDeleted(user.email);
+      if (previouslyDeleted) {
+        pendingRejoinCodeRef.current = code;
+        setShowRejoinConfirm(true);
+        return;
       }
+      await performInviteJoin(code, user);
     })();
   }, [isInitializing, isDataLoaded, user, org]);
+
+  const handleConfirmRejoin = async () => {
+    const code = pendingRejoinCodeRef.current;
+    setShowRejoinConfirm(false);
+    if (!code || !user) return;
+    setIsRejoining(true);
+    await performInviteJoin(code, user);
+    setIsRejoining(false);
+  };
+
+  const handleDeclineRejoin = () => {
+    setShowRejoinConfirm(false);
+    pendingRejoinCodeRef.current = null;
+    // Releases the boot-splash gate below (inviteJoinPending) without joining anything —
+    // OrgOnboardingScreen mounts normally next, same as an invalid/expired code would.
+    setInviteJoinSettled(true);
+    clearPendingInviteCode();
+  };
 
   // Handle Org Created / Joined
   const handleOrgJoined = async (data: { org: Organization; member: OrgMember }) => {
@@ -751,10 +797,23 @@ export const AppContent: React.FC = () => {
   // very first render.
   const inviteJoinPending = Boolean(inviteCodeRef.current) && !org && !inviteJoinSettled;
   if (isInitializing || !isDataLoaded || inviteJoinPending) {
-    return isJoiningViaInvite || inviteJoinPending ? (
-      <BootSplash title="Joining Chapter..." subtitle="Connecting you to your invited chapter" />
-    ) : (
-      <BootSplash title="Verifying Organization..." subtitle="Checking chapter membership & credentials" />
+    return (
+      <>
+        {isJoiningViaInvite || (inviteJoinPending && !showRejoinConfirm) ? (
+          <BootSplash title="Joining Chapter..." subtitle="Connecting you to your invited chapter" />
+        ) : showRejoinConfirm ? (
+          <BootSplash title="One moment..." subtitle="This account has deleted Handychapter before" />
+        ) : (
+          <BootSplash title="Verifying Organization..." subtitle="Checking chapter membership & credentials" />
+        )}
+        <ConfirmationModal
+          isOpen={showRejoinConfirm}
+          type="rejoinAfterDelete"
+          onConfirm={handleConfirmRejoin}
+          onClose={handleDeclineRejoin}
+          isLoading={isRejoining}
+        />
+      </>
     );
   }
 
