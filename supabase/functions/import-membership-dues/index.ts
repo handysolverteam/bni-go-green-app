@@ -15,6 +15,7 @@
 //   supabase functions deploy import-membership-dues
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logCallerScope } from "../_shared/callerScope.ts";
 import { importMembershipDuesReport } from "../_shared/renewals/database-import.ts";
 import { extractErrorMessage } from "../_shared/renewals/error-message.ts";
 
@@ -56,6 +57,7 @@ Deno.serve(async (req: Request) => {
 
     const xml = await file.text();
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    await logCallerScope(req, admin, "import-membership-dues");
     const result = await importMembershipDuesReport(admin, xml, file.name);
 
     return json(result, 200);

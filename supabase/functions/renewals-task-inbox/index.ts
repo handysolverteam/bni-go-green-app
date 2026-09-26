@@ -8,6 +8,7 @@
 //   supabase functions deploy renewals-task-inbox
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logCallerScope } from "../_shared/callerScope.ts";
 import { getTaskInboxItems } from "../_shared/renewals/task-inbox.ts";
 import { extractErrorMessage } from "../_shared/renewals/error-message.ts";
 
@@ -37,6 +38,7 @@ Deno.serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    await logCallerScope(req, admin, "renewals-task-inbox");
     const result = await getTaskInboxItems(admin);
 
     return json(result, 200);

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { firebaseAuth } from './firebase';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -9,20 +10,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// Supabase Third-Party Auth trusts Firebase ID tokens directly, so RLS sees the Firebase UID
+// as auth.jwt()->>'sub'. Returning null when signed out makes supabase-js send the anon key.
+// Note: with accessToken set, every supabase.auth.* call throws -- Firebase owns identity.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
+  accessToken: async () => {
+    try {
+      return (await firebaseAuth.currentUser?.getIdToken()) ?? null;
+    } catch {
+      return null;
+    }
   },
 });
-
-/**
- * Firebase is the only identity provider; Supabase is the database only. Sign-out remains so
- * sessions created by the old Google-OAuth fallback still get cleared from browsers that have
- * one. There is deliberately no matching sign-in.
- */
-export async function signOutSupabase() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
-}

@@ -52,7 +52,10 @@ interface DashboardProps {
   onSelectReportName?: (name: string | null) => void;
   onSelectMember: (member: Member) => void;
   onOpenImport: () => void;
-  onOpenNudges: (reportName?: string) => void;
+  /** Omitted for roles without outreach access, which hides the outreach buttons. */
+  onOpenNudges?: (reportName?: string) => void;
+  /** Admin/Superadmin: import, add, edit and delete controls. */
+  canEdit?: boolean;
   onSaveMember: (member: Member) => Promise<void>;
   onDeleteMember: (memberId: string) => Promise<void>;
   onDeleteBatch?: (batchName: string, logId?: string) => Promise<void>;
@@ -72,6 +75,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onSelectMember,
   onOpenImport,
   onOpenNudges,
+  canEdit = true,
   onSaveMember,
   onDeleteMember,
   onDeleteBatch,
@@ -390,13 +394,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </button>
           ) : (
             <div className="flex flex-col sm:flex-row items-center gap-2">
-              <button
-                onClick={onOpenImport}
-                className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm sm:text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all min-h-[44px] sm:min-h-0"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                <span>Import New Report</span>
-              </button>
+              {canEdit && (
+                <button
+                  onClick={onOpenImport}
+                  className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm sm:text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all min-h-[44px] sm:min-h-0"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Import New Report</span>
+                </button>
+              )}
             </div>
           )
         }
@@ -700,7 +706,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         </p>
                       </div>
 
-                      {onDeleteBatch && (
+                      {canEdit && onDeleteBatch && (
                         <button
                           onClick={(e) => { e.stopPropagation(); setBatchToDelete({ name: report.batch_name || '', logId: report.id }); }}
                           className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors shrink-0"
@@ -753,13 +759,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </button>
 
                     {/* Button 2: Start WhatsApp Outreach (Subtle Secondary Button) */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onOpenNudges(report.batch_name || undefined); }}
-                      className="w-full py-2.5 px-3.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white font-bold text-xs flex items-center justify-center space-x-2 border border-white/10 hover:border-emerald-500/30 transition-all min-h-[40px] active:scale-[0.99] cursor-pointer"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Start WhatsApp Outreach</span>
-                    </button>
+                    {onOpenNudges && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onOpenNudges(report.batch_name || undefined); }}
+                        className="w-full py-2.5 px-3.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white font-bold text-xs flex items-center justify-center space-x-2 border border-white/10 hover:border-emerald-500/30 transition-all min-h-[40px] active:scale-[0.99] cursor-pointer"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Start WhatsApp Outreach</span>
+                      </button>
+                    )}
                   </div>
                 </GlassCard>
               ))}
@@ -799,21 +807,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </button>
               )}
 
-              <button
-                onClick={() => { setMemberToEdit(null); setIsAddModalOpen(true); }}
-                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
-              >
-                <UserPlus className="w-4 h-4 text-emerald-400" />
-                <span>Add Member</span>
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => { setMemberToEdit(null); setIsAddModalOpen(true); }}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+                >
+                  <UserPlus className="w-4 h-4 text-emerald-400" />
+                  <span>Add Member</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => onOpenNudges(activeReportName || undefined)}
-                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
-              >
-                <MessageSquare className="w-4 h-4 text-teal-400" />
-                <span>Start Outreach</span>
-              </button>
+              {onOpenNudges && (
+                <button
+                  onClick={() => onOpenNudges(activeReportName || undefined)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 border border-white/10 transition-all"
+                >
+                  <MessageSquare className="w-4 h-4 text-teal-400" />
+                  <span>Start Outreach</span>
+                </button>
+              )}
 
               {/* <button
                 onClick={() => setActiveReportName(null)}
@@ -918,22 +930,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         <span>Details</span>
                       </button> */}
 
-                      <button
-                        onClick={() => { setMemberToEdit(member); setIsAddModalOpen(true); }}
-                        className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center space-x-1 border border-white/10 transition-all active:scale-95"
-                      >
-                        <Edit className="w-3.5 h-3.5 text-slate-300" />
-                        <span>Edit</span>
-                      </button>
+                      {canEdit && (
+                        <>
+                          <button
+                            onClick={() => { setMemberToEdit(member); setIsAddModalOpen(true); }}
+                            className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center space-x-1 border border-white/10 transition-all active:scale-95"
+                          >
+                            <Edit className="w-3.5 h-3.5 text-slate-300" />
+                            <span>Edit</span>
+                          </button>
 
-                      <button
-                        onClick={() => setMemberToDelete(member)}
-                        className="py-1.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold flex items-center justify-center space-x-1 border border-rose-500/20 transition-all active:scale-95"
-                        title="Delete Member"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete</span>
-                      </button>
+                          <button
+                            onClick={() => setMemberToDelete(member)}
+                            className="py-1.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold flex items-center justify-center space-x-1 border border-rose-500/20 transition-all active:scale-95"
+                            title="Delete Member"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))
@@ -1041,23 +1057,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           </td>
 
                           <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end space-x-1">
-                              <button
-                                onClick={() => { setMemberToEdit(member); setIsAddModalOpen(true); }}
-                                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                                title="Edit Member"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
+                            {canEdit && (
+                              <div className="flex items-center justify-end space-x-1">
+                                <button
+                                  onClick={() => { setMemberToEdit(member); setIsAddModalOpen(true); }}
+                                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                                  title="Edit Member"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
 
-                              <button
-                                onClick={() => setMemberToDelete(member)}
-                                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                                title="Delete Member"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                                <button
+                                  onClick={() => setMemberToDelete(member)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                  title="Delete Member"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );

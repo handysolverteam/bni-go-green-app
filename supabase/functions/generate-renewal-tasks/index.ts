@@ -11,6 +11,7 @@
 //   supabase functions deploy generate-renewal-tasks
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logCallerScope } from "../_shared/callerScope.ts";
 import { generateRenewalTasks } from "../_shared/renewals/tasks.ts";
 import { extractErrorMessage } from "../_shared/renewals/error-message.ts";
 
@@ -40,6 +41,7 @@ Deno.serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    await logCallerScope(req, admin, "generate-renewal-tasks");
     const result = await generateRenewalTasks(admin);
 
     return json(result, 200);

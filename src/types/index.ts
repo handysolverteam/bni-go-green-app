@@ -1,6 +1,11 @@
 export type UserRole = 'owner' | 'admin' | 'member';
 export type SidebarMode = 'full' | 'icons' | 'hover';
 
+// RBAC committee tags — independent of UserRole's hierarchy. A member can hold zero,
+// one, or both, regardless of whether they're owner/admin/member. See
+// src/lib/permissions.ts and supabase/migrations/007_committees_and_role_check.sql.
+export type Committee = 'go_green' | 'rrc';
+
 export interface ChatOption {
   id: string;
   label: string;
@@ -42,6 +47,9 @@ export interface OrgMember {
   role: UserRole;
   created_at?: string;
   profile?: UserProfileExtended;
+  // Populated separately (fetchMemberCommittees) — not present on every OrgMember
+  // returned by fetchUserOrganization/fetchOrgMembers unless explicitly hydrated.
+  committees?: Committee[];
 }
 
 export interface UserProfileExtended {

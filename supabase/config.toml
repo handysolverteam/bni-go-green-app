@@ -70,3 +70,10 @@ verify_jwt = false
 
 [functions.sso-consume]
 verify_jwt = false
+
+# RBAC: both take a Firebase ID token as the bearer and verify it in their own code.
+[functions.ensure-role-claim]
+verify_jwt = false
+
+[functions.sync-committee-tag]
+verify_jwt = false

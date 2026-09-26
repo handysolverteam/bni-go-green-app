@@ -6,6 +6,8 @@ import { UniversalModal } from './UniversalModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../types';
+import { isAdminOrOwner, hasFullRosterAccess, hasFullRenewalsAccess } from '../lib/permissions';
+import { ROLE_LABELS_SHORT } from '../lib/roles';
 
 export type NavigationTab = 'dashboard' | 'trends' | 'nudges' | 'chat' | 'org' | 'profile' | 'settings' | 'import' | 'renewals';
 
@@ -66,7 +68,13 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   const [showModeModal, setShowModeModal] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
-  const isAdminOrOwner = orgMember?.role === 'owner' || orgMember?.role === 'admin';
+  const isAdminOrOwnerRole = isAdminOrOwner(orgMember?.role);
+  const canSeeFullRoster = hasFullRosterAccess(orgMember?.role, orgMember?.committees);
+  const canManageRenewals = hasFullRenewalsAccess(orgMember?.role, orgMember?.committees);
+  const isNavItemAllowed = (item: { adminOnly?: boolean; needsRoster?: boolean; needsRenewals?: boolean }) =>
+    !(item.adminOnly && !isAdminOrOwnerRole) &&
+    !(item.needsRoster && !canSeeFullRoster) &&
+    !(item.needsRenewals && !canManageRenewals);
 
   const updateSidebarMode = (mode: SidebarMode) => {
     setSidebarMode(mode);
@@ -74,15 +82,26 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     setShowModeModal(false);
   };
 
-  const navItems = [
+  const navItems: Array<{
+    id: NavigationTab;
+    label: string;
+    icon: typeof BarChart3;
+    badge?: number | null;
+    subPath?: string;
+    adminOnly?: boolean;
+    needsRoster?: boolean;
+    needsRenewals?: boolean;
+  }> = [
     { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
     { id: 'trends' as NavigationTab, label: 'Trends', icon: TrendingUp },
-    { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare },
-    { id: 'renewals' as NavigationTab, label: 'Renewals', icon: RefreshCw },
-    { id: 'renewals' as NavigationTab, label: 'Import Data', icon: UploadCloud, subPath: 'import' },
+    { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare, needsRoster: true },
+    // Renewals hidden for now (not yet role-enforced server-side). Uncomment both, and add
+    // 'renewals' back to validTabs in App.tsx, to re-enable.
+    // { id: 'renewals' as NavigationTab, label: 'Renewals', icon: RefreshCw },
+    // { id: 'renewals' as NavigationTab, label: 'Import Data', icon: UploadCloud, subPath: 'import', needsRenewals: true },
     { id: 'org' as NavigationTab, label: 'Chapter', icon: Building2 },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
-    { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Bot },
+    { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Bot, needsRoster: true },
   ];
 
   // Width calculations based on sidebarMode
@@ -131,7 +150,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         {/* Navigation Items */}
         <nav className="flex-1 space-y-1.5 py-3">
           {navItems.map((item) => {
-            if (item.adminOnly && !isAdminOrOwner) return null;
+            if (!isNavItemAllowed(item)) return null;
             const Icon = item.icon;
             // Two nav items can share id 'renewals' (plain vs the Import
             // sub-view) -- only distinguish by subPath for that id, so
@@ -197,7 +216,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
                     </div>
                     <div className="text-[10px] text-slate-400 capitalize font-semibold flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-                      <span>{orgMember?.role || 'Member'}</span>
+                      <span>{orgMember?.role ? ROLE_LABELS_SHORT[orgMember.role] : 'Member'}</span>
                     </div>
                   </div>
                 )}
@@ -300,7 +319,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
                     <div className="text-xs font-bold text-white truncate">{userProfile?.full_name || user.displayName || 'Member Profile'}</div>
                     <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-                      <span>{orgMember?.role?.toUpperCase() || 'MEMBER'} &bull; View Profile</span>
+                      <span>{(orgMember?.role ? ROLE_LABELS_SHORT[orgMember.role] : 'Member').toUpperCase()} &bull; View Profile</span>
                     </div>
                   </div>
                 </div>
@@ -332,7 +351,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] pointer-events-none">
         <nav className="pointer-events-auto max-w-sm sm:max-w-md mx-auto bg-slate-900/80 backdrop-blur-3xl border border-white/20 rounded-full p-2 flex items-center justify-around shadow-[0_16px_40px_rgba(0,0,0,0.85)] shadow-emerald-500/20 ring-1 ring-white/10">
           {navItems.map((item) => {
-            if (item.adminOnly && !isAdminOrOwner) return null;
+            if (!isNavItemAllowed(item)) return null;
             const Icon = item.icon;
             const isActive = activeTab === item.id && (item.id !== 'renewals' || (item.subPath ?? null) === activeSubPath);
             return (

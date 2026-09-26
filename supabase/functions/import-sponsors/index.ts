@@ -6,6 +6,7 @@
 //   supabase functions deploy import-sponsors
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logCallerScope } from "../_shared/callerScope.ts";
 import { importSponsorReport } from "../_shared/renewals/sponsor-database-import.ts";
 import { extractErrorMessage } from "../_shared/renewals/error-message.ts";
 
@@ -46,6 +47,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    await logCallerScope(req, admin, "import-sponsors");
     const result = await importSponsorReport(admin, await file.text(), file.name);
 
     return json(result, 200);

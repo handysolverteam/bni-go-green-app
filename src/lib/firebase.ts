@@ -262,3 +262,30 @@ export async function reloadFirebaseUser(): Promise<FirebaseUser | null> {
   await current.reload();
   return firebaseAuth.currentUser;
 }
+
+/**
+ * RBAC Phase 2: Supabase's Third-Party Auth for Firebase requires every ID token to carry
+ * a `role: "authenticated"` custom claim (Firebase never sets this on its own -- see the
+ * ensure-role-claim Edge Function). Called on every auth state change; the Edge Function
+ * itself is the no-op check, so this is cheap to call unconditionally. A stale cached ID
+ * token doesn't carry a newly-granted claim, so the token is force-refreshed once the
+ * Edge Function reports it actually changed something.
+ *
+ * Fire-and-forget by design: RLS is still fully permissive while this rolls out (see the
+ * plan), so nothing in the app currently depends on this claim being present yet, and a
+ * failure here (offline, cold-start) must not block sign-in.
+ */
+export async function ensureFirebaseRoleClaim(user: FirebaseUser): Promise<void> {
+  const idToken = await user.getIdToken();
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ensure-role-claim`,
+    { method: 'POST', headers: { Authorization: `Bearer ${idToken}` } }
+  );
+
+  if (!response.ok) {
+    throw new Error(`ensure-role-claim failed: ${await response.text()}`);
+  }
+
+  const { updated } = (await response.json()) as { updated: boolean };
+  if (updated) await user.getIdToken(true);
+}

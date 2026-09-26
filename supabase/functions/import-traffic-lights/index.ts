@@ -21,7 +21,7 @@
 
 import { Buffer } from "node:buffer";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { PDFParse } from "npm:pdf-parse@2.4.5";
+import { logCallerScope } from "../_shared/callerScope.ts";
 import {
   formatImportError,
   importTrafficLightPdfScoreReport,
@@ -42,6 +42,10 @@ const json = (body: unknown, status: number) =>
   });
 
 async function extractPdfText(file: File): Promise<string> {
+  // Loaded lazily: pdf-parse's bundled pdfjs touches DOMMatrix at module load, which the Edge
+  // runtime lacks. A top-level import crashed the whole function at boot (even CORS preflight
+  // and the XLSX path); this way only PDF uploads are affected.
+  const { PDFParse } = await import("npm:pdf-parse@2.4.5");
   const bytes = new Uint8Array(await file.arrayBuffer());
   const parser = new PDFParse({ data: bytes });
 
@@ -82,6 +86,7 @@ Deno.serve(async (req: Request) => {
 
     const normalizedReportMonth = typeof reportMonth === "string" && reportMonth ? reportMonth : null;
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    await logCallerScope(req, admin, "import-traffic-lights");
 
     if (filename.endsWith(".xlsx")) {
       const buffer = Buffer.from(await file.arrayBuffer());
