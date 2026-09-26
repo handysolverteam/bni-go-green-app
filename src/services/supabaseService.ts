@@ -1,4 +1,4 @@
-import { Member, Organization, OrgMember, UserProfileExtended, OutreachTemplate, Committee } from '../types';
+import { Member, Organization, OrgMember, UserProfileExtended, OutreachTemplate, Committee, UserRole } from '../types';
 import { scoreMember } from '../lib/scoringEngine';
 import { UNIVERSAL_DEFAULT_TEMPLATE_TEXT } from '../lib/outreachUtils';
 import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
@@ -624,6 +624,41 @@ export const supabaseService = {
       throw new Error(payload?.error || error.message || 'Failed to update committee tag.');
     }
     return data as { renewalsLink: string };
+  },
+
+  // --- PLATFORM ADMIN (acts across every organization, not just one chapter) ---
+  /** True only for the handful of accounts granted platform-wide access via SQL (see migration 009). */
+  async checkIsPlatformAdmin(): Promise<boolean> {
+    const { data, error } = await supabase.rpc('is_platform_admin');
+    if (error) return false;
+    return Boolean(data);
+  },
+
+  /** Every organization on the platform, with a member count. Platform-admin only -- RLS returns nothing to anyone else. */
+  async fetchAllOrganizationsForAdmin(): Promise<Array<Organization & { member_count: number }>> {
+    const [{ data: orgs, error: orgsError }, { data: members, error: membersError }] = await Promise.all([
+      supabase.from('organizations').select('*').order('name', { ascending: true }),
+      supabase.from('org_members').select('org_id'),
+    ]);
+    if (orgsError || !orgs) return [];
+
+    const counts = new Map<string, number>();
+    for (const row of members || []) {
+      counts.set(row.org_id, (counts.get(row.org_id) ?? 0) + 1);
+    }
+    return orgs.map(org => ({ ...org, member_count: counts.get(org.id) ?? 0 }));
+  },
+
+  /** Adds (or re-roles) someone in any organization directly, no invite code needed. Platform-admin only. */
+  async adminAddOrgMember(orgId: string, userId: string, userEmail: string, role: UserRole): Promise<OrgMember> {
+    const { data, error } = await supabase.rpc('admin_add_org_member', {
+      p_org_id: orgId,
+      p_user_id: userId,
+      p_user_email: userEmail,
+      p_role: role,
+    });
+    if (error) throw new Error(error.message || 'Failed to add member.');
+    return data as OrgMember;
   },
 
   // --- USER PROFILE METHODS ---
