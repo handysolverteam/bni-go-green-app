@@ -8,7 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 import { OrgShareWidget } from './OrgShareWidget';
 import { AccountDangerZone } from './AccountDangerZone';
-import { SignInMethodsCard } from './SignInMethodsCard';
+// import { SignInMethodsCard } from './SignInMethodsCard'; // hidden while sign-in is Google-only
 
 interface ProfilePageProps {
   profile: UserProfileExtended | null;
@@ -306,8 +306,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         </form>
       </GlassCard>
 
-      {/* Linked sign-in methods */}
-      <SignInMethodsCard />
+      {/* Linked sign-in methods -- hidden while sign-in is Google-only (its only job is linking a phone).
+      <SignInMethodsCard /> */}
 
       {/* Account & Membership Danger Zone */}
       {onLeaveOrganization && (

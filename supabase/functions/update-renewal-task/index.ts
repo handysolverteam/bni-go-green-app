@@ -11,6 +11,7 @@
 //   supabase functions deploy update-renewal-task
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logCallerScope } from "../_shared/callerScope.ts";
 import { getRenewalCycleUpdateForTaskStatus } from "../_shared/renewals/task-status.ts";
 import { extractErrorMessage } from "../_shared/renewals/error-message.ts";
 import type { RenewalTask } from "../_shared/renewals/types.ts";
@@ -52,6 +53,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    await logCallerScope(req, admin, "update-renewal-task");
     const table = (name: string) => admin.schema("renewals").from(name);
 
     const { data: task, error: taskError } = await table("renewal_tasks")

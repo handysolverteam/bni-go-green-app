@@ -15,6 +15,7 @@
 //   supabase functions deploy renewals-dashboard
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logCallerScope } from "../_shared/callerScope.ts";
 import { getAchievementMembers, getCommitteeMembers, getDashboardCycles, getMemberDetail } from "../_shared/renewals/data.ts";
 import { extractErrorMessage } from "../_shared/renewals/error-message.ts";
 
@@ -46,6 +47,7 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    await logCallerScope(req, admin, "renewals-dashboard", { action });
 
     switch (action) {
       case "cycles":

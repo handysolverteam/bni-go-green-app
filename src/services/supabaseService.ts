@@ -1,22 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
-import { Member, Organization, OrgMember, UserProfileExtended, OutreachTemplate } from '../types';
+import { Member, Organization, OrgMember, UserProfileExtended, OutreachTemplate, Committee } from '../types';
 import { scoreMember } from '../lib/scoringEngine';
 import { UNIVERSAL_DEFAULT_TEMPLATE_TEXT } from '../lib/outreachUtils';
 import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
-
-// No hardcoded fallbacks: a baked-in key survives rotation, and the truncated placeholder that
-// used to live here would connect with an invalid credential and fail in confusing ways.
-// Misconfiguration must fail loudly instead.
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase configuration. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file (see .env.example).'
-  );
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// RBAC Phase 2: this file used to create its own separate Supabase client here (a second
+// instance alongside lib/supabase.ts's). That meant the Third-Party-Auth accessToken hook
+// (added to lib/supabase.ts) covered only half the app's queries -- everything through
+// this service would still go out unauthenticated after the cutover, silently. Consolidated
+// to the one client so every query carries the caller's Firebase identity consistently.
+import { supabase } from '../lib/supabase';
+export { supabase };
 
 export interface OutreachLogRecord {
   user_id: string;
@@ -238,39 +230,9 @@ export const supabaseService = {
         p_code: code
       });
 
-      if (!rpcError && rpcData && rpcData.org && rpcData.member) {
-        return { org: rpcData.org, member: rpcData.member };
-      }
-
-      // 2. Direct table fallback
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .insert([{
-          name,
-          chapter_name: chapterName,
-          city,
-          code,
-          created_by: userId
-        }])
-        .select()
-        .single();
-
-      if (orgError || !orgData) throw orgError;
-
-      const { data: memberData, error: memberError } = await supabase
-        .from('org_members')
-        .insert([{
-          org_id: orgData.id,
-          user_id: userId,
-          user_email: userEmail || '',
-          role: 'owner'
-        }])
-        .select()
-        .single();
-
-      if (memberError || !memberData) throw memberError;
-
-      return { org: orgData, member: memberData };
+      // No direct-insert fallback: under RLS only the RPC may create an org and its Superadmin.
+      if (rpcError || !rpcData?.org || !rpcData?.member) throw rpcError || new Error('Organization was not created.');
+      return { org: rpcData.org, member: rpcData.member };
     } catch (e) {
       console.error('Error creating org:', e);
       return null;
@@ -281,44 +243,16 @@ export const supabaseService = {
     return this.joinOrganizationByCode(code, userId, userEmail);
   },
 
-  async joinOrganizationByCode(code: string, userId: string, userEmail?: string): Promise<{ org: Organization; member: OrgMember } | { error: string } | null> {
+  /**
+   * Joins via the join_org_by_code RPC: under RLS a non-member cannot read organizations, so the
+   * code is checked server-side. The caller always joins as themselves, as a plain member.
+   */
+  async joinOrganizationByCode(code: string, _userId?: string, _userEmail?: string): Promise<{ org: Organization; member: OrgMember } | { error: string } | null> {
     try {
-      const cleanCode = code.trim();
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('code', cleanCode)
-        .maybeSingle();
-
-      if (orgError || !orgData) {
-        return { error: 'Invalid 6-digit organization code. Please check and try again.' };
-      }
-
-      const { data: existingMember } = await supabase
-        .from('org_members')
-        .select('*')
-        .eq('org_id', orgData.id)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (existingMember) {
-        return { org: orgData, member: existingMember };
-      }
-
-      const { data: newMember, error: memberError } = await supabase
-        .from('org_members')
-        .insert([{
-          org_id: orgData.id,
-          user_id: userId,
-          user_email: userEmail || '',
-          role: 'member'
-        }])
-        .select()
-        .single();
-
-      if (memberError || !newMember) throw memberError;
-
-      return { org: orgData, member: newMember };
+      const { data, error } = await supabase.rpc('join_org_by_code', { p_code: code.trim() });
+      if (error) throw error;
+      if (data?.error) return { error: data.error };
+      return { org: data.org, member: data.member };
     } catch (e: any) {
       console.error('Error joining org by code:', e);
       return { error: e.message || 'Failed to join organization.' };
@@ -359,6 +293,12 @@ export const supabaseService = {
         return null;
       }
 
+      const { data: committeeRows } = await supabase
+        .from('member_committees')
+        .select('committee')
+        .eq('org_id', memberData.org_id)
+        .eq('user_id', userId);
+
       return {
         org: memberData.organization,
         member: {
@@ -367,7 +307,8 @@ export const supabaseService = {
           user_id: userId,
           user_email: memberData.user_email || userEmail || '',
           role: memberData.role,
-          created_at: memberData.created_at
+          created_at: memberData.created_at,
+          committees: (committeeRows || []).map((row: { committee: string }) => row.committee as Committee),
         }
       };
     } catch (e) {
@@ -430,7 +371,7 @@ export const supabaseService = {
       if (isSoleOwner) {
         return {
           canLeave: false,
-          reason: 'You are the only Owner of this chapter. Promote another member to Owner in the Chapter tab before you leave, otherwise nobody will be able to manage it.',
+          reason: 'You are the only Superadmin of this chapter. Use "Make Superadmin" on another member in the Chapter tab before you leave, otherwise nobody will be able to manage it.',
           memberCount: data.length,
           ownerCount: owners.length,
           isSoleOwner: true,
@@ -473,13 +414,6 @@ export const supabaseService = {
           .eq('org_id', orgId)
           .eq('user_email', userEmail);
       }
-
-      // Unlink (but keep) any roster row that pointed at this user
-      await supabase
-        .from('members')
-        .update({ user_id: null })
-        .eq('org_id', orgId)
-        .eq('user_id', userId);
 
       return { ok: true };
     } catch (e: any) {
@@ -529,12 +463,9 @@ export const supabaseService = {
         return {
           ok: false,
           blockedOrgs,
-          error: `You are the only Owner of ${blockedOrgs.join(', ')}. Promote another member to Owner before deleting your account.`,
+          error: `You are the only Superadmin of ${blockedOrgs.join(', ')}. Use "Make Superadmin" on another member in the Chapter tab before deleting your account.`,
         };
       }
-
-      // Unlink roster rows, keeping the chapter's PALMS data intact
-      await supabase.from('members').update({ user_id: null }).eq('user_id', userId);
 
       // Personal outreach history
       await supabase.from('outreach_logs').delete().eq('user_id', userId);
@@ -614,6 +545,11 @@ export const supabaseService = {
   },
 
   async updateOrgMemberRole(orgId: string, userId: string, newRole: string): Promise<boolean> {
+    // Superadmin can only be handed over via transferOwnership(), never granted directly.
+    if (newRole === 'owner') {
+      console.error('updateOrgMemberRole refuses role=owner; use transferOwnership instead.');
+      return false;
+    }
     try {
       const { error } = await supabase
         .from('org_members')
@@ -626,6 +562,68 @@ export const supabaseService = {
       console.error('Error updating member role:', e);
       return false;
     }
+  },
+
+  /**
+   * Hands the Superadmin role to another member and steps the current Superadmin down to Admin.
+   * The target is promoted first so the chapter is never left without a Superadmin, even if the
+   * second write fails (worst case: two Superadmins, which the caller is told about).
+   */
+  async transferOwnership(orgId: string, fromUserId: string, toUserId: string): Promise<{ ok: boolean; error?: string }> {
+    const { data: promoted, error: promoteError } = await supabase
+      .from('org_members')
+      .update({ role: 'owner' })
+      .eq('org_id', orgId)
+      .eq('user_id', toUserId)
+      .select('user_id');
+    if (promoteError || !promoted?.length) {
+      return { ok: false, error: 'Could not promote that member. Nothing was changed.' };
+    }
+
+    const { error: demoteError } = await supabase
+      .from('org_members')
+      .update({ role: 'admin' })
+      .eq('org_id', orgId)
+      .eq('user_id', fromUserId);
+    if (demoteError) {
+      return { ok: false, error: 'The new Superadmin was set, but you could not be moved to Admin. You are both Superadmins for now.' };
+    }
+    return { ok: true };
+  },
+
+  /** Committee tags for every member of an org, keyed by user_id. */
+  async fetchOrgCommittees(orgId: string): Promise<Record<string, Committee[]>> {
+    const { data, error } = await supabase
+      .from('member_committees')
+      .select('user_id, committee')
+      .eq('org_id', orgId);
+    if (error || !data) return {};
+
+    const byUser: Record<string, Committee[]> = {};
+    for (const row of data) {
+      (byUser[row.user_id] ??= []).push(row.committee as Committee);
+    }
+    return byUser;
+  },
+
+  /**
+   * Grants/revokes a committee tag through the sync-committee-tag Edge Function (it checks the
+   * caller is an Admin/Superadmin of the org, and links RRC holders to their renewals record).
+   */
+  async setCommitteeTag(
+    orgId: string,
+    userId: string,
+    committee: Committee,
+    grant: boolean,
+  ): Promise<{ renewalsLink: string }> {
+    const { data, error } = await supabase.functions.invoke('sync-committee-tag', {
+      body: { orgId, userId, committee, grant },
+    });
+    if (error) {
+      const payload = await (error as { context?: Response }).context?.json().catch(() => null);
+      throw new Error(payload?.error || error.message || 'Failed to update committee tag.');
+    }
+    return data as { renewalsLink: string };
   },
 
   // --- USER PROFILE METHODS ---
@@ -1459,17 +1457,15 @@ export const supabaseService = {
     }
   },
 
-  /** Fetches one report's stored Excel (base64) only when the user asks to download it. */
+  /**
+   * Fetches one report's stored Excel (base64) only when the user asks to download it. Goes
+   * through an RPC because the file is the whole roster: only Admins/Go Green may read it.
+   */
   async fetchImportLogFileData(logId: string): Promise<string | null> {
     try {
-      const { data, error } = await supabase
-        .from('import_logs')
-        .select('file_data')
-        .eq('id', logId)
-        .maybeSingle();
-
-      if (error || !data?.file_data) return null;
-      return data.file_data as string;
+      const { data, error } = await supabase.rpc('get_import_file_data', { p_log_id: logId });
+      if (error || !data) return null;
+      return data as string;
     } catch (e) {
       console.error('fetchImportLogFileData exception:', e);
       return null;

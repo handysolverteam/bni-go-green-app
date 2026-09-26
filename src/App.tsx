@@ -14,10 +14,12 @@ import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
 import { TrendsTab } from './components/TrendsTab';
 import { ChatTab } from './components/ChatTab';
-import { RenewalsTab } from './components/renewals/RenewalsTab';
+// import { RenewalsTab } from './components/renewals/RenewalsTab'; // Renewals hidden -- see validTabs
 import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
+import { isAdminOrOwner, hasFullRosterAccess } from './lib/permissions';
+import { AccessRequired } from './components/AccessRequired';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
 import { captureInviteCode, clearPendingInviteCode, clearInviteCodeFromUrl } from './lib/inviteCode';
@@ -35,7 +37,8 @@ const parseHash = () => {
     reportName = subReport.startsWith('report/') ? subReport.replace('report/', '') : subReport;
   }
 
-  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'import', 'nudges', 'chat', 'org', 'profile', 'settings', 'renewals'];
+  // Renewals is hidden for now (not yet role-enforced server-side); add 'renewals' back to re-enable.
+  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'import', 'nudges', 'chat', 'org', 'profile', 'settings'];
   if (validTabs.includes(mainTab)) {
     return { tab: mainTab, report: ['dashboard', 'nudges', 'renewals'].includes(mainTab) ? (reportName || null) : null };
   }
@@ -197,6 +200,8 @@ export const AppContent: React.FC = () => {
       return null;
     }
   });
+
+  const canSeeFullRoster = hasFullRosterAccess(orgMember?.role, orgMember?.committees);
 
   const [userProfile, setUserProfile] = useState<UserProfileExtended | null>(() => {
     try {
@@ -861,7 +866,8 @@ export const AppContent: React.FC = () => {
             onSelectReportName={(repName) => navigateTo('dashboard', repName)}
             onSelectMember={(m) => setSelectedMember(m)}
             onOpenImport={() => navigateTo('import')}
-            onOpenNudges={(reportName) => navigateTo('nudges', reportName)}
+            onOpenNudges={canSeeFullRoster ? (reportName) => navigateTo('nudges', reportName) : undefined}
+            canEdit={isAdminOrOwner(orgMember?.role)}
             onSaveMember={handleSaveMember}
             onDeleteMember={handleDeleteMember}
             onDeleteBatch={handleDeleteBatch}
@@ -892,28 +898,43 @@ export const AppContent: React.FC = () => {
         )}
 
         {activeTab === 'nudges' && (
-          <NudgeSender
-            members={members}
-            importLogs={importLogs}
-            initialReportName={selectedNudgeReport}
-            onSelectReportName={(repName) => navigateTo('nudges', repName)}
-            customSignature={org.custom_signature}
-            orgId={org.id}
-          />
+          canSeeFullRoster ? (
+            <NudgeSender
+              members={members}
+              importLogs={importLogs}
+              initialReportName={selectedNudgeReport}
+              onSelectReportName={(repName) => navigateTo('nudges', repName)}
+              customSignature={org.custom_signature}
+              orgId={org.id}
+            />
+          ) : (
+            <AccessRequired
+              title="Go Green Access Required"
+              message="Messages are sent by Admins, Superadmins and the Go Green committee. Ask your chapter's Superadmin if you should be on it."
+            />
+          )
         )}
 
         {activeTab === 'chat' && (
-          <ChatTab
-            members={members}
-            org={org}
-            importLogs={importLogs}
-            userProfile={userProfile}
-          />
+          canSeeFullRoster ? (
+            <ChatTab
+              members={members}
+              org={org}
+              importLogs={importLogs}
+              userProfile={userProfile}
+            />
+          ) : (
+            <AccessRequired
+              title="Go Green Access Required"
+              message="Chapter AI works over the whole chapter's data, so it's available to Admins, Superadmins and the Go Green committee."
+            />
+          )
         )}
 
+        {/* Renewals hidden -- see validTabs.
         {activeTab === 'renewals' && (
           <RenewalsTab initialView={selectedNudgeReport === 'import' ? 'import' : undefined} />
-        )}
+        )} */}
 
         {activeTab === 'org' && (
           <OrganizationTab
@@ -938,12 +959,20 @@ export const AppContent: React.FC = () => {
         )}
 
         {activeTab === 'settings' && (
-          <SettingsPage
-            orgId={org.id}
-            onSettingsSaved={() => {
-              setMembers(prev => prev.map(m => scoreMember(m)));
-            }}
-          />
+          isAdminOrOwner(orgMember?.role) ? (
+            <SettingsPage
+              orgId={org.id}
+              onSettingsSaved={() => {
+                setMembers(prev => prev.map(m => scoreMember(m)));
+              }}
+            />
+          ) : (
+            // The Sidebar only hides the link; direct #settings navigation lands here.
+            <AccessRequired
+              title="Admin Access Required"
+              message="Only Admins and Superadmins can view chapter settings. Contact your chapter's Superadmin if you need something changed here."
+            />
+          )
         )}
       </div>
 

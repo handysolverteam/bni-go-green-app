@@ -14,10 +14,10 @@ import {
   linkGoogleToCurrentUser,
   unlinkProvider,
   reloadFirebaseUser,
+  ensureFirebaseRoleClaim,
   PROVIDER_GOOGLE,
   PROVIDER_PHONE,
 } from '../lib/firebase';
-import { signOutSupabase } from '../lib/supabase';
 import { onAuthStateChanged, type ConfirmationResult, type User as FirebaseUser } from 'firebase/auth';
 import { supabaseService } from '../services/supabaseService';
 import { clearInviteCodeFromUrl } from '../lib/inviteCode';
@@ -125,6 +125,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearTimeout(failsafe);
       setUser(fbUser ? fromFirebaseUser(fbUser) : null);
       setLoading(false);
+
+      // RBAC Phase 2: see ensureFirebaseRoleClaim's own comment. Deliberately not awaited --
+      // must never delay sign-in / the splash screen.
+      if (fbUser) {
+        ensureFirebaseRoleClaim(fbUser).catch((err) => {
+          console.error('ensureFirebaseRoleClaim failed:', err);
+        });
+      }
     });
 
     return () => {
@@ -222,9 +230,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cancelPhoneOtp();
 
       await signOutFirebase();
-      // Clears any leftover session from when Google sign-in could fall back to Supabase
-      // OAuth. Nothing creates those any more, but one may still be sitting in a browser.
-      await signOutSupabase();
       setUser(null);
 
       // Best-effort: ask every trusted sibling app to sign out too, so logging out here
@@ -277,7 +282,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         await signOutFirebase();
-        await signOutSupabase();
       } catch {}
 
       setUser(null);

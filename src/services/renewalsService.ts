@@ -1,10 +1,9 @@
 // Client wrapper around the Phase 2 renewals Edge Functions (see
-// docs/BNI_RRC_MIGRATION.md). These functions have no caller-auth check —
-// same anon-key-plus-permissive-RLS posture as the rest of Handychapter
-// today (see docs/SECURITY_REMEDIATION.md) — so calls just need the
-// project's anon key, no session/token plumbing.
+// docs/BNI_RRC_MIGRATION.md). Calls carry the caller's Firebase ID token (anon key when
+// signed out) so the functions can resolve the caller's RBAC scope.
 
 import { supabase } from '../lib/supabase';
+import { firebaseAuth } from '../lib/firebase';
 import type { AchievementMemberListItem, DashboardCycle, Member } from '../lib/renewals/types';
 import type { TaskInboxItem } from '../lib/renewals/task-inbox-model';
 import type { PalmsMonthlyCoverageEntry } from '../lib/renewals/palms-monthly-performance';
@@ -17,8 +16,9 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 /** Edge Functions that only accept GET (Supabase's own client always POSTs via .invoke()). */
 async function invokeGet<T>(functionName: string, params?: Record<string, string>): Promise<T> {
   const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+  const idToken = (await firebaseAuth.currentUser?.getIdToken().catch(() => null)) ?? null;
   const res = await fetch(`${supabaseUrl}/functions/v1/${functionName}${query}`, {
-    headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` },
+    headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${idToken ?? supabaseAnonKey}` },
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) {

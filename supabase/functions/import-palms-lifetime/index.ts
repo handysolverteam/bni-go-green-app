@@ -6,6 +6,7 @@
 //   supabase functions deploy import-palms-lifetime
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logCallerScope } from "../_shared/callerScope.ts";
 import { importLifetimePalmsChapterSummaryReports } from "../_shared/renewals/palms-database-import.ts";
 import { extractErrorMessage } from "../_shared/renewals/error-message.ts";
 
@@ -59,6 +60,7 @@ Deno.serve(async (req: Request) => {
     );
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    await logCallerScope(req, admin, "import-palms-lifetime");
     const result = await importLifetimePalmsChapterSummaryReports(admin, payload);
 
     return json(result, 200);
