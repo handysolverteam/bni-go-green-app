@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Member, Organization, ImportLog, UserProfileExtended } from '../types';
+import { Member, Organization, ImportLog, UserProfileExtended, OrgMember } from '../types';
 import { useToast } from '../context/ToastContext';
 import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { formatDecimal, formatCurrency } from '../lib/numberUtils';
 import { supabaseService } from '../services/supabaseService';
 import { geminiService } from '../services/geminiService';
 import { analyzeLocalChapterQuery } from '../services/localAiEngine';
+import { isAdminOrOwner } from '../lib/permissions';
 import { ConfirmationModal } from './ConfirmationModal';
 import { UniversalModal } from './UniversalModal';
 import {
@@ -58,10 +59,19 @@ interface ChatTabProps {
   org: Organization | null;
   importLogs?: ImportLog[];
   userProfile?: UserProfileExtended | null;
+  orgMember?: OrgMember | null;
 }
 
-export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [], userProfile }) => {
+export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [], userProfile, orgMember }) => {
   const { showToast } = useToast();
+
+  // Derive permission tier: owners and admins (President/VP) can see contact details.
+  // Go Green committee members can see scores/zones/metrics but NOT phone numbers,
+  // emails, or per-member TYFCB amounts.
+  const canSeeContactDetails = isAdminOrOwner(orgMember?.role);
+  const roleLabel = canSeeContactDetails
+    ? (orgMember?.role === 'owner' ? 'President' : 'Vice President')
+    : 'Go Green Committee Member';
 
   // Safe member property accessors (handles both PascalCase and snake_case from DB)
   const safeName = (m: any): string => m?.Name || m?.name || 'Member';
@@ -375,7 +385,9 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
         text,
         snapshot,
         userProfile,
-        messages
+        messages,
+        0.2,
+        { canSeeContactDetails, roleLabel }
       );
 
       let replyText = '';
@@ -387,7 +399,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
         replyText = geminiReply.trim();
       } else {
         // Smart Local AI Data Engine fallback with full read-time snapshot context, conversation history & counter-questions
-        replyText = analyzeLocalChapterQuery(text, snapshot, userProfile, messages);
+        replyText = analyzeLocalChapterQuery(text, snapshot, userProfile, messages, { canSeeContactDetails, roleLabel });
       }
 
       const aiMsg: ChatMessage = {
@@ -404,7 +416,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
     } catch (err) {
       console.error('Error handling AI message:', err);
       const fallbackSnapshot = { organization: org, members: members, importLogs: [], templates: [] };
-      const localReply = analyzeLocalChapterQuery(text, fallbackSnapshot, userProfile);
+      const localReply = analyzeLocalChapterQuery(text, fallbackSnapshot, userProfile, [], { canSeeContactDetails, roleLabel });
       const errorMsg: ChatMessage = {
         id: `ai_err_${Date.now()}`,
         sender: 'ai',
@@ -469,14 +481,15 @@ REGENERATION INSTRUCTIONS:
         snapshot,
         userProfile,
         messages.slice(0, msgIndex),
-        0.8
+        0.8,
+        { canSeeContactDetails, roleLabel }
       );
 
       let newReplyText = '';
       if (geminiReply && geminiReply.trim()) {
         newReplyText = geminiReply.trim();
       } else {
-        newReplyText = analyzeLocalChapterQuery(promptText, snapshot, userProfile, messages.slice(0, msgIndex));
+        newReplyText = analyzeLocalChapterQuery(promptText, snapshot, userProfile, messages.slice(0, msgIndex), { canSeeContactDetails, roleLabel });
       }
 
       setMessages(prev =>
@@ -587,9 +600,11 @@ REGENERATION INSTRUCTIONS:
 
             rMembers.forEach((m, idx) => {
               const refs = safeRefs(m);
-              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)} pts (📱 ${safePhone(m)})\n` +
+              const contactLine = canSeeContactDetails ? ` (📱 ${safePhone(m)})` : '';
+              const tyfcbLine = canSeeContactDetails ? `   • TYFCB: ${formatCurrency(safeTYFCB(m))}\n\n` : '\n';
+              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)} pts${contactLine}\n` +
                 `   • 1-to-1s: ${formatDecimal(safeOneToOnes(m), 1)}/wk | CEU: ${formatDecimal(safeCEU(m), 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
-                `   • TYFCB: ${formatCurrency(safeTYFCB(m))}\n\n`;
+                tyfcbLine;
             });
 
             replyText += `💡 *Leadership Action:*\nAcknowledge these top contributors in your next meeting!`;
@@ -615,9 +630,9 @@ REGENERATION INSTRUCTIONS:
 
             rMembers.forEach((m, idx) => {
               const refs = safeRefs(m);
-              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)}/100 pts (📱 ${safePhone(m)})\n` +
-                `   • 1-to-1s: ${formatDecimal(safeOneToOnes(m), 1)}/wk | CEU: ${formatDecimal(safeCEU(m), 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
-                `   • TYFCB: ${formatCurrency(safeTYFCB(m))}\n\n`;
+              const contactLine = canSeeContactDetails ? ` (📱 ${safePhone(m)})` : '';
+              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)}/100 pts${contactLine}\n` +
+                `   • 1-to-1s: ${formatDecimal(safeOneToOnes(m), 1)}/wk | CEU: ${formatDecimal(safeCEU(m), 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n\n`;
             });
 
             replyText += `💡 *Action Plan:*\n` +
@@ -646,9 +661,9 @@ REGENERATION INSTRUCTIONS:
 
             rMembers.forEach((m, idx) => {
               const refs = safeRefs(m);
-              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)}/100 pts (📱 ${safePhone(m)})\n` +
-                `   • 1-to-1s: ${formatDecimal(safeOneToOnes(m), 1)}/wk | CEU: ${formatDecimal(safeCEU(m), 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n` +
-                `   • TYFCB: ${formatCurrency(safeTYFCB(m))}\n\n`;
+              const contactLine = canSeeContactDetails ? ` (📱 ${safePhone(m)})` : '';
+              replyText += `${idx + 1}. *${safeName(m)}* — ${safeScore(m)}/100 pts${contactLine}\n` +
+                `   • 1-to-1s: ${formatDecimal(safeOneToOnes(m), 1)}/wk | CEU: ${formatDecimal(safeCEU(m), 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n\n`;
             });
 
             replyText += `💡 *Action:* 1 additional CEU module or 1-to-1 meeting elevates them to Green!`;
@@ -673,7 +688,8 @@ REGENERATION INSTRUCTIONS:
               `*Report:* ${rName}\n\n`;
 
             rMembers.forEach((m, idx) => {
-              replyText += `${idx + 1}. *${safeName(m)}* — ${formatDecimal(safeOneToOnes(m), 1)} meetings/wk (📱 ${safePhone(m)})\n`;
+              const contactLine = canSeeContactDetails ? ` (📱 ${safePhone(m)})` : '';
+              replyText += `${idx + 1}. *${safeName(m)}* — ${formatDecimal(safeOneToOnes(m), 1)} meetings/wk${contactLine}\n`;
             });
 
             replyText += `\n💡 *Action:* Pair these members during feature presentations!`;
@@ -692,14 +708,19 @@ REGENERATION INSTRUCTIONS:
           const sortedTYFCB = [...rMembers].sort((a, b) => safeTYFCB(b) - safeTYFCB(a));
           const totalTYFCB = rMembers.reduce((sum, m) => sum + safeTYFCB(m), 0);
 
-          replyText = `💰 *TYFCB Business Breakdown (${sortedTYFCB.length} Members)*\n` +
-            `*Report:* ${rName}\n\n`;
-
-          sortedTYFCB.forEach((m, idx) => {
-            replyText += `${idx + 1}. *${safeName(m)}* — ${formatCurrency(safeTYFCB(m))}\n`;
-          });
-
-          replyText += `\n📈 *Total Closed in ${rName}:* ${formatCurrency(totalTYFCB)}`;
+          if (canSeeContactDetails) {
+            replyText = `💰 *TYFCB Business Breakdown (${sortedTYFCB.length} Members)*\n` +
+              `*Report:* ${rName}\n\n`;
+            sortedTYFCB.forEach((m, idx) => {
+              replyText += `${idx + 1}. *${safeName(m)}* — ${formatCurrency(safeTYFCB(m))}\n`;
+            });
+            replyText += `\n📈 *Total Closed in ${rName}:* ${formatCurrency(totalTYFCB)}`;
+          } else {
+            replyText = `💰 *TYFCB Business Summary for ${rName}*\n\n` +
+              `📈 *Total Chapter Closed Business:* ${formatCurrency(totalTYFCB)}\n` +
+              `👥 *Contributing Members:* ${sortedTYFCB.filter(m => safeTYFCB(m) > 0).length} of ${sortedTYFCB.length}\n\n` +
+              `🔒 *Per-member TYFCB amounts are available to the President and Vice President only.*`;
+          }
 
           replyOptions = [
             { id: 'opt_rep_back', label: `📄 Back to ${rName}`, action: 'VIEW_SINGLE_REPORT', payload: { reportName: rName } },
