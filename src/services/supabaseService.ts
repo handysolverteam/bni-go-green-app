@@ -661,6 +661,82 @@ export const supabaseService = {
     return data as OrgMember;
   },
 
+  /** Candidate accounts to grant Platform Admin to. Searches org_members (every real user has a row there). */
+  async searchUsersByEmail(query: string): Promise<Array<{ user_id: string; user_email: string }>> {
+    const q = query.trim();
+    if (q.length < 3) return [];
+    const { data, error } = await supabase
+      .from('org_members')
+      .select('user_id, user_email')
+      .ilike('user_email', `%${q}%`)
+      .limit(20);
+    if (error || !data) return [];
+
+    const seen = new Set<string>();
+    return data.filter(row => (seen.has(row.user_id) ? false : (seen.add(row.user_id), true)));
+  },
+
+  async fetchPlatformAdmins(): Promise<Array<{
+    user_id: string;
+    email: string | null;
+    full_name: string | null;
+    granted_by: string | null;
+    granted_at: string;
+    note: string | null;
+  }>> {
+    const { data, error } = await supabase.rpc('admin_list_platform_admins');
+    if (error || !data) return [];
+    return data;
+  },
+
+  async grantPlatformAdmin(userId: string, note?: string): Promise<void> {
+    const { error } = await supabase.rpc('admin_grant_platform_admin', { p_user_id: userId, p_note: note || null });
+    if (error) throw new Error(error.message || 'Failed to grant Platform Admin.');
+  },
+
+  async revokePlatformAdmin(userId: string): Promise<void> {
+    const { error } = await supabase.rpc('admin_revoke_platform_admin', { p_user_id: userId });
+    if (error) throw new Error(error.message || 'Failed to revoke Platform Admin.');
+  },
+
+  /** Every logged Platform Admin action, most recent first. Enriches org_id/actor_uid with names client-side. */
+  async fetchPlatformAdminAuditLog(limit = 200): Promise<Array<{
+    id: string;
+    actor_uid: string;
+    actor_email: string | null;
+    org_id: string | null;
+    org_name: string | null;
+    action: string;
+    detail: Record<string, unknown> | null;
+    created_at: string;
+  }>> {
+    const { data: logRows, error } = await supabase
+      .from('platform_admin_audit_log')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error || !logRows || logRows.length === 0) return [];
+
+    const orgIds = Array.from(new Set(logRows.map(r => r.org_id).filter(Boolean)));
+    const actorUids = Array.from(new Set(logRows.map(r => r.actor_uid)));
+
+    const [{ data: orgs }, { data: actors }] = await Promise.all([
+      orgIds.length
+        ? supabase.from('organizations').select('id, name, chapter_name').in('id', orgIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; name: string; chapter_name?: string }> }),
+      supabase.from('org_members').select('user_id, user_email').in('user_id', actorUids),
+    ]);
+
+    const orgNames = new Map((orgs || []).map(o => [o.id, o.chapter_name || o.name]));
+    const actorEmails = new Map((actors || []).map(a => [a.user_id, a.user_email]));
+
+    return logRows.map(row => ({
+      ...row,
+      org_name: row.org_id ? orgNames.get(row.org_id) ?? null : null,
+      actor_email: actorEmails.get(row.actor_uid) ?? null,
+    }));
+  },
+
   // --- USER PROFILE METHODS ---
   /**
    * Looks for an EXISTING profile that already claims this phone number, under a different

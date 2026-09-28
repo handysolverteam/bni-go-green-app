@@ -18,7 +18,7 @@ import { ChatTab } from './components/ChatTab';
 import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { UniversalModal } from './components/UniversalModal';
-import { PlatformAdminOrgs } from './components/PlatformAdminOrgs';
+import { PlatformAdminPanel } from './components/PlatformAdminPanel';
 import { Crown } from 'lucide-react';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { isAdminOrOwner, hasFullRosterAccess } from './lib/permissions';
@@ -921,7 +921,7 @@ export const AppContent: React.FC = () => {
               &larr; Back to create/join a chapter
             </button>
           </div>
-          <PlatformAdminOrgs onManage={enterOrgAsAdmin} />
+          <PlatformAdminPanel onManageOrg={enterOrgAsAdmin} />
         </div>
       );
     }
@@ -971,8 +971,8 @@ export const AppContent: React.FC = () => {
       )}
 
       {showOrgBrowser && (
-        <UniversalModal isOpen={showOrgBrowser} onClose={() => setShowOrgBrowser(false)} maxWidth="max-w-3xl">
-          <PlatformAdminOrgs onManage={enterOrgAsAdmin} />
+        <UniversalModal isOpen={showOrgBrowser} onClose={() => setShowOrgBrowser(false)} maxWidth="max-w-4xl">
+          <PlatformAdminPanel onManageOrg={enterOrgAsAdmin} />
         </UniversalModal>
       )}
 
