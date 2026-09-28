@@ -1,12 +1,13 @@
 import { Member, Organization, UserProfileExtended, ChatMessage } from '../types';
 import { formatDecimal, formatCurrency } from '../lib/numberUtils';
-import { OrgSnapshot } from './geminiService';
+import { OrgSnapshot, ChatPermissions } from './geminiService';
 
 export function analyzeLocalChapterQuery(
   prompt: string,
   snapshot: OrgSnapshot,
   userProfile?: UserProfileExtended | null,
-  conversationHistory: ChatMessage[] = []
+  conversationHistory: ChatMessage[] = [],
+  permissions?: ChatPermissions
 ): string {
   const lower = (prompt || '').toLowerCase().trim();
   const userName = userProfile?.full_name ? userProfile.full_name : 'Member';
@@ -23,11 +24,49 @@ export function analyzeLocalChapterQuery(
   const greenThreshold = org?.green_threshold || 70;
   const amberThreshold = org?.amber_threshold || 50;
 
+  // Resolve permission flags — default to full access if not supplied
+  const canSeeContacts = permissions?.canSeeContactDetails ?? true;
+  const roleLabel = permissions?.roleLabel ?? 'President';
+  const CONTACT_RESTRICTED_MSG = `🔒 Contact details and individual TYFCB amounts are available to the *President* and *Vice President* only. I can show you zone summaries, scores, improvement tips, or report comparisons instead.`;
+
+  // ─── EARLY PERMISSION GUARD ────────────────────────────────────────────────
+  // This fires BEFORE any member-name matching, disambiguation, or affirmative
+  // handling. Without it, a query like "email address of X" would slip through
+  // to the member-name matcher, return a disambiguation card, and never refuse.
+  if (!canSeeContacts) {
+    const isRestrictedContactRequest =
+      lower.includes('email') ||
+      lower.includes('e-mail') ||
+      lower.includes('mail id') ||
+      lower.includes('mail address') ||
+      lower.includes('phone number') ||
+      lower.includes('phone no') ||
+      lower.includes('mobile number') ||
+      lower.includes('mobile no') ||
+      lower.includes('contact number') ||
+      lower.includes('contact no') ||
+      lower.includes('contact detail') ||
+      lower.includes('whatsapp number') ||
+      lower.includes('whatsapp no') ||
+      lower.includes('whatsapp contact') ||
+      // TYFCB per-member questions (e.g. "how much tyfcb did X generate?")
+      (lower.includes('tyfcb') && (lower.includes('who') || lower.includes('how much') || lower.includes('earn') || lower.includes('generated') || lower.includes('of ')));
+
+    if (isRestrictedContactRequest) {
+      return CONTACT_RESTRICTED_MSG;
+    }
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
   const availableReports = importLogs.map(l => l.batch_name).filter((b: string) => Boolean(b) && b !== 'Master Roster');
 
   // Helper functions
   const getMemberName = (m: any) => m.Name || m.name || 'Member';
-  const getMemberPhone = (m: any) => m.Phone || m.phone || 'N/A';
+  // Phone is gated by permission tier: go_green committee members cannot see contact details.
+  const getMemberPhone = (m: any): string => {
+    if (!canSeeContacts) return '[contact restricted]';
+    return m.Phone || m.phone || 'N/A';
+  };
   const getMemberScore = (m: any) => m.score || 0;
   const getMemberZone = (m: any) => {
     const raw = m.trafficLight?.label || m.traffic_light || '';
@@ -317,14 +356,14 @@ export function analyzeLocalChapterQuery(
 
     members.forEach((m, idx) => {
       const name = getMemberName(m);
-      const phone = getMemberPhone(m);
       const score = getMemberScore(m);
       const zone = getMemberZone(m);
       const emoji = getZoneEmoji(zone);
-      res += `${idx + 1}. *${name}* — ${emoji} ${score} pts (📱 ${phone})\n`;
+      const phoneDisplay = canSeeContacts ? ` (📱 ${getMemberPhone(m)})` : '';
+      res += `${idx + 1}. *${name}* — ${emoji} ${score} pts${phoneDisplay}\n`;
     });
 
-    res += `\n❓ *Would you like me to inspect 1-to-1s or TYFCB business details for any member above?*`;
+    res += `\n❓ *Would you like me to inspect 1-to-1s or CEU details for any member above?*`;
     return res;
   }
 
@@ -390,7 +429,6 @@ export function analyzeLocalChapterQuery(
 
   if (matchedMembers.length === 1 && matchedMember) {
     const name = getMemberName(matchedMember);
-    const phone = getMemberPhone(matchedMember);
     const score = getMemberScore(matchedMember);
     const zone = getMemberZone(matchedMember);
     const emoji = getZoneEmoji(zone);
@@ -399,15 +437,20 @@ export function analyzeLocalChapterQuery(
     const ceu = matchedMember.CEU || (matchedMember as any).ceu || 0;
     const memberTyfcb = matchedMember.TYFCB || (matchedMember as any).tyfcb || 0;
 
+    const phoneDisplay = canSeeContacts ? `📱 *Phone:* ${getMemberPhone(matchedMember)}\n\n` : '';
+    const tyfcbDisplay = canSeeContacts
+      ? `• *TYFCB Business:* ${formatCurrency(memberTyfcb)}\n\n`
+      : `• *TYFCB Business:* 🔒 Restricted (President/VP only)\n\n`;
+
     return `👤 *Member Record: ${name}*\n` +
       `*Chapter:* ${orgName} | *Report:* ${matchedMember.batch_name || (matchedMember as any).batch_name || 'Latest'}\n\n` +
       `📊 *Score:* ${emoji} *${score}/100 pts* (${zone} Zone)\n` +
-      `📱 *Phone:* ${phone}\n\n` +
+      phoneDisplay +
       `📈 *Activity Summary:*\n` +
       `• *1-to-1 Meetings:* ${formatDecimal(oneToOnes, 1)} / wk\n` +
       `• *CEU Credits:* ${formatDecimal(ceu, 1)} / wk\n` +
       `• *Referrals Given:* ${formatDecimal(refs, 1)} / wk\n` +
-      `• *TYFCB Business:* ${formatCurrency(memberTyfcb)}\n\n` +
+      tyfcbDisplay +
       `❓ *Would you like me to generate a WhatsApp outreach message for ${name}?*`;
   }
 
@@ -434,12 +477,13 @@ export function analyzeLocalChapterQuery(
     let res = `🟢 *${orgName} Green Zone Leaders (${greenMembers.length} Members)*\n\n`;
     greenMembers.forEach((m, idx) => {
       const name = getMemberName(m);
-      const phone = getMemberPhone(m);
       const score = getMemberScore(m);
       const refs = m.ReferralsGivenRate ?? m.RGT ?? (m as any).referrals_given ?? 0;
       const memberTyfcb = m.TYFCB || (m as any).tyfcb || 0;
-      res += `${idx + 1}. *${name}* — ${score} pts (📱 ${phone})\n` +
-        `   • 1-to-1s: ${formatDecimal(m.OneToOnes || (m as any).one_to_ones || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk | TYFCB: ${formatCurrency(memberTyfcb)}\n\n`;
+      const contactLine = canSeeContacts ? ` (📱 ${getMemberPhone(m)})` : '';
+      const tyfcbLine = canSeeContacts ? ` | TYFCB: ${formatCurrency(memberTyfcb)}` : '';
+      res += `${idx + 1}. *${name}* — ${score} pts${contactLine}\n` +
+        `   • 1-to-1s: ${formatDecimal(m.OneToOnes || (m as any).one_to_ones || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk${tyfcbLine}\n\n`;
     });
     res += `❓ *Would you like a draft WhatsApp message to congratulate these Green zone leaders?*`;
     return res;
@@ -454,10 +498,10 @@ export function analyzeLocalChapterQuery(
     let res = `🔴 *${orgName} Red Zone Support List (${redMembers.length} Members)*\n\n`;
     redMembers.forEach((m, idx) => {
       const name = getMemberName(m);
-      const phone = getMemberPhone(m);
       const score = getMemberScore(m);
       const refs = m.ReferralsGivenRate ?? m.RGT ?? (m as any).referrals_given ?? 0;
-      res += `${idx + 1}. *${name}* — ${score}/100 pts (📱 ${phone})\n` +
+      const contactLine = canSeeContacts ? ` (📱 ${getMemberPhone(m)})` : '';
+      res += `${idx + 1}. *${name}* — ${score}/100 pts${contactLine}\n` +
         `   • 1-to-1s: ${formatDecimal(m.OneToOnes || (m as any).one_to_ones || 0, 1)}/wk | CEUs: ${formatDecimal(m.CEU || (m as any).ceu || 0, 1)}/wk | Referrals: ${formatDecimal(refs, 1)}/wk\n\n`;
     });
     res += `❓ *Should I draft a 1-to-1 support invitation for these members?*`;
@@ -473,9 +517,9 @@ export function analyzeLocalChapterQuery(
     let res = `🟡 *${orgName} Amber Zone Candidates (${amberMembers.length} Members)*\n\n`;
     amberMembers.forEach((m, idx) => {
       const name = getMemberName(m);
-      const phone = getMemberPhone(m);
       const score = getMemberScore(m);
-      res += `${idx + 1}. *${name}* — ${score}/100 pts (📱 ${phone})\n` +
+      const contactLine = canSeeContacts ? ` (📱 ${getMemberPhone(m)})` : '';
+      res += `${idx + 1}. *${name}* — ${score}/100 pts${contactLine}\n` +
         `   • 1-to-1s: ${formatDecimal(m.OneToOnes || (m as any).one_to_ones || 0, 1)}/wk | CEUs: ${formatDecimal(m.CEU || (m as any).ceu || 0, 1)}/wk\n\n`;
     });
     res += `❓ *Would you like a WhatsApp nudge template to send to these Amber members?*`;
@@ -484,10 +528,19 @@ export function analyzeLocalChapterQuery(
 
   // 10. TYFCB / Revenue / Business Query
   if (lower.includes('tyfcb') || lower.includes('business') || lower.includes('revenue') || lower.includes('money') || lower.includes('rupee')) {
-    const sorted = [...members].sort((a, b) => (b.TYFCB || (b as any).tyfcb || 0) - (a.TYFCB || (a as any).tyfcb || 0));
     const totalTy = members.reduce((sum, m) => sum + (m.TYFCB || (m as any).tyfcb || 0), 0);
-    let res = `💰 *${orgName} TYFCB Business Leaders*\n\n`;
 
+    if (!canSeeContacts) {
+      // Go Green committee: show aggregate only, not per-member breakdown
+      return `💰 *${orgName} TYFCB Business Summary*\n\n` +
+        `📈 *Total Chapter Closed Business:* ${formatCurrency(totalTy)}\n` +
+        `👥 *Contributing Members:* ${members.filter(m => (m.TYFCB || (m as any).tyfcb || 0) > 0).length} of ${members.length}\n\n` +
+        `🔒 *Per-member TYFCB amounts are available to the President and Vice President only.*\n\n` +
+        `❓ *Would you like to see member scores or zone distribution instead?*`;
+    }
+
+    const sorted = [...members].sort((a, b) => (b.TYFCB || (b as any).tyfcb || 0) - (a.TYFCB || (a as any).tyfcb || 0));
+    let res = `💰 *${orgName} TYFCB Business Leaders*\n\n`;
     sorted.slice(0, 10).forEach((m, idx) => {
       const name = getMemberName(m);
       const memberTyfcb = m.TYFCB || (m as any).tyfcb || 0;
@@ -507,9 +560,9 @@ export function analyzeLocalChapterQuery(
     let res = `🤝 *1-to-1 Meetings Needed (${low121.length} Members)*\n\n`;
     low121.forEach((m, idx) => {
       const name = getMemberName(m);
-      const phone = getMemberPhone(m);
       const count = m.OneToOnes || (m as any).one_to_ones || 0;
-      res += `${idx + 1}. *${name}* — ${formatDecimal(count, 1)} meetings/wk (📱 ${phone})\n`;
+      const contactLine = canSeeContacts ? ` (📱 ${getMemberPhone(m)})` : '';
+      res += `${idx + 1}. *${name}* — ${formatDecimal(count, 1)} meetings/wk${contactLine}\n`;
     });
     res += `\n❓ *Would you like me to pair these members with Green zone leaders for feature presentations?*`;
     return res;
@@ -525,9 +578,9 @@ export function analyzeLocalChapterQuery(
       res += `🚨 *Members with Recorded Absences:*\n`;
       absentMembers.forEach((m, idx) => {
         const name = getMemberName(m);
-        const phone = getMemberPhone(m);
         const abs = m.A || (m as any).absent || 0;
-        res += `${idx + 1}. *${name}* — ${abs} Absences (📱 ${phone})\n`;
+        const contactLine = canSeeContacts ? ` (📱 ${getMemberPhone(m)})` : '';
+        res += `${idx + 1}. *${name}* — ${abs} Absences${contactLine}\n`;
       });
       res += `\n`;
     }
@@ -567,8 +620,8 @@ export function analyzeLocalChapterQuery(
       res += `\n⚠️ *Members Needing CEU Completion (${lowCeu.length} Members):*\n`;
       lowCeu.slice(0, 5).forEach((m, idx) => {
         const name = getMemberName(m);
-        const phone = getMemberPhone(m);
-        res += `• *${name}* (📱 ${phone})\n`;
+        const contactLine = canSeeContacts ? ` (📱 ${getMemberPhone(m)})` : '';
+        res += `• *${name}*${contactLine}\n`;
       });
     }
 
@@ -614,15 +667,16 @@ export function analyzeLocalChapterQuery(
       const name = getMemberName(topM);
       const score = getMemberScore(topM);
       const zone = getMemberZone(topM);
-      const phone = getMemberPhone(topM);
+      const contactLine = canSeeContacts ? `• *Phone Contact:* ${getMemberPhone(topM)}\n` : '';
+      const tyfcbLine = canSeeContacts ? `• *TYFCB Business:* ${formatCurrency(topM.TYFCB || (topM as any).tyfcb || 0)}\n` : '';
       return `🏆 *Top Chapter Performer: ${name}*\n` +
         `*Chapter:* ${orgName}\n\n` +
         `• *PALMS Score:* 🟢 *${score}/100 pts* (${zone} Zone)\n` +
-        `• *Phone Contact:* ${phone}\n` +
+        contactLine +
         `• *1-to-1 Meetings:* ${formatDecimal(topM.OneToOnes || (topM as any).one_to_ones || 0, 1)}/wk\n` +
         `• *Referrals Given:* ${formatDecimal(topM.ReferralsGivenRate ?? topM.RGT ?? (topM as any).referrals_given ?? 0, 1)}/wk\n` +
-        `• *TYFCB Business:* ${formatCurrency(topM.TYFCB || (topM as any).tyfcb || 0)}\n\n` +
-        `❓ *Would you like to draft a WhatsApp message to congratulate ${name}?*`;
+        tyfcbLine +
+        `\n❓ *Would you like to draft a WhatsApp message to congratulate ${name}?*`;
     }
   }
 
@@ -633,11 +687,11 @@ export function analyzeLocalChapterQuery(
       const name = getMemberName(botM);
       const score = getMemberScore(botM);
       const zone = getMemberZone(botM);
-      const phone = getMemberPhone(botM);
+      const contactLine = canSeeContacts ? `• *Phone Contact:* ${getMemberPhone(botM)}\n` : '';
       return `🔴 *Member Needing Highest Support: ${name}*\n` +
         `*Chapter:* ${orgName}\n\n` +
         `• *PALMS Score:* 🔴 *${score}/100 pts* (${zone} Zone)\n` +
-        `• *Phone Contact:* ${phone}\n` +
+        contactLine +
         `• *1-to-1 Meetings:* ${formatDecimal(botM.OneToOnes || (botM as any).one_to_ones || 0, 1)}/wk\n\n` +
         `❓ *Would you like me to generate a 1-to-1 mentorship invitation template for ${name}?*`;
     }

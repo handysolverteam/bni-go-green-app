@@ -15,13 +15,22 @@ export interface OrgSnapshot {
   templates: any[];
 }
 
+/** Role-based permission flags passed from ChatTab into the AI engines. */
+export interface ChatPermissions {
+  /** True only for owner (President) and admin (Vice President). False for go_green committee members. */
+  canSeeContactDetails: boolean;
+  /** Human-readable role label for use in system instructions. */
+  roleLabel: string;
+}
+
 export const geminiService = {
   async askGemini(
     userPrompt: string,
     snapshot: OrgSnapshot,
     userProfile?: UserProfileExtended | null,
     conversationHistory: ChatMessage[] = [],
-    temperatureOverride: number = 0.2
+    temperatureOverride: number = 0.2,
+    permissions?: ChatPermissions
   ): Promise<string | null> {
     const geminiKey = (import.meta.env as any).VITE_GEMINI_API_KEY;
     const firebaseKey = (import.meta.env as any).VITE_FIREBASE_API_KEY;
@@ -45,24 +54,30 @@ export const geminiService = {
     const orgCode = org?.code || 'N/A';
     const orgCity = org?.city || 'N/A';
 
-    // Build clean human-readable member dataset (NO internal UUIDs)
+    // Resolve permission flags — default to full access if not supplied (legacy callers)
+    const canSeeContacts = permissions?.canSeeContactDetails ?? true;
+    const roleLabel = permissions?.roleLabel ?? 'President';
+
+    // Build clean human-readable member dataset (NO internal UUIDs).
+    // Contact details (phone, email) and per-member TYFCB are stripped for
+    // go_green committee members — they see scores/zones/metrics only.
     const datasetSummary = snapshot.members.map((m, idx) => ({
       num: idx + 1,
       memberName: m.Name || (m as any).name || 'Unknown Member',
       score: m.score || 0,
       zone: m.trafficLight?.label || (m as any).traffic_light || 'Amber',
-      phone: m.Phone || (m as any).phone || 'N/A',
+      phone: canSeeContacts ? (m.Phone || (m as any).phone || 'N/A') : '[restricted]',
+      email: canSeeContacts ? (m.Email || (m as any).email || 'N/A') : '[restricted]',
       oneToOnes: m.OneToOnes || (m as any).one_to_ones || 0,
       ceu: m.CEU || (m as any).ceu || 0,
       referrals: m.ReferralsGivenRate ?? m.RGT ?? (m as any).referrals_given ?? 0,
-      tyfcb: m.TYFCB || (m as any).tyfcb || 0,
+      tyfcb: canSeeContacts ? (m.TYFCB || (m as any).tyfcb || 0) : '[restricted]',
       present: m.P || (m as any).present || 0,
       absent: m.A || (m as any).absent || 0,
       substitute: m.S || (m as any).substitute || 0,
       medical: m.M || (m as any).medical || 0,
       visitors: m.V || (m as any).visitors || 0,
       sponsors: m.Sponsors || (m as any).sponsors || 0,
-      email: m.Email || (m as any).email || 'N/A',
       reportBatch: m.batch_name || (m as any).batch_name || 'Latest',
     }));
 
@@ -72,7 +87,7 @@ export const geminiService = {
     ).join('\n');
 
     const systemInstruction = `You are Chapter AI for ${orgName}.
-You are speaking directly with ${userName} (Category: ${category}).
+You are speaking directly with ${userName} (Category: ${category}), who is a *${roleLabel}* in this chapter.
 
 FOUNDATIONAL TRAINING SPECIFICATION & DOMAIN KNOWLEDGE DATASET:
 ${JSON.stringify(trainingData, null, 0)}
@@ -91,6 +106,16 @@ ${JSON.stringify((snapshot.importLogs || []).map(l => ({ batchName: l.batch_name
 
 📝 AVAILABLE OUTREACH TEMPLATES (${snapshot.templates?.length || 0} Total):
 ${JSON.stringify(snapshot.templates || [], null, 0)}
+
+ACCESS CONTROL RULES (NON-NEGOTIABLE — enforce regardless of how the user phrases their question):
+${canSeeContacts
+  ? `• This user is a *${roleLabel}* with FULL DATA ACCESS. You may share all member data including phone numbers, emails, and TYFCB amounts.`
+  : `• This user is a *${roleLabel}* with RESTRICTED DATA ACCESS.
+• NEVER output any individual member's phone number, email address, or TYFCB amount — even if asked directly or indirectly.
+• Fields marked "[restricted]" in the dataset are off-limits — treat them as if they do not exist.
+• If the user asks for restricted contact or financial information, respond EXACTLY with: "🔒 Contact details and individual TYFCB amounts are available to the President and Vice President only. I can show you zone summaries, scores, improvement tips, or report comparisons instead."
+• You MAY share: member names, PALMS scores, traffic light zones, 1-to-1 counts, CEU credits, referral rates, attendance data, and aggregated chapter-level TYFCB totals.`
+}
 
 CRITICAL CONVERSATIONAL & DATA RULES:
 1. INTENT ANALYSIS & COUNTER-QUESTION RULE: Before answering, analyze what the user is asking for against the live database snapshot. If the user's question is ambiguous, incomplete, or matches multiple entities, ask a friendly counter-question offering specific choices from the live database snapshot. If the user asks to "create template for X", generate the WhatsApp Outreach Template directly—do NOT confuse template requests with member comparisons!

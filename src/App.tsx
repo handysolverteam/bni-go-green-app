@@ -1052,6 +1052,7 @@ export const AppContent: React.FC = () => {
               org={org}
               importLogs={importLogs}
               userProfile={userProfile}
+              orgMember={orgMember}
             />
           ) : (
             <AccessRequired
