@@ -1040,7 +1040,7 @@ export const AppContent: React.FC = () => {
           ) : (
             <AccessRequired
               title="Go Green Access Required"
-              message="Messages are sent by Admins, Superadmins and the Go Green committee. Ask your chapter's Superadmin if you should be on it."
+              message="Messages are sent by the President, Vice President and the Go Green committee. Ask your chapter's President if you should be on it."
             />
           )
         )}
@@ -1056,7 +1056,7 @@ export const AppContent: React.FC = () => {
           ) : (
             <AccessRequired
               title="Go Green Access Required"
-              message="Chapter AI works over the whole chapter's data, so it's available to Admins, Superadmins and the Go Green committee."
+              message="Chapter AI works over the whole chapter's data, so it's available to the President, Vice President and the Go Green committee."
             />
           )
         )}
@@ -1100,7 +1100,7 @@ export const AppContent: React.FC = () => {
             // The Sidebar only hides the link; direct #settings navigation lands here.
             <AccessRequired
               title="Admin Access Required"
-              message="Only Admins and Superadmins can view chapter settings. Contact your chapter's Superadmin if you need something changed here."
+              message="Only the President and Vice President can view chapter settings. Contact your chapter's President if you need something changed here."
             />
           )
         )}
