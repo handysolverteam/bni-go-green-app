@@ -230,7 +230,7 @@ export const supabaseService = {
         p_code: code
       });
 
-      // No direct-insert fallback: under RLS only the RPC may create an org and its Superadmin.
+      // No direct-insert fallback: under RLS only the RPC may create an org and its President.
       if (rpcError || !rpcData?.org || !rpcData?.member) throw rpcError || new Error('Organization was not created.');
       return { org: rpcData.org, member: rpcData.member };
     } catch (e) {
@@ -371,7 +371,7 @@ export const supabaseService = {
       if (isSoleOwner) {
         return {
           canLeave: false,
-          reason: 'You are the only Superadmin of this chapter. Use "Make Superadmin" on another member in the Chapter tab before you leave, otherwise nobody will be able to manage it.',
+          reason: 'You are the only President of this chapter. Use "Make President" on another member in the Chapter tab before you leave, otherwise nobody will be able to manage it.',
           memberCount: data.length,
           ownerCount: owners.length,
           isSoleOwner: true,
@@ -463,7 +463,7 @@ export const supabaseService = {
         return {
           ok: false,
           blockedOrgs,
-          error: `You are the only Superadmin of ${blockedOrgs.join(', ')}. Use "Make Superadmin" on another member in the Chapter tab before deleting your account.`,
+          error: `You are the only President of ${blockedOrgs.join(', ')}. Use "Make President" on another member in the Chapter tab before deleting your account.`,
         };
       }
 
@@ -545,7 +545,7 @@ export const supabaseService = {
   },
 
   async updateOrgMemberRole(orgId: string, userId: string, newRole: string): Promise<boolean> {
-    // Superadmin can only be handed over via transferOwnership(), never granted directly.
+    // President can only be handed over via transferOwnership(), never granted directly.
     if (newRole === 'owner') {
       console.error('updateOrgMemberRole refuses role=owner; use transferOwnership instead.');
       return false;
@@ -565,9 +565,9 @@ export const supabaseService = {
   },
 
   /**
-   * Hands the Superadmin role to another member and steps the current Superadmin down to Admin.
-   * The target is promoted first so the chapter is never left without a Superadmin, even if the
-   * second write fails (worst case: two Superadmins, which the caller is told about).
+   * Hands the President role to another member and steps the current President down to Vice
+   * President. The target is promoted first so the chapter is never left without a President,
+   * even if the second write fails (worst case: two Presidents, which the caller is told about).
    */
   async transferOwnership(orgId: string, fromUserId: string, toUserId: string): Promise<{ ok: boolean; error?: string }> {
     const { data: promoted, error: promoteError } = await supabase
@@ -586,7 +586,7 @@ export const supabaseService = {
       .eq('org_id', orgId)
       .eq('user_id', fromUserId);
     if (demoteError) {
-      return { ok: false, error: 'The new Superadmin was set, but you could not be moved to Admin. You are both Superadmins for now.' };
+      return { ok: false, error: 'The new President was set, but you could not be moved to Vice President. You are both President for now.' };
     }
     return { ok: true };
   },
@@ -608,7 +608,8 @@ export const supabaseService = {
 
   /**
    * Grants/revokes a committee tag through the sync-committee-tag Edge Function (it checks the
-   * caller is an Admin/Superadmin of the org, and links RRC holders to their renewals record).
+   * caller is the President or Vice President of the org, and links RRC holders to their
+   * renewals record).
    */
   async setCommitteeTag(
     orgId: string,

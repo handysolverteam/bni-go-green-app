@@ -121,18 +121,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // resolve — otherwise the splash hangs forever instead of offering sign-in.
     const failsafe = setTimeout(() => setLoading(false), 5000);
 
-    const unsubscribeFirebase = onAuthStateChanged(firebaseAuth, (fbUser) => {
+    const unsubscribeFirebase = onAuthStateChanged(firebaseAuth, async (fbUser) => {
       clearTimeout(failsafe);
+
+      // MUST be awaited before setUser/setLoading(false) -- incident 2026-09-28: this used to
+      // be fire-and-forget, so App.tsx's org lookup could run on a token that didn't carry the
+      // `authenticated` role claim yet (true for every account's first sign-in under a Firebase
+      // project that hasn't set the claim for them before). PostgREST then silently treats the
+      // caller as anon -- not an error, just empty results -- so the app concluded "no chapter"
+      // and sent a real chapter President into onboarding, where they created a duplicate empty
+      // chapter. Bounded by a timeout so a hung network call can't block sign-in indefinitely.
+      if (fbUser) {
+        await Promise.race([
+          ensureFirebaseRoleClaim(fbUser).catch((err) => console.error('ensureFirebaseRoleClaim failed:', err)),
+          new Promise((resolve) => setTimeout(resolve, 6000)),
+        ]);
+      }
+
       setUser(fbUser ? fromFirebaseUser(fbUser) : null);
       setLoading(false);
-
-      // RBAC Phase 2: see ensureFirebaseRoleClaim's own comment. Deliberately not awaited --
-      // must never delay sign-in / the splash screen.
-      if (fbUser) {
-        ensureFirebaseRoleClaim(fbUser).catch((err) => {
-          console.error('ensureFirebaseRoleClaim failed:', err);
-        });
-      }
     });
 
     return () => {
