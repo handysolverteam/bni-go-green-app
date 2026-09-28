@@ -17,6 +17,9 @@ import { ChatTab } from './components/ChatTab';
 // import { RenewalsTab } from './components/renewals/RenewalsTab'; // Renewals hidden -- see validTabs
 import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
 import { ConfirmationModal } from './components/ConfirmationModal';
+import { UniversalModal } from './components/UniversalModal';
+import { PlatformAdminPanel } from './components/PlatformAdminPanel';
+import { Crown } from 'lucide-react';
 import { Member, Organization, OrgMember, UserProfileExtended, ImportLog } from './types';
 import { isAdminOrOwner, hasFullRosterAccess } from './lib/permissions';
 import { AccessRequired } from './components/AccessRequired';
@@ -191,6 +194,14 @@ export const AppContent: React.FC = () => {
       return null;
     }
   });
+
+  // Platform Admin: true only for the handful of accounts granted this via SQL (migration 009).
+  // Lets them jump into ANY organization -- see enterOrgAsAdmin/exitAdminView below. Deliberately
+  // NOT persisted to localStorage: reloading always starts from the admin's own personal chapter
+  // (or none), never wherever they last browsed to.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [showOrgBrowser, setShowOrgBrowser] = useState(false);
+  const [personalOrgSnapshot, setPersonalOrgSnapshot] = useState<{ org: Organization | null; orgMember: OrgMember | null } | null>(null);
 
   const [orgMember, setOrgMember] = useState<OrgMember | null>(() => {
     try {
@@ -400,12 +411,14 @@ export const AppContent: React.FC = () => {
 
     const initUserData = async () => {
       try {
-        // Fetch Org and User Profile concurrently
-        const [orgRes, profRes] = await Promise.all([
+        // Fetch Org, User Profile and Platform Admin status concurrently
+        const [orgRes, profRes, isPlatformAdminRes] = await Promise.all([
           supabaseService.fetchUserOrganization(user.uid, user.email),
           supabaseService.fetchUserProfile(user.uid, user.email),
+          supabaseService.checkIsPlatformAdmin(),
         ]);
         if (cancelled) return;
+        setIsPlatformAdmin(isPlatformAdminRes);
 
         let fetchedMembers: Member[] = [];
         let fetchedLogs: ImportLog[] = [];
@@ -611,6 +624,64 @@ export const AppContent: React.FC = () => {
       setImportLogs(hydrated.logs);
     } catch (err) {
       console.error('Failed to load joined organization data:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  /**
+   * Platform Admin only: switches the app into another chapter without a real membership row.
+   * `orgMember` is synthesized client-side purely to drive the existing per-chapter UI's role
+   * checks (isAdminOrOwner etc.) -- it is not a security boundary. The real one is server-side:
+   * every query still goes through RLS, which independently grants a Platform Admin full access
+   * via caller_admin_org_ids()/caller_full_roster_org_ids() (migration 009). The personal org is
+   * snapshotted so exitAdminView() can restore it exactly, and never touches localStorage, so a
+   * reload always comes back to the admin's own chapter (or none), not wherever they browsed to.
+   */
+  const enterOrgAsAdmin = async (target: Organization) => {
+    if (!user?.uid) return;
+    setPersonalOrgSnapshot({ org, orgMember });
+    setShowOrgBrowser(false);
+    setOrg(target);
+    setOrgMember({
+      id: `platform-admin-view-${target.id}`,
+      org_id: target.id,
+      user_id: user.uid,
+      user_email: user.email || '',
+      role: 'owner',
+      created_at: new Date().toISOString(),
+    });
+    navigateTo('dashboard');
+
+    setIsSyncing(true);
+    try {
+      const hydrated = await hydrateOrgData(target, user.uid);
+      setMembers(hydrated.members);
+      setImportLogs(hydrated.logs);
+    } catch (err) {
+      console.error('Failed to load organization for admin view:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  /** Returns from admin-viewing another chapter back to the Platform Admin's own context. */
+  const exitAdminView = async () => {
+    if (!personalOrgSnapshot || !user?.uid) return;
+    const { org: ownOrg, orgMember: ownMember } = personalOrgSnapshot;
+    setOrg(ownOrg);
+    setOrgMember(ownMember);
+    setPersonalOrgSnapshot(null);
+    navigateTo('dashboard');
+
+    if (!ownOrg) return;
+    setIsSyncing(true);
+    try {
+      const hydrated = await hydrateOrgData(ownOrg, user.uid);
+      setMembers(hydrated.members);
+      setImportLogs(hydrated.logs);
+    } catch (err) {
+      console.error('Failed to restore personal organization:', err);
     } finally {
       setIsSyncing(false);
     }
@@ -835,8 +906,39 @@ export const AppContent: React.FC = () => {
   }
 
   // 3b. Authenticated & Verified, but NO Organization -> Org Onboarding Screen
+  //     (A Platform Admin with no personal chapter gets the org browser instead, with a way
+  //     back to the normal create/join flow -- they are not "stuck" the way a regular new
+  //     user without an org would be.)
   if (!org) {
-    return <OrgOnboardingScreen onOrgJoined={handleOrgJoined} prefillCode={inviteCodeRef.current} />;
+    if (isPlatformAdmin && showOrgBrowser) {
+      return (
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+          <div className="max-w-3xl mx-auto pt-6 px-4">
+            <button
+              onClick={() => setShowOrgBrowser(false)}
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white"
+            >
+              &larr; Back to create/join a chapter
+            </button>
+          </div>
+          <PlatformAdminPanel onManageOrg={enterOrgAsAdmin} />
+        </div>
+      );
+    }
+    return (
+      <>
+        <OrgOnboardingScreen onOrgJoined={handleOrgJoined} prefillCode={inviteCodeRef.current} />
+        {isPlatformAdmin && (
+          <button
+            onClick={() => setShowOrgBrowser(true)}
+            className="fixed bottom-4 right-4 px-3.5 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-black shadow-lg flex items-center gap-1.5 z-50"
+          >
+            <Crown className="w-3.5 h-3.5" />
+            <span>Platform Admin: Browse all organizations</span>
+          </button>
+        )}
+      </>
+    );
   }
 
   // 4. Authenticated & Verified, Has Org, but Profile NOT Completed -> Profile Onboarding Screen
@@ -846,16 +948,44 @@ export const AppContent: React.FC = () => {
 
   // 4. Fully Authenticated & Onboarded -> App with Sidebar Layout
   return (
-    <SidebarLayout
-      activeTab={activeTab}
-      activeSubPath={selectedNudgeReport}
-      setActiveTab={(tab, subPath) => navigateTo(tab, subPath ?? null)}
-      memberCount={members.length}
-      reportCount={importLogs.length}
-      org={org}
-      orgMember={orgMember}
-      userProfile={userProfile}
-    >
+    <>
+      {/* Platform Admin currently viewing someone else's chapter: always visible, always one click back. */}
+      {personalOrgSnapshot && (
+        <div className="fixed top-0 inset-x-0 z-[60] bg-amber-500 text-slate-950 text-xs font-black px-4 py-2 flex items-center justify-center gap-2 shadow-lg">
+          <Crown className="w-3.5 h-3.5" />
+          <span>Viewing {org.chapter_name || org.name} as Platform Admin</span>
+          <button onClick={exitAdminView} className="ml-2 underline underline-offset-2 hover:opacity-80">
+            Exit
+          </button>
+        </div>
+      )}
+
+      {isPlatformAdmin && !personalOrgSnapshot && (
+        <button
+          onClick={() => setShowOrgBrowser(true)}
+          title="Platform Admin: browse all organizations"
+          className="fixed bottom-4 right-4 z-50 p-3 rounded-full bg-amber-500 text-slate-950 shadow-lg hover:scale-105 transition-all"
+        >
+          <Crown className="w-4 h-4" />
+        </button>
+      )}
+
+      {showOrgBrowser && (
+        <UniversalModal isOpen={showOrgBrowser} onClose={() => setShowOrgBrowser(false)} maxWidth="max-w-4xl">
+          <PlatformAdminPanel onManageOrg={enterOrgAsAdmin} />
+        </UniversalModal>
+      )}
+
+      <SidebarLayout
+        activeTab={activeTab}
+        activeSubPath={selectedNudgeReport}
+        setActiveTab={(tab, subPath) => navigateTo(tab, subPath ?? null)}
+        memberCount={members.length}
+        reportCount={importLogs.length}
+        org={org}
+        orgMember={orgMember}
+        userProfile={userProfile}
+      >
       {/* Animated Tab Page Wrapper — key forces remount on tab change, triggering smooth enter animation */}
       <div key={activeTab} className={activeTab === 'chat' ? 'tab-page-instant h-full flex flex-col' : 'tab-page'}>
         {activeTab === 'dashboard' && (
@@ -984,7 +1114,8 @@ export const AppContent: React.FC = () => {
           onClose={() => setSelectedMember(null)}
         />
       )}
-    </SidebarLayout>
+      </SidebarLayout>
+    </>
   );
 };
 
