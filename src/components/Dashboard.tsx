@@ -54,7 +54,7 @@ interface DashboardProps {
   onOpenImport: () => void;
   /** Omitted for roles without outreach access, which hides the outreach buttons. */
   onOpenNudges?: (reportName?: string) => void;
-  /** President/Vice President: import, add, edit and delete controls. */
+  /** Admins: import, add, edit and delete controls. */
   canEdit?: boolean;
   onSaveMember: (member: Member) => Promise<void>;
   onDeleteMember: (memberId: string) => Promise<void>;

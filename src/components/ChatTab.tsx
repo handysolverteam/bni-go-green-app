@@ -65,13 +65,11 @@ interface ChatTabProps {
 export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [], userProfile, orgMember }) => {
   const { showToast } = useToast();
 
-  // Derive permission tier: owners and admins (President/VP) can see contact details.
-  // Go Green committee members can see scores/zones/metrics but NOT phone numbers,
-  // emails, or per-member TYFCB amounts.
+  // Derive permission tier: Admins (owner/admin) can see contact details. Go Green committee
+  // members can see scores/zones/metrics but NOT phone numbers, emails, or per-member TYFCB
+  // amounts.
   const canSeeContactDetails = isAdminOrOwner(orgMember?.role);
-  const roleLabel = canSeeContactDetails
-    ? (orgMember?.role === 'owner' ? 'President' : 'Vice President')
-    : 'Go Green Committee Member';
+  const roleLabel = canSeeContactDetails ? 'Admin' : 'Go Green Committee Member';
 
   // Safe member property accessors (handles both PascalCase and snake_case from DB)
   const safeName = (m: any): string => m?.Name || m?.name || 'Member';
@@ -719,7 +717,7 @@ REGENERATION INSTRUCTIONS:
             replyText = `💰 *TYFCB Business Summary for ${rName}*\n\n` +
               `📈 *Total Chapter Closed Business:* ${formatCurrency(totalTYFCB)}\n` +
               `👥 *Contributing Members:* ${sortedTYFCB.filter(m => safeTYFCB(m) > 0).length} of ${sortedTYFCB.length}\n\n` +
-              `🔒 *Per-member TYFCB amounts are available to the President and Vice President only.*`;
+              `🔒 *Per-member TYFCB amounts are available to chapter Admins only.*`;
           }
 
           replyOptions = [

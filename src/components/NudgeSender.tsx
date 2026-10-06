@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Member, ImportLog } from '../types';
 import { GlassCard } from './GlassCard';
-import { buildMemberMessage, formatDisplayDateTime } from '../lib/outreachUtils';
+import { buildOutreachMessage, formatDisplayDateTime, type MessageTemplates } from '../lib/outreachUtils';
 import { getWhatsAppUrl, formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 import { useToast } from '../context/ToastContext';
 import {
@@ -70,7 +70,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
   }, [orgId]);
 
   const startEditingMessage = (key: string, member: Member) => {
-    const current = customMessages[key] || buildMemberMessage(member, { signature: dbSignature });
+    const current = customMessages[key] || buildMessageFor(member);
     setDraftMessage(current);
     setEditingPreviewKey(key);
   };
@@ -89,7 +89,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       delete next[key];
       return next;
     });
-    setDraftMessage(buildMemberMessage(member, { signature: dbSignature }));
+    setDraftMessage(buildMessageFor(member));
     setEditingPreviewKey(null);
     showToast('Message regenerated from member data', 'info');
   };
@@ -210,6 +210,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
 
   const [dbScoreTerm, setDbScoreTerm] = useState('Go Green');
   const [dbCountryCode, setDbCountryCode] = useState('+91');
+  const [dbTemplates, setDbTemplates] = useState<MessageTemplates>({});
 
   useEffect(() => {
     if (orgId && user?.uid) {
@@ -217,20 +218,29 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
         if (res) {
           if (res.signature) setDbSignature(res.signature);
           if (res.enableSignature !== undefined) setEnableSignature(Boolean(res.enableSignature));
-          if ((res as any).scoreTerm) setDbScoreTerm((res as any).scoreTerm);
-          if ((res as any).defaultCountryCode) setDbCountryCode((res as any).defaultCountryCode);
+          if (res.scoreTerm) setDbScoreTerm(res.scoreTerm);
+          if (res.defaultCountryCode) setDbCountryCode(res.defaultCountryCode);
+          setDbTemplates(res.messageTemplates);
         }
       });
     }
   }, [orgId, user]);
+
+  // The one place a member's message is composed, so every path -- the list, "edit" and
+  // "regenerate" -- agrees on the signature toggle, score label and the chapter's templates.
+  const buildMessageFor = (member: Member): string =>
+    buildOutreachMessage(member, {
+      signature: enableSignature ? dbSignature : '',
+      scoreTerm: dbScoreTerm,
+      templates: dbTemplates,
+    });
 
   const generateNudgeMessage = (member: Member): string => {
     const key = getMemberKey(member);
     if (customMessages[key]) {
       return customMessages[key];
     }
-    const finalSignature = enableSignature ? dbSignature : '';
-    return buildMemberMessage(member, { signature: finalSignature, scoreTerm: dbScoreTerm });
+    return buildMessageFor(member);
   };
 
   const getWhatsAppLink = (member: Member, message: string): string => {

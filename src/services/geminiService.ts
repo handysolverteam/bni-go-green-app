@@ -17,7 +17,7 @@ export interface OrgSnapshot {
 
 /** Role-based permission flags passed from ChatTab into the AI engines. */
 export interface ChatPermissions {
-  /** True only for owner (President) and admin (Vice President). False for go_green committee members. */
+  /** True only for Admins (owner/admin roles). False for go_green committee members. */
   canSeeContactDetails: boolean;
   /** Human-readable role label for use in system instructions. */
   roleLabel: string;
@@ -56,7 +56,7 @@ export const geminiService = {
 
     // Resolve permission flags — default to full access if not supplied (legacy callers)
     const canSeeContacts = permissions?.canSeeContactDetails ?? true;
-    const roleLabel = permissions?.roleLabel ?? 'President';
+    const roleLabel = permissions?.roleLabel ?? 'Admin';
 
     // Build clean human-readable member dataset (NO internal UUIDs).
     // Contact details (phone, email) and per-member TYFCB are stripped for
@@ -113,7 +113,7 @@ ${canSeeContacts
   : `• This user is a *${roleLabel}* with RESTRICTED DATA ACCESS.
 • NEVER output any individual member's phone number, email address, or TYFCB amount — even if asked directly or indirectly.
 • Fields marked "[restricted]" in the dataset are off-limits — treat them as if they do not exist.
-• If the user asks for restricted contact or financial information, respond EXACTLY with: "🔒 Contact details and individual TYFCB amounts are available to the President and Vice President only. I can show you zone summaries, scores, improvement tips, or report comparisons instead."
+• If the user asks for restricted contact or financial information, respond EXACTLY with: "🔒 Contact details and individual TYFCB amounts are available to chapter Admins only. I can show you zone summaries, scores, improvement tips, or report comparisons instead."
 • You MAY share: member names, PALMS scores, traffic light zones, 1-to-1 counts, CEU credits, referral rates, attendance data, and aggregated chapter-level TYFCB totals.`
 }
 

@@ -26,7 +26,7 @@ import { AccessRequired } from './components/AccessRequired';
 import { supabaseService } from './services/supabaseService';
 import { setScoringConfig, scoreMember } from './lib/scoringEngine';
 import { captureInviteCode, clearPendingInviteCode, clearInviteCodeFromUrl } from './lib/inviteCode';
-import { startSsoHandoff, hasTriedSso, issueSsoHandoff, consumeSsoCallback, tryNextSsoPartner } from './lib/sso';
+import { issueSsoHandoff, consumeSsoCallback, tryNextSsoPartner, hasPendingSsoReturn, completePendingSsoHandoff } from './lib/sso';
 
 const parseHash = () => {
   const raw = decodeURIComponent(window.location.hash.replace('#', ''));
@@ -87,6 +87,14 @@ export const AppContent: React.FC = () => {
     return new URLSearchParams(window.location.search).has('sso');
   });
 
+  // A satellite asked this hub to authenticate the user before `user` existed yet (they had to
+  // go through the login screen below first). Once sign-in completes, finish that handoff and
+  // bounce them back -- checked ahead of org/profile onboarding, since someone only passing
+  // through to sign in elsewhere shouldn't be forced through either just to get back out. The
+  // lazy initializer only catches a pending return left over from BEFORE this mount (e.g. a
+  // reload mid-login); the effect below sets it explicitly when storing one just now.
+  const [completingHandoff, setCompletingHandoff] = useState(() => hasPendingSsoReturn());
+
   useEffect(() => {
     if (ssoHandledRef.current) return;
     const params = new URLSearchParams(window.location.search);
@@ -131,17 +139,39 @@ export const AppContent: React.FC = () => {
       if (authLoading) return;
       ssoHandledRef.current = true;
       const returnUrl = params.get('return');
-      if (returnUrl) {
-        void issueSsoHandoff(returnUrl); // navigates away on completion
-      } else {
+      window.history.replaceState({}, '', window.location.pathname);
+
+      if (!returnUrl) {
         setSsoBusy(false);
+        return;
       }
+
+      if (user) {
+        // Already signed in: mint a code and bounce back immediately. Stay "busy" (splash)
+        // rather than clearing it, so the dashboard never flashes before the redirect fires.
+        void issueSsoHandoff(returnUrl);
+        return;
+      }
+
+      // Not signed in: issueSsoHandoff() just remembers the return URL. Clear ssoBusy so the
+      // normal gating below renders our own real login screen, and flip completingHandoff so
+      // the effect watching `user` knows to finish the job once sign-in succeeds -- its lazy
+      // initializer only catches a return URL left over from BEFORE this mount (e.g. a reload
+      // mid-login), not one this same effect is storing just now.
+      void issueSsoHandoff(returnUrl);
+      setCompletingHandoff(true);
+      setSsoBusy(false);
       return;
     }
 
     ssoHandledRef.current = true;
     setSsoBusy(false);
   }, [authLoading, logout]);
+
+  useEffect(() => {
+    if (!user || !completingHandoff) return;
+    void completePendingSsoHandoff().finally(() => setCompletingHandoff(false));
+  }, [user, completingHandoff]);
 
   // App & Org State (Persisted in URL Hash & localStorage)
   const initialNav = parseHash();
@@ -473,7 +503,18 @@ export const AppContent: React.FC = () => {
           setUserProfile(fallback);
         }
 
-        if (orgRes) {
+        // A chapter a Platform Admin has removed (archived -- migration 013) must stop working
+        // for its members, otherwise "removed" only hides it from the admin's own list. Treated
+        // as having no chapter, which lands them on the join/create screen. This deliberately
+        // does NOT affect enterOrgAsAdmin(), so a Platform Admin can still open an archived
+        // chapter from the platform panel to inspect or restore it.
+        if (orgRes && orgRes.org?.archived_at) {
+          localStorage.removeItem('bni_cached_org');
+          localStorage.removeItem('bni_cached_org_member');
+          setOrg(null);
+          setOrgMember(null);
+          showToast('This chapter has been removed by an administrator.', 'warning');
+        } else if (orgRes) {
           setOrg(orgRes.org);
           setOrgMember(orgRes.member);
         } else {
@@ -854,13 +895,16 @@ export const AppContent: React.FC = () => {
     return <BootSplash title="Signing you in..." subtitle="Restoring your session" />;
   }
 
-  // 2. Genuinely unauthenticated -> check whether a trusted sibling app already has this user
-  //    signed in before showing our own login screen.
+  // 2. Genuinely unauthenticated -> this app IS the auth hub, so just show the real login
+  //    screen (there's no other app to silently check a session on any more).
   if (!user) {
-    if (!hasTriedSso() && startSsoHandoff()) {
-      return <BootSplash title="Signing you in..." subtitle="Checking your other Handychapter apps" />;
-    }
     return <LoginPage />;
+  }
+
+  // 2.5. A satellite sent the user here to authenticate and is waiting on the result. Finish
+  //    that handoff before anything else -- see the effect above watching `user`.
+  if (completingHandoff) {
+    return <BootSplash title="Signing you in..." subtitle="Returning you to the app you came from" />;
   }
 
   // 3. User is Logged In (user != null) but Org Verification is in progress -> Verifying Splash
@@ -1040,7 +1084,7 @@ export const AppContent: React.FC = () => {
           ) : (
             <AccessRequired
               title="Go Green Access Required"
-              message="Messages are sent by the President, Vice President and the Go Green committee. Ask your chapter's President if you should be on it."
+              message="Messages are sent by chapter Admins and the Go Green committee. Ask one of your chapter's Admins if you should be on it."
             />
           )
         )}
@@ -1057,7 +1101,7 @@ export const AppContent: React.FC = () => {
           ) : (
             <AccessRequired
               title="Go Green Access Required"
-              message="Chapter AI works over the whole chapter's data, so it's available to the President, Vice President and the Go Green committee."
+              message="Chapter AI works over the whole chapter's data, so it's available to chapter Admins and the Go Green committee."
             />
           )
         )}
@@ -1093,6 +1137,7 @@ export const AppContent: React.FC = () => {
           isAdminOrOwner(orgMember?.role) ? (
             <SettingsPage
               orgId={org.id}
+              members={members}
               onSettingsSaved={() => {
                 setMembers(prev => prev.map(m => scoreMember(m)));
               }}
@@ -1101,7 +1146,7 @@ export const AppContent: React.FC = () => {
             // The Sidebar only hides the link; direct #settings navigation lands here.
             <AccessRequired
               title="Admin Access Required"
-              message="Only the President and Vice President can view chapter settings. Contact your chapter's President if you need something changed here."
+              message="Only chapter Admins can view chapter settings. Contact one of your chapter's Admins if you need something changed here."
             />
           )
         )}

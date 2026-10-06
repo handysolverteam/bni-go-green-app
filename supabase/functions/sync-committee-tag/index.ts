@@ -13,9 +13,23 @@
 // the bearer is a Firebase ID token, verified below.)
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verifyFirebaseIdToken } from "../_shared/firebaseAdmin.ts";
+import { verifyFirebaseIdToken, getFirebaseUserClaims, setFirebaseUserClaims } from "../_shared/firebaseAdmin.ts";
 import { buildMemberNameResolver, loadMemberAliases } from "../_shared/renewals/member-aliases.ts";
 import { extractErrorMessage } from "../_shared/renewals/error-message.ts";
+
+/**
+ * "rrc" and "slips" each additionally gate access to an external app (bni-rrc / bni-rrc-slips)
+ * that has no access to this Supabase project, so the grant/revoke is mirrored into a Firebase
+ * custom claim of the same name -- those apps check it straight from the ID token instead of
+ * needing a cross-database query. "go_green" has no such external app and is left alone.
+ */
+const APP_ACCESS_COMMITTEES = new Set(["rrc", "slips"]);
+
+async function syncAppAccessClaim(userId: string, committee: string, grant: boolean) {
+  if (!APP_ACCESS_COMMITTEES.has(committee)) return;
+  const claims = await getFirebaseUserClaims(userId);
+  await setFirebaseUserClaims(userId, { ...claims, [committee]: grant });
+}
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -29,7 +43,7 @@ const json = (body: unknown, status: number) =>
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
 
-const COMMITTEES = ["go_green", "rrc"] as const;
+const COMMITTEES = ["go_green", "rrc", "slips"] as const;
 type Committee = (typeof COMMITTEES)[number];
 
 type RenewalsLink = "linked" | "already_linked" | "unmatched" | "ambiguous" | "conflict" | "unlinked" | "not_applicable";
@@ -108,7 +122,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "orgId, userId and grant are required." }, 400);
     }
     if (!COMMITTEES.includes(committee as Committee)) {
-      return json({ error: "committee must be go_green or rrc." }, 400);
+      return json({ error: "committee must be go_green, rrc or slips." }, 400);
     }
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -151,6 +165,16 @@ Deno.serve(async (req: Request) => {
         .eq("user_id", userId)
         .eq("committee", committee);
       if (error) throw error;
+    }
+
+    // Best-effort: the Postgres write above is the source of truth and has already
+    // succeeded. A Firebase hiccup here shouldn't surface as "failed to update committee
+    // tag" when the tag itself was in fact updated -- the external app just checks a
+    // temporarily-stale claim until this is retried (next toggle, or a future reconcile pass).
+    try {
+      await syncAppAccessClaim(userId, committee, grant);
+    } catch (err) {
+      console.error("Failed to sync Firebase app-access claim:", err);
     }
 
     let renewalsLink: RenewalsLink = "not_applicable";

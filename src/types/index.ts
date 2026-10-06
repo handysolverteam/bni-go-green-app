@@ -1,10 +1,13 @@
 export type UserRole = 'owner' | 'admin' | 'member';
 export type SidebarMode = 'full' | 'icons' | 'hover';
 
-// RBAC committee tags — independent of UserRole's hierarchy. A member can hold zero,
-// one, or both, regardless of whether they're owner/admin/member. See
-// src/lib/permissions.ts and supabase/migrations/007_committees_and_role_check.sql.
-export type Committee = 'go_green' | 'rrc';
+// RBAC committee tags — independent of UserRole's hierarchy. A member can hold any subset,
+// regardless of whether they're owner/admin/member. See src/lib/permissions.ts,
+// supabase/migrations/007_committees_and_role_check.sql and 012_slips_committee.sql.
+// "rrc" and "slips" additionally gate access to the bni-rrc and bni-rrc-slips apps (see
+// sync-committee-tag, which mirrors a grant/revoke into a Firebase custom claim of the same
+// name so those apps can check it from the ID token without querying this database).
+export type Committee = 'go_green' | 'rrc' | 'slips';
 
 export interface ChatOption {
   id: string;
@@ -37,6 +40,8 @@ export interface Organization {
   custom_scoring?: Partial<ScoringConfig>;
   default_country_code?: string;
   created_at?: string;
+  /** Set when a Platform Admin has removed the chapter (reversible soft delete, migration 013). */
+  archived_at?: string | null;
 }
 
 export interface OrgMember {

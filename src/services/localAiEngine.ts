@@ -26,8 +26,8 @@ export function analyzeLocalChapterQuery(
 
   // Resolve permission flags — default to full access if not supplied
   const canSeeContacts = permissions?.canSeeContactDetails ?? true;
-  const roleLabel = permissions?.roleLabel ?? 'President';
-  const CONTACT_RESTRICTED_MSG = `🔒 Contact details and individual TYFCB amounts are available to the *President* and *Vice President* only. I can show you zone summaries, scores, improvement tips, or report comparisons instead.`;
+  const roleLabel = permissions?.roleLabel ?? 'Admin';
+  const CONTACT_RESTRICTED_MSG = `🔒 Contact details and individual TYFCB amounts are available to chapter *Admins* only. I can show you zone summaries, scores, improvement tips, or report comparisons instead.`;
 
   // ─── EARLY PERMISSION GUARD ────────────────────────────────────────────────
   // This fires BEFORE any member-name matching, disambiguation, or affirmative
@@ -440,7 +440,7 @@ export function analyzeLocalChapterQuery(
     const phoneDisplay = canSeeContacts ? `📱 *Phone:* ${getMemberPhone(matchedMember)}\n\n` : '';
     const tyfcbDisplay = canSeeContacts
       ? `• *TYFCB Business:* ${formatCurrency(memberTyfcb)}\n\n`
-      : `• *TYFCB Business:* 🔒 Restricted (President/VP only)\n\n`;
+      : `• *TYFCB Business:* 🔒 Restricted (Admins only)\n\n`;
 
     return `👤 *Member Record: ${name}*\n` +
       `*Chapter:* ${orgName} | *Report:* ${matchedMember.batch_name || (matchedMember as any).batch_name || 'Latest'}\n\n` +
@@ -535,7 +535,7 @@ export function analyzeLocalChapterQuery(
       return `💰 *${orgName} TYFCB Business Summary*\n\n` +
         `📈 *Total Chapter Closed Business:* ${formatCurrency(totalTy)}\n` +
         `👥 *Contributing Members:* ${members.filter(m => (m.TYFCB || (m as any).tyfcb || 0) > 0).length} of ${members.length}\n\n` +
-        `🔒 *Per-member TYFCB amounts are available to the President and Vice President only.*\n\n` +
+        `🔒 *Per-member TYFCB amounts are available to chapter Admins only.*\n\n` +
         `❓ *Would you like to see member scores or zone distribution instead?*`;
     }
 
