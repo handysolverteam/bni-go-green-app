@@ -1,6 +1,6 @@
 import { Member, Organization, OrgMember, UserProfileExtended, OutreachTemplate, Committee, UserRole } from '../types';
 import { scoreMember } from '../lib/scoringEngine';
-import { UNIVERSAL_DEFAULT_TEMPLATE_TEXT } from '../lib/outreachUtils';
+import { UNIVERSAL_DEFAULT_TEMPLATE_TEXT, normalizeTemplates } from '../lib/outreachUtils';
 import { formatPhoneWithCountryCode } from '../lib/whatsappUtils';
 // RBAC Phase 2: this file used to create its own separate Supabase client here (a second
 // instance alongside lib/supabase.ts's). That meant the Third-Party-Auth accessToken hook
@@ -230,7 +230,7 @@ export const supabaseService = {
         p_code: code
       });
 
-      // No direct-insert fallback: under RLS only the RPC may create an org and its President.
+      // No direct-insert fallback: under RLS only the RPC may create an org and its first admin.
       if (rpcError || !rpcData?.org || !rpcData?.member) throw rpcError || new Error('Organization was not created.');
       return { org: rpcData.org, member: rpcData.member };
     } catch (e) {
@@ -371,7 +371,7 @@ export const supabaseService = {
       if (isSoleOwner) {
         return {
           canLeave: false,
-          reason: 'You are the only President of this chapter. Use "Make President" on another member in the Chapter tab before you leave, otherwise nobody will be able to manage it.',
+          reason: 'You are the only primary admin of this chapter. Use "Make primary admin" on another member in the Chapter tab before you leave, otherwise nobody will be able to manage it.',
           memberCount: data.length,
           ownerCount: owners.length,
           isSoleOwner: true,
@@ -463,7 +463,7 @@ export const supabaseService = {
         return {
           ok: false,
           blockedOrgs,
-          error: `You are the only President of ${blockedOrgs.join(', ')}. Use "Make President" on another member in the Chapter tab before deleting your account.`,
+          error: `You are the only primary admin of ${blockedOrgs.join(', ')}. Use "Make primary admin" on another member in the Chapter tab before deleting your account.`,
         };
       }
 
@@ -545,7 +545,8 @@ export const supabaseService = {
   },
 
   async updateOrgMemberRole(orgId: string, userId: string, newRole: string): Promise<boolean> {
-    // President can only be handed over via transferOwnership(), never granted directly.
+    // Primary admin (role=owner) can only be handed over via transferOwnership(), never
+    // granted directly.
     if (newRole === 'owner') {
       console.error('updateOrgMemberRole refuses role=owner; use transferOwnership instead.');
       return false;
@@ -565,9 +566,10 @@ export const supabaseService = {
   },
 
   /**
-   * Hands the President role to another member and steps the current President down to Vice
-   * President. The target is promoted first so the chapter is never left without a President,
-   * even if the second write fails (worst case: two Presidents, which the caller is told about).
+   * Hands primary admin (role=owner) to another member and steps the current one down to a
+   * regular Admin -- same permissions either way, this only moves who holds the chapter. The
+   * target is promoted first so the chapter is never left without one, even if the second
+   * write fails (worst case: two primary admins, which the caller is told about).
    */
   async transferOwnership(orgId: string, fromUserId: string, toUserId: string): Promise<{ ok: boolean; error?: string }> {
     const { data: promoted, error: promoteError } = await supabase
@@ -586,7 +588,7 @@ export const supabaseService = {
       .eq('org_id', orgId)
       .eq('user_id', fromUserId);
     if (demoteError) {
-      return { ok: false, error: 'The new President was set, but you could not be moved to Vice President. You are both President for now.' };
+      return { ok: false, error: 'The new primary admin was set, but you could not be stepped down. You are both primary admin for now.' };
     }
     return { ok: true };
   },
@@ -608,8 +610,8 @@ export const supabaseService = {
 
   /**
    * Grants/revokes a committee tag through the sync-committee-tag Edge Function (it checks the
-   * caller is the President or Vice President of the org, and links RRC holders to their
-   * renewals record).
+   * caller is an Admin of the org, mirrors rrc/slips into a Firebase custom claim for the
+   * external apps, and links RRC holders to their renewals record).
    */
   async setCommitteeTag(
     orgId: string,
@@ -698,6 +700,28 @@ export const supabaseService = {
   async revokePlatformAdmin(userId: string): Promise<void> {
     const { error } = await supabase.rpc('admin_revoke_platform_admin', { p_user_id: userId });
     if (error) throw new Error(error.message || 'Failed to revoke Platform Admin.');
+  },
+
+  /**
+   * Removes (archives) or restores a chapter. Reversible by design -- see migration 013 for why
+   * this isn't a physical delete. Platform-Admin-only and audit-logged inside the RPC, so the
+   * UI check in front of it is convenience, not the security boundary.
+   */
+  async setOrganizationArchived(orgId: string, archived: boolean): Promise<void> {
+    const { data, error } = await supabase.rpc('admin_set_organization_archived', {
+      p_org_id: orgId,
+      p_archived: archived,
+    });
+    if (error) {
+      // PGRST202 = the function isn't in the database at all, i.e. migration 013 hasn't been
+      // applied. The raw PostgREST message ("...in the schema cache") means nothing to a person.
+      if ((error as { code?: string }).code === 'PGRST202') {
+        throw new Error('Removing chapters isn\'t set up on the database yet — migration 013_archive_organization.sql still needs to be run.');
+      }
+      throw new Error(error.message || 'Failed to update that chapter.');
+    }
+    const payload = data as { error?: string } | null;
+    if (payload?.error) throw new Error(payload.error);
   },
 
   /** Every logged Platform Admin action, most recent first. Enriches org_id/actor_uid with names client-side. */
@@ -1426,7 +1450,11 @@ export const supabaseService = {
           signature: orgData.custom_signature || 'Keep the momentum going! 💪',
           enableSignature: orgSettings.enable_signature !== undefined ? Boolean(orgSettings.enable_signature) : true,
           scoreTerm: orgSettings.score_term || 'Go Green',
-          defaultCountryCode: orgSettings.default_country_code || '+91',
+          // Older saves wrote this under a camelCase key that this read never looked at, so the
+          // chapter's country code silently reverted to +91 on every load. Accept both.
+          defaultCountryCode: orgSettings.default_country_code || orgSettings.defaultCountryCode || '+91',
+          // Per-tier custom WhatsApp message templates; a missing tier means "use the auto-built one".
+          messageTemplates: normalizeTemplates(orgSettings.message_templates),
         };
       }
       return null;
@@ -1443,12 +1471,19 @@ export const supabaseService = {
         .eq('id', orgId)
         .maybeSingle();
 
-      const existingSettings = currentOrg?.settings || {};
+      // `defaultCountryCode` (camelCase) is the stale key earlier versions wrote; fetchOrgSettings
+      // reads `default_country_code`, so drop the old one and write the canonical one.
+      const { defaultCountryCode: _staleCountryKey, ...existingSettings } = currentOrg?.settings || {};
       const updatedSettings = {
         ...existingSettings,
         enable_signature: settingsPayload.enableSignature !== undefined ? settingsPayload.enableSignature : true,
         score_term: settingsPayload.scoreTerm || 'Go Green',
-        defaultCountryCode: settingsPayload.defaultCountryCode || '+91',
+        default_country_code: settingsPayload.defaultCountryCode || '+91',
+        // Only touched when the caller supplies it, so a save that doesn't know about templates
+        // (e.g. "Reset to defaults") leaves the chapter's templates alone.
+        ...(settingsPayload.messageTemplates !== undefined
+          ? { message_templates: normalizeTemplates(settingsPayload.messageTemplates) }
+          : {}),
       };
 
       const { error: orgError } = await supabase

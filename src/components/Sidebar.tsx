@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, Sparkles, Bot, RefreshCw, UploadCloud } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, Sparkles, Bot, RefreshCw, UploadCloud, FileSpreadsheet, ExternalLink } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { UniversalModal } from './UniversalModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
@@ -88,20 +88,47 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     icon: typeof BarChart3;
     badge?: number | null;
     subPath?: string;
+    group: 'Overview' | 'Engage' | 'Manage';
     adminOnly?: boolean;
     needsRoster?: boolean;
     needsRenewals?: boolean;
   }> = [
-    { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
-    { id: 'trends' as NavigationTab, label: 'Trends', icon: TrendingUp },
-    { id: 'nudges' as NavigationTab, label: 'Messages', icon: MessageSquare, needsRoster: true },
+    { id: 'dashboard' as NavigationTab, group: 'Overview', label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
+    { id: 'trends' as NavigationTab, group: 'Overview', label: 'Trends', icon: TrendingUp },
+    { id: 'nudges' as NavigationTab, group: 'Engage', label: 'Messages', icon: MessageSquare, needsRoster: true },
     // Renewals hidden for now (not yet role-enforced server-side). Uncomment both, and add
     // 'renewals' back to validTabs in App.tsx, to re-enable.
     // { id: 'renewals' as NavigationTab, label: 'Renewals', icon: RefreshCw },
     // { id: 'renewals' as NavigationTab, label: 'Import Data', icon: UploadCloud, subPath: 'import', needsRenewals: true },
-    { id: 'org' as NavigationTab, label: 'Chapter', icon: Building2 },
-    { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings, adminOnly: true },
-    { id: 'chat' as NavigationTab, label: 'Chapter AI', icon: Bot, needsRoster: true },
+    { id: 'org' as NavigationTab, group: 'Manage', label: 'Chapter', icon: Building2 },
+    { id: 'settings' as NavigationTab, group: 'Manage', label: 'Settings', icon: Settings, adminOnly: true },
+    { id: 'chat' as NavigationTab, group: 'Engage', label: 'Chapter AI', icon: Bot, needsRoster: true },
+  ];
+
+  // External apps on this same Firebase project, reached via cross-app SSO (see src/lib/sso.ts)
+  // -- clicking signs the member straight in there, no separate login. Shown to everyone, not
+  // gated by the rrc/slips committee here: that gate is enforced on the app itself (checked
+  // from the ID token's custom claims), which is also where a member without access is told to
+  // ask an admin, rather than the button just silently not appearing.
+  // Each sibling app is tinted with its own brand colour (RRC: forest green, Slips: orange/cream)
+  // so they read as distinct products rather than more nav tabs. Class strings are spelled out in
+  // full so Tailwind can see them.
+  const externalApps: Array<{
+    label: string; subtitle: string; href: string; icon: typeof BarChart3;
+    tile: string; card: string; sub: string;
+  }> = [
+    {
+      label: 'BNI RRC', subtitle: 'Renewals & retention', href: 'https://bni-rrc-flax.vercel.app', icon: RefreshCw,
+      tile: 'bg-gradient-to-br from-[#2f8a65] to-[#1c5640] text-white shadow-[#246b4f]/40',
+      card: 'border-[#2f8a65]/30 bg-[#246b4f]/10 hover:bg-[#246b4f]/20 hover:border-[#2f8a65]/60',
+      sub: 'text-[#6fcfa4]',
+    },
+    {
+      label: 'BNI Slips', subtitle: 'Slips & tracking', href: 'https://bni-rrc-slips.vercel.app', icon: FileSpreadsheet,
+      tile: 'bg-gradient-to-br from-[#f0703f] to-[#d6542c] text-white shadow-[#d6542c]/40',
+      card: 'border-[#d6542c]/30 bg-[#d6542c]/10 hover:bg-[#d6542c]/20 hover:border-[#f0703f]/60',
+      sub: 'text-[#f6a67f]',
+    },
   ];
 
   // Width calculations based on sidebarMode
@@ -148,9 +175,11 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex-1 space-y-1.5 py-3">
-          {navItems.map((item) => {
+        <nav className="flex-1 space-y-1 py-3">
+          {navItems.map((item, idx, all) => {
             if (!isNavItemAllowed(item)) return null;
+            // A group header appears above the first visible item of each group (a divider when compact).
+            const firstOfGroup = all.findIndex(n => n.group === item.group && isNavItemAllowed(n)) === idx;
             const Icon = item.icon;
             // Two nav items can share id 'renewals' (plain vs the Import
             // sub-view) -- only distinguish by subPath for that id, so
@@ -160,14 +189,13 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
 
             return (
               <div key={`${item.id}-${item.subPath ?? ''}`}>
-                {/* Divider above Chapter AI to visually separate it at the bottom */}
-                {item.id === 'chat' && (
-                  <div className="my-2 border-t border-white/10" />
-                )}
+                {firstOfGroup && (isCompact
+                  ? (idx > 0 && <div className="my-2 border-t border-white/10" />)
+                  : <p className={`px-3.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 ${idx > 0 ? 'pt-3' : 'pt-1'}`}>{item.group}</p>)}
                 <button
                   onClick={() => setActiveTab(item.id, item.subPath)}
                   title={isCompact ? item.label : undefined}
-                  className={`w-full flex items-center ${isCompact ? 'justify-center px-2' : 'justify-between px-3.5'} py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  className={`group/nav w-full flex items-center ${isCompact ? 'justify-center px-2' : 'justify-between px-3.5'} py-2.5 rounded-xl text-xs font-bold transition-all ${
                     isActive
                       ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-500/20'
                       : item.id === 'chat'
@@ -188,6 +216,33 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
               </div>
             );
           })}
+
+          {/* External apps (same Firebase project, cross-app SSO) */}
+          <div className={`${isCompact ? 'pt-3 flex flex-col items-center space-y-2' : 'pt-3 space-y-2'} border-t border-white/10 mt-3`}>
+            {!isCompact && <p className="px-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Your apps</p>}
+            {externalApps.map((app) => {
+              const Icon = app.icon;
+              return (
+                <a
+                  key={app.href}
+                  href={app.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`w-full p-2 rounded-xl border flex items-center space-x-3 transition-all active:scale-[0.99] ${app.card}`}
+                >
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-md ${app.tile}`}>
+                    <Icon className="w-4 h-4" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-extrabold text-white truncate">{app.label}</span>
+                    <span className={`block text-[10px] font-semibold truncate ${app.sub}`}>{app.subtitle}</span>
+                  </span>
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                </a>
+              );
+            })}
+          </div>
         </nav>
 
         {/* Profile Footer & Logout (Click Avatar to open Profile) */}
@@ -325,6 +380,27 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
                 </div>
               </div>
             )}
+
+            {/* External apps (same Firebase project, cross-app SSO) */}
+            {externalApps.map((app) => {
+              const Icon = app.icon;
+              return (
+                <a
+                  key={app.href}
+                  href={app.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-slate-900/90 text-slate-300 font-bold text-xs flex items-center justify-between border border-white/10 transition-all active:scale-[0.99]"
+                >
+                  <span className="flex items-center space-x-2">
+                    <Icon className="w-4 h-4" />
+                    <span>{app.label}</span>
+                  </span>
+                  <ExternalLink className="w-3 h-3 opacity-50" />
+                </a>
+              );
+            })}
 
             {/* Sign Out Action Button */}
             <button

@@ -1,5 +1,5 @@
 import { Member, Nudge } from '../types';
-import { levelUpPlan, trafficLight } from './scoringEngine';
+import { levelUpPlan, trafficLight, getScoringConfig } from './scoringEngine';
 
 export const CAT_LABELS: Record<string, string> = {
   attendance: 'Attendance',
@@ -269,10 +269,14 @@ export function buildSnapshotLines(member: Member): string[] {
   ];
 }
 
-export function buildMemberMessage(member: Member, options?: { signature?: string; scoreTerm?: string }): string {
-  const firstName = getFirstName(member.Name);
+/**
+ * The "what to do next" part of a message: the tier-specific plan (perfect score / keep improving
+ * / just do this / do all of these) followed by any other ways to gain points. Driven by
+ * levelUpPlan(), so it follows the chapter's own scoring thresholds -- unlike the static
+ * `nudges_list` in buildMemberTemplateData, whose targets are hardcoded.
+ */
+export function buildActionPlanText(member: Member): string {
   const score = member.score ?? 0;
-  const light = member.trafficLight || { label: 'Grey', emoji: '⚪', color: '#9ca3af' };
   const plan = levelUpPlan(member);
   const allOpportunities = member.nudges || [];
 
@@ -309,9 +313,7 @@ export function buildMemberMessage(member: Member, options?: { signature?: strin
     return `• *${labelOf(n)}*${pts}: ${n.action} → *+${n.gain} pts*`;
   };
 
-  const scoreTerm = options?.scoreTerm || 'Go Green';
-  let msg = `Hi ${firstName}! 👋\n\n`;
-  msg += `Your ${scoreTerm} Score: *${score}/100* ${light.emoji} ${light.label}\n\n`;
+  let msg = '';
 
   if (plan.stayGreen) {
     if (plan.nudgesForLevel.length === 0) {
@@ -355,13 +357,31 @@ export function buildMemberMessage(member: Member, options?: { signature?: strin
     });
   }
 
+  return msg;
+}
+
+/** Current-vs-target breakdown for every scoring category, as a titled block. */
+export function buildSnapshotText(member: Member): string {
   const snapshotLines = buildSnapshotLines(member);
-  if (snapshotLines.length > 0) {
-    msg += `\n📋 Current scoring snapshot:\n`;
-    snapshotLines.forEach(l => {
-      msg += `${l}\n`;
-    });
-  }
+  if (snapshotLines.length === 0) return '';
+
+  let msg = `\n📋 Current scoring snapshot:\n`;
+  snapshotLines.forEach(l => {
+    msg += `${l}\n`;
+  });
+  return msg;
+}
+
+export function buildMemberMessage(member: Member, options?: { signature?: string; scoreTerm?: string }): string {
+  const firstName = getFirstName(member.Name);
+  const score = member.score ?? 0;
+  const light = member.trafficLight || { label: 'Grey', emoji: '⚪', color: '#9ca3af' };
+  const scoreTerm = options?.scoreTerm || 'Go Green';
+
+  let msg = `Hi ${firstName}! 👋\n\n`;
+  msg += `Your ${scoreTerm} Score: *${score}/100* ${light.emoji} ${light.label}\n\n`;
+  msg += buildActionPlanText(member);
+  msg += buildSnapshotText(member);
 
   const signature = String(options?.signature || '').trim();
   msg += signature
@@ -369,6 +389,213 @@ export function buildMemberMessage(member: Member, options?: { signature?: strin
     : `\nMade with 🧡 by Handysolver`;
   return msg;
 }
+
+// ─── Custom message templates ────────────────────────────────────────────────────────────────
+//
+// Admins can replace the auto-built message for a traffic-light tier with their own wording built
+// from {{placeholders}} (Settings -> WhatsApp Outreach Messages). A tier with no template keeps
+// using buildMemberMessage, so nothing changes until someone opts in.
+
+export const MESSAGE_TIERS = ['Green', 'Amber', 'Red', 'Grey'] as const;
+export type MessageTier = (typeof MESSAGE_TIERS)[number];
+export type MessageTemplates = Partial<Record<MessageTier, string>>;
+
+/** Stored on the org row and fetched with every Settings/Outreach load, so keep it bounded. */
+export const MAX_TEMPLATE_LENGTH = 4000;
+
+/**
+ * Every placeholder a template may use, grouped for the editor's insert chips. This is the single
+ * source of truth for validation too: anything not listed here is rejected rather than risk a
+ * literal "{{nmae}}" reaching a member's WhatsApp.
+ *
+ * Deliberately omits the legacy `*_target` keys -- buildMemberTemplateData derives those from
+ * hardcoded thresholds, so they'd be wrong for any chapter with custom scoring.
+ */
+export const TEMPLATE_PLACEHOLDER_GROUPS: ReadonlyArray<{
+  title: string;
+  items: ReadonlyArray<{ key: string; label: string }>;
+}> = [
+  {
+    title: 'Member',
+    items: [
+      { key: 'name', label: 'First name' },
+      { key: 'chapter', label: 'Chapter' },
+    ],
+  },
+  {
+    title: 'Score',
+    items: [
+      { key: 'score', label: 'Score' },
+      { key: 'score_term', label: 'Score label' },
+      { key: 'traffic_light', label: 'Tier' },
+      { key: 'pts_to_green', label: 'Points to Green' },
+    ],
+  },
+  {
+    title: 'What to do next',
+    items: [
+      { key: 'nudges_list', label: 'Action plan' },
+      { key: 'snapshot', label: 'Scoring snapshot' },
+    ],
+  },
+  {
+    title: 'By category',
+    items: [
+      { key: 'attendance_rate', label: 'Attendance %' },
+      { key: 'attendance_pts', label: 'Attendance pts' },
+      { key: 'ceu_current', label: 'CEU / week' },
+      { key: 'ceu_pts', label: 'CEU pts' },
+      { key: 'one_to_ones_current', label: '1-2-1s / week' },
+      { key: 'one_to_ones_pts', label: '1-2-1s pts' },
+      { key: 'referrals_current', label: 'Referrals / week' },
+      { key: 'referrals_pts', label: 'Referrals pts' },
+      { key: 'visitors_current', label: 'Visitors' },
+      { key: 'visitors_pts', label: 'Visitors pts' },
+      { key: 'tyfcb_current', label: 'TYFCB' },
+      { key: 'tyfcb_pts', label: 'TYFCB pts' },
+      { key: 'sponsors_current', label: 'Sponsors' },
+      { key: 'sponsors_pts', label: 'Sponsors pts' },
+    ],
+  },
+  {
+    title: 'Closing',
+    items: [{ key: 'signature', label: 'Your signature' }],
+  },
+];
+
+const KNOWN_PLACEHOLDERS = new Set(TEMPLATE_PLACEHOLDER_GROUPS.flatMap(g => g.items.map(i => i.key)));
+
+const PLACEHOLDER_RE = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
+// `{name}` -- one brace each side. The leading group stands in for a lookbehind (older Safari).
+const SINGLE_BRACE_RE = /(^|[^{])\{([a-z0-9_]+)\}(?!\})/gi;
+
+/**
+ * Plain-language problems with a template, empty when it's safe to save. Catches the mistakes
+ * that would otherwise ship to members verbatim: unknown/misspelled placeholders, `{name}`
+ * written with single braces, and stray `{{` / `}}`.
+ */
+export function validateTemplate(template: string): string[] {
+  const problems: string[] = [];
+
+  const unknown = new Set<string>();
+  for (const m of template.matchAll(PLACEHOLDER_RE)) {
+    if (!KNOWN_PLACEHOLDERS.has(m[1].toLowerCase())) unknown.add(m[1]);
+  }
+  unknown.forEach(key => problems.push(`Unknown placeholder {{${key}}}`));
+
+  const rest = template.replace(PLACEHOLDER_RE, '');
+  const singles = new Set<string>();
+  for (const m of rest.matchAll(SINGLE_BRACE_RE)) singles.add(m[2]);
+  singles.forEach(key => problems.push(`{${key}} needs double braces: {{${key}}}`));
+
+  if (/\{\{|\}\}/.test(rest)) {
+    problems.push('Stray "{{" or "}}" — a placeholder looks like {{name}}');
+  }
+
+  return problems;
+}
+
+/**
+ * Cleans templates read from storage: known tiers only, non-blank strings only, length-capped.
+ * The org `settings` column is free-form JSON, so never trust its shape.
+ */
+export function normalizeTemplates(raw: unknown): MessageTemplates {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: MessageTemplates = {};
+  for (const tier of MESSAGE_TIERS) {
+    const value = (raw as Record<string, unknown>)[tier];
+    if (typeof value === 'string' && value.trim()) out[tier] = value.slice(0, MAX_TEMPLATE_LENGTH);
+  }
+  return out;
+}
+
+/** Fills a template's placeholders for one member. Unknown placeholders render as nothing. */
+export function renderTemplateMessage(
+  member: Member,
+  template: string,
+  options?: { signature?: string; scoreTerm?: string },
+): string {
+  const score = member.score ?? 0;
+  const signature = String(options?.signature || '').trim();
+
+  const data: Record<string, string> = {
+    ...buildMemberTemplateData(member),
+    // buildMemberTemplateData hardcodes the Green cutoff (70) and the action-plan targets, so
+    // take these from the live scoring engine instead -- they must follow the chapter's config.
+    pts_to_green: String(Math.max(0, getScoringConfig().trafficLight.green - score)),
+    nudges_list: buildActionPlanText(member).trim(),
+    snapshot: buildSnapshotText(member).trim(),
+    score_term: options?.scoreTerm || 'Go Green',
+    signature,
+  };
+
+  // One pass over the template: values are inserted as-is, never re-scanned, so a signature
+  // containing "{{score}}" (or "$&") can't expand or corrupt anything.
+  let body = template.replace(PLACEHOLDER_RE, (_match, key: string) => data[key.toLowerCase()] ?? '');
+  body = body.replace(/\n{3,}/g, '\n\n').trim();
+
+  // Same contract as the auto-built message: the signature always lands somewhere. A template
+  // that wants it mid-message uses {{signature}}; otherwise it's appended.
+  const placesSignatureItself = /\{\{\s*signature\s*\}\}/i.test(template);
+  if (signature && !placesSignatureItself) body += `\n\n${signature}`;
+
+  return `${body}\n\nMade with 🧡 by Handysolver`;
+}
+
+/**
+ * The one entry point for "the message to send this member": their tier's custom template if the
+ * chapter has set one, otherwise the auto-built message. Every outreach surface should call this
+ * rather than buildMemberMessage directly, so a template change applies everywhere at once.
+ */
+export function buildOutreachMessage(
+  member: Member,
+  options?: { signature?: string; scoreTerm?: string; templates?: MessageTemplates },
+): string {
+  const tier = (member.trafficLight?.label ?? 'Grey') as MessageTier;
+  const template = options?.templates?.[tier];
+  if (template && template.trim()) return renderTemplateMessage(member, template, options);
+  return buildMemberMessage(member, options);
+}
+
+/**
+ * Ready-made starting points for the editor's "Use a starter" button. They lean on live data
+ * ({{nudges_list}}, {{pts_to_green}}) rather than baking in advice like "book 1 One-to-One",
+ * which would be wrong for any member whose gap is elsewhere.
+ */
+export const STARTER_TEMPLATES: Record<MessageTier, string> = {
+  Green: `Hi {{name}}! 👋
+
+Your {{score_term}} Score: *{{score}}/100* {{traffic_light}}
+
+You're doing great — thank you for being such a strong part of our chapter! 🌟
+
+{{nudges_list}}`,
+  Amber: `Hi {{name}}! 👋
+
+Your {{score_term}} Score: *{{score}}/100* {{traffic_light}}
+
+You're so close — just *{{pts_to_green}} pts* away from Green! 🚀
+
+{{nudges_list}}
+
+{{snapshot}}`,
+  Red: `Hi {{name}}! 👋
+
+Your {{score_term}} Score: *{{score}}/100* {{traffic_light}}
+
+We value having you in the chapter and want to help you move up. A few focused steps this week will make a real difference:
+
+{{nudges_list}}`,
+  Grey: `Hi {{name}}! 👋
+
+Your {{score_term}} Score: *{{score}}/100* {{traffic_light}}
+
+We've missed seeing you at the chapter and would love to get you back on track. Here's where to start:
+
+{{nudges_list}}
+
+Reach out any time if you'd like to catch up over a 1-2-1. 🤝`,
+};
 
 export const UNIVERSAL_DEFAULT_TEMPLATE_TEXT = `Hi {{name}}!
 

@@ -1,0 +1,709 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildMemberMessage (auto-built message) > amberAll: with signature and custom score term 1`] = `
+"Hi Imran! 👋
+
+Your Go Green Score: *63/100* 🟡 Amber
+
+🎯 To reach *Green* (need *+7 pts*), do *all* of these:
+
+*Step 1*
+📊 *TYFCB*: 3/5 pts
+  → TYFCB: generate ₹25,000 more closed business → *+1 pts*
+
+*Step 2*
+📊 *Attendance*: 5/10 pts
+  → Attendance: improve attendance rate to 96% → *+5 pts*
+
+*Step 3*
+📊 *CEU*: 5/10 pts
+  → CEU: reach 0.5 CEUs per week → *+5 pts*
+
+✅ Combined new total: *74/100* 🟢 Green
+
+📈 Other ways to increase points:
+• *1-2-1s* (15/20 pts): 1-2-1s: reach 1 1-2-1s per week → *+5 pts*
+• *Referrals* (20/25 pts): Referrals given: reach 1.25 per week → *+5 pts*
+• *Visitors* (15/25 pts): Visitors: bring 1 more visitor(s) → *+5 pts*
+• *Sponsors* (0/5 pts): Sponsors: sponsor at least 1 member → *+5 pts*
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 92%
+  Points: 5/10 pts
+  Target: next: 96%+ for 10 pts
+- *CEU*
+  Current: per week: 0.50
+  Points: 5/10 pts
+  Target: next: 0.5 for 10 pts
+- *1-2-1s*
+  Current: per week: 0.92
+  Points: 15/20 pts
+  Target: next: 1.0 for 20 pts
+- *Referrals*
+  Current: given per week: 1.00
+  Points: 20/25 pts
+  Target: next: 0.75 for 15 pts; max: 1.25 for 25 pts
+- *Visitors*
+  Current: brought: 3
+  Points: 15/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 6,00,000
+  Points: 3/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Keep going!
+Asha, Admin
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > amberAll: without signature 1`] = `
+"Hi Imran! 👋
+
+Your Go Green Score: *63/100* 🟡 Amber
+
+🎯 To reach *Green* (need *+7 pts*), do *all* of these:
+
+*Step 1*
+📊 *TYFCB*: 3/5 pts
+  → TYFCB: generate ₹25,000 more closed business → *+1 pts*
+
+*Step 2*
+📊 *Attendance*: 5/10 pts
+  → Attendance: improve attendance rate to 96% → *+5 pts*
+
+*Step 3*
+📊 *CEU*: 5/10 pts
+  → CEU: reach 0.5 CEUs per week → *+5 pts*
+
+✅ Combined new total: *74/100* 🟢 Green
+
+📈 Other ways to increase points:
+• *1-2-1s* (15/20 pts): 1-2-1s: reach 1 1-2-1s per week → *+5 pts*
+• *Referrals* (20/25 pts): Referrals given: reach 1.25 per week → *+5 pts*
+• *Visitors* (15/25 pts): Visitors: bring 1 more visitor(s) → *+5 pts*
+• *Sponsors* (0/5 pts): Sponsors: sponsor at least 1 member → *+5 pts*
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 92%
+  Points: 5/10 pts
+  Target: next: 96%+ for 10 pts
+- *CEU*
+  Current: per week: 0.50
+  Points: 5/10 pts
+  Target: next: 0.5 for 10 pts
+- *1-2-1s*
+  Current: per week: 0.92
+  Points: 15/20 pts
+  Target: next: 1.0 for 20 pts
+- *Referrals*
+  Current: given per week: 1.00
+  Points: 20/25 pts
+  Target: next: 0.75 for 15 pts; max: 1.25 for 25 pts
+- *Visitors*
+  Current: brought: 3
+  Points: 15/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 6,00,000
+  Points: 3/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > amberOne: with signature and custom score term 1`] = `
+"Hi Sneha! 👋
+
+Your Go Green Score: *68/100* 🟡 Amber
+
+🎯 To reach *Green* (need *+2 pts*), just do this:
+
+📊 *Attendance*: 5/10 pts
+  → Attendance: improve attendance rate to 96%
+  ✅ New total: *73/100* 🟢 Green
+
+
+📈 Other ways to increase points:
+• *CEU* (5/10 pts): CEU: reach 0.5 CEUs per week → *+5 pts*
+• *1-2-1s* (15/20 pts): 1-2-1s: reach 1 1-2-1s per week → *+5 pts*
+• *Referrals* (20/25 pts): Referrals given: reach 1.25 per week → *+5 pts*
+• *Visitors* (20/25 pts): Visitors: bring 1 more visitor(s) → *+5 pts*
+• *Sponsors* (0/5 pts): Sponsors: sponsor at least 1 member → *+5 pts*
+• *TYFCB* (3/5 pts): TYFCB: generate ₹25,000 more closed business → *+1 pts*
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 92%
+  Points: 5/10 pts
+  Target: next: 96%+ for 10 pts
+- *CEU*
+  Current: per week: 0.50
+  Points: 5/10 pts
+  Target: next: 0.5 for 10 pts
+- *1-2-1s*
+  Current: per week: 0.92
+  Points: 15/20 pts
+  Target: next: 1.0 for 20 pts
+- *Referrals*
+  Current: given per week: 1.00
+  Points: 20/25 pts
+  Target: next: 0.75 for 15 pts; max: 1.25 for 25 pts
+- *Visitors*
+  Current: brought: 4
+  Points: 20/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 6,00,000
+  Points: 3/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Keep going!
+Asha, Admin
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > amberOne: without signature 1`] = `
+"Hi Sneha! 👋
+
+Your Go Green Score: *68/100* 🟡 Amber
+
+🎯 To reach *Green* (need *+2 pts*), just do this:
+
+📊 *Attendance*: 5/10 pts
+  → Attendance: improve attendance rate to 96%
+  ✅ New total: *73/100* 🟢 Green
+
+
+📈 Other ways to increase points:
+• *CEU* (5/10 pts): CEU: reach 0.5 CEUs per week → *+5 pts*
+• *1-2-1s* (15/20 pts): 1-2-1s: reach 1 1-2-1s per week → *+5 pts*
+• *Referrals* (20/25 pts): Referrals given: reach 1.25 per week → *+5 pts*
+• *Visitors* (20/25 pts): Visitors: bring 1 more visitor(s) → *+5 pts*
+• *Sponsors* (0/5 pts): Sponsors: sponsor at least 1 member → *+5 pts*
+• *TYFCB* (3/5 pts): TYFCB: generate ₹25,000 more closed business → *+1 pts*
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 92%
+  Points: 5/10 pts
+  Target: next: 96%+ for 10 pts
+- *CEU*
+  Current: per week: 0.50
+  Points: 5/10 pts
+  Target: next: 0.5 for 10 pts
+- *1-2-1s*
+  Current: per week: 0.92
+  Points: 15/20 pts
+  Target: next: 1.0 for 20 pts
+- *Referrals*
+  Current: given per week: 1.00
+  Points: 20/25 pts
+  Target: next: 0.75 for 15 pts; max: 1.25 for 25 pts
+- *Visitors*
+  Current: brought: 4
+  Points: 20/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 6,00,000
+  Points: 3/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > greenOpts: with signature and custom score term 1`] = `
+"Hi Prof Vikram! 👋
+
+Your Go Green Score: *89/100* 🟢 Green
+
+✅ You're in the Green! Keep improving with any of these:
+
+*Option 1*
+📊 *TYFCB*: 4/5 pts
+  → TYFCB: generate ₹3,50,000 more closed business
+  ✅ New total: *90/100* 🟢 Green
+
+*Option 2*
+📊 *Visitors*: 20/25 pts
+  → Visitors: bring 1 more visitor(s)
+  ✅ New total: *94/100* 🟢 Green
+
+*Option 3*
+📊 *Sponsors*: 0/5 pts
+  → Sponsors: sponsor at least 1 member
+  ✅ New total: *94/100* 🟢 Green
+
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 100%
+  Points: 10/10 pts
+  Target: max achieved
+- *CEU*
+  Current: per week: 0.75
+  Points: 10/10 pts
+  Target: max achieved
+- *1-2-1s*
+  Current: per week: 1.25
+  Points: 20/20 pts
+  Target: max achieved
+- *Referrals*
+  Current: given per week: 1.50
+  Points: 25/25 pts
+  Target: max achieved
+- *Visitors*
+  Current: brought: 4
+  Points: 20/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 9,00,000
+  Points: 4/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Keep going!
+Asha, Admin
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > greenOpts: without signature 1`] = `
+"Hi Prof Vikram! 👋
+
+Your Go Green Score: *89/100* 🟢 Green
+
+✅ You're in the Green! Keep improving with any of these:
+
+*Option 1*
+📊 *TYFCB*: 4/5 pts
+  → TYFCB: generate ₹3,50,000 more closed business
+  ✅ New total: *90/100* 🟢 Green
+
+*Option 2*
+📊 *Visitors*: 20/25 pts
+  → Visitors: bring 1 more visitor(s)
+  ✅ New total: *94/100* 🟢 Green
+
+*Option 3*
+📊 *Sponsors*: 0/5 pts
+  → Sponsors: sponsor at least 1 member
+  ✅ New total: *94/100* 🟢 Green
+
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 100%
+  Points: 10/10 pts
+  Target: max achieved
+- *CEU*
+  Current: per week: 0.75
+  Points: 10/10 pts
+  Target: max achieved
+- *1-2-1s*
+  Current: per week: 1.25
+  Points: 20/20 pts
+  Target: max achieved
+- *Referrals*
+  Current: given per week: 1.50
+  Points: 25/25 pts
+  Target: max achieved
+- *Visitors*
+  Current: brought: 4
+  Points: 20/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 9,00,000
+  Points: 4/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > grey: with signature and custom score term 1`] = `
+"Hi Neeraj! 👋
+
+Your Go Green Score: *0/100* ⚪ Grey
+
+🎯 To reach *Red* (need *+30 pts*), do *all* of these:
+
+*Step 1*
+📊 *TYFCB*: 0/5 pts
+  → TYFCB: generate ₹1 more closed business → *+1 pts*
+
+*Step 2*
+📊 *Attendance*: 0/10 pts
+  → Attendance: improve attendance rate to 88% → *+5 pts*
+
+*Step 3*
+📊 *CEU*: 0/10 pts
+  → CEU: reach 0 CEUs per week → *+5 pts*
+
+*Step 4*
+📊 *1-2-1s*: 0/20 pts
+  → 1-2-1s: reach 0.25 1-2-1s per week → *+5 pts*
+
+*Step 5*
+📊 *Referrals*: 0/25 pts
+  → Referrals given: reach 0.25 per week → *+5 pts*
+
+*Step 6*
+📊 *Visitors*: 0/25 pts
+  → Visitors: bring 1 more visitor(s) → *+5 pts*
+
+*Step 7*
+📊 *Sponsors*: 0/5 pts
+  → Sponsors: sponsor at least 1 member → *+5 pts*
+
+✅ Combined new total: *31/100* 🔴 Red
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 25%
+  Points: 0/10 pts
+  Target: next: 96%+ for 10 pts
+- *CEU*
+  Current: per week: 0.00
+  Points: 0/10 pts
+  Target: next: 0.5 for 10 pts
+- *1-2-1s*
+  Current: per week: 0.04
+  Points: 0/20 pts
+  Target: next: 1.0 for 20 pts
+- *Referrals*
+  Current: given per week: 0.04
+  Points: 0/25 pts
+  Target: next: 0.75 for 15 pts; max: 1.25 for 25 pts
+- *Visitors*
+  Current: brought: 0
+  Points: 0/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 0
+  Points: 0/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Keep going!
+Asha, Admin
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > grey: without signature 1`] = `
+"Hi Neeraj! 👋
+
+Your Go Green Score: *0/100* ⚪ Grey
+
+🎯 To reach *Red* (need *+30 pts*), do *all* of these:
+
+*Step 1*
+📊 *TYFCB*: 0/5 pts
+  → TYFCB: generate ₹1 more closed business → *+1 pts*
+
+*Step 2*
+📊 *Attendance*: 0/10 pts
+  → Attendance: improve attendance rate to 88% → *+5 pts*
+
+*Step 3*
+📊 *CEU*: 0/10 pts
+  → CEU: reach 0 CEUs per week → *+5 pts*
+
+*Step 4*
+📊 *1-2-1s*: 0/20 pts
+  → 1-2-1s: reach 0.25 1-2-1s per week → *+5 pts*
+
+*Step 5*
+📊 *Referrals*: 0/25 pts
+  → Referrals given: reach 0.25 per week → *+5 pts*
+
+*Step 6*
+📊 *Visitors*: 0/25 pts
+  → Visitors: bring 1 more visitor(s) → *+5 pts*
+
+*Step 7*
+📊 *Sponsors*: 0/5 pts
+  → Sponsors: sponsor at least 1 member → *+5 pts*
+
+✅ Combined new total: *31/100* 🔴 Red
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 25%
+  Points: 0/10 pts
+  Target: next: 96%+ for 10 pts
+- *CEU*
+  Current: per week: 0.00
+  Points: 0/10 pts
+  Target: next: 0.5 for 10 pts
+- *1-2-1s*
+  Current: per week: 0.04
+  Points: 0/20 pts
+  Target: next: 1.0 for 20 pts
+- *Referrals*
+  Current: given per week: 0.04
+  Points: 0/25 pts
+  Target: next: 0.75 for 15 pts; max: 1.25 for 25 pts
+- *Visitors*
+  Current: brought: 0
+  Points: 0/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 0
+  Points: 0/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > perfect: with signature and custom score term 1`] = `
+"Hi Dr Asha! 👋
+
+Your Go Green Score: *100/100* 🟢 Green
+
+🏆 Perfect score! You're the BNI champion — keep leading the way!
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 100%
+  Points: 10/10 pts
+  Target: max achieved
+- *CEU*
+  Current: per week: 0.75
+  Points: 10/10 pts
+  Target: max achieved
+- *1-2-1s*
+  Current: per week: 1.25
+  Points: 20/20 pts
+  Target: max achieved
+- *Referrals*
+  Current: given per week: 1.67
+  Points: 25/25 pts
+  Target: max achieved
+- *Visitors*
+  Current: brought: 6
+  Points: 25/25 pts
+  Target: max achieved
+- *TYFCB*
+  Current: closed business: Rs 15,00,000
+  Points: 5/5 pts
+  Target: max achieved
+- *Sponsors*
+  Current: sponsored: 1
+  Points: 5/5 pts
+  Target: max achieved
+
+Keep going!
+Asha, Admin
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > perfect: without signature 1`] = `
+"Hi Dr Asha! 👋
+
+Your Go Green Score: *100/100* 🟢 Green
+
+🏆 Perfect score! You're the BNI champion — keep leading the way!
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 100%
+  Points: 10/10 pts
+  Target: max achieved
+- *CEU*
+  Current: per week: 0.75
+  Points: 10/10 pts
+  Target: max achieved
+- *1-2-1s*
+  Current: per week: 1.25
+  Points: 20/20 pts
+  Target: max achieved
+- *Referrals*
+  Current: given per week: 1.67
+  Points: 25/25 pts
+  Target: max achieved
+- *Visitors*
+  Current: brought: 6
+  Points: 25/25 pts
+  Target: max achieved
+- *TYFCB*
+  Current: closed business: Rs 15,00,000
+  Points: 5/5 pts
+  Target: max achieved
+- *Sponsors*
+  Current: sponsored: 1
+  Points: 5/5 pts
+  Target: max achieved
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > red: with signature and custom score term 1`] = `
+"Hi Rahul! 👋
+
+Your Go Green Score: *33/100* 🔴 Red
+
+🎯 To reach *Amber* (need *+17 pts*), do *all* of these:
+
+*Step 1*
+📊 *TYFCB*: 3/5 pts
+  → TYFCB: generate ₹3,25,000 more closed business → *+1 pts*
+
+*Step 2*
+📊 *Attendance*: 0/10 pts
+  → Attendance: improve attendance rate to 88% → *+5 pts*
+
+*Step 3*
+📊 *CEU*: 5/10 pts
+  → CEU: reach 0.5 CEUs per week → *+5 pts*
+
+*Step 4*
+📊 *1-2-1s*: 5/20 pts
+  → 1-2-1s: reach 0.5 1-2-1s per week → *+5 pts*
+
+*Step 5*
+📊 *Referrals*: 10/25 pts
+  → Referrals given: reach 0.75 per week → *+5 pts*
+
+✅ Combined new total: *54/100* 🟡 Amber
+
+📈 Other ways to increase points:
+• *Visitors* (10/25 pts): Visitors: bring 1 more visitor(s) → *+5 pts*
+• *Sponsors* (0/5 pts): Sponsors: sponsor at least 1 member → *+5 pts*
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 75%
+  Points: 0/10 pts
+  Target: next: 96%+ for 10 pts
+- *CEU*
+  Current: per week: 0.25
+  Points: 5/10 pts
+  Target: next: 0.5 for 10 pts
+- *1-2-1s*
+  Current: per week: 0.42
+  Points: 5/20 pts
+  Target: next: 1.0 for 20 pts
+- *Referrals*
+  Current: given per week: 0.58
+  Points: 10/25 pts
+  Target: next: 0.75 for 15 pts; max: 1.25 for 25 pts
+- *Visitors*
+  Current: brought: 2
+  Points: 10/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 3,00,000
+  Points: 3/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Keep going!
+Asha, Admin
+
+Made with 🧡 by Handysolver"
+`;
+
+exports[`buildMemberMessage (auto-built message) > red: without signature 1`] = `
+"Hi Rahul! 👋
+
+Your Go Green Score: *33/100* 🔴 Red
+
+🎯 To reach *Amber* (need *+17 pts*), do *all* of these:
+
+*Step 1*
+📊 *TYFCB*: 3/5 pts
+  → TYFCB: generate ₹3,25,000 more closed business → *+1 pts*
+
+*Step 2*
+📊 *Attendance*: 0/10 pts
+  → Attendance: improve attendance rate to 88% → *+5 pts*
+
+*Step 3*
+📊 *CEU*: 5/10 pts
+  → CEU: reach 0.5 CEUs per week → *+5 pts*
+
+*Step 4*
+📊 *1-2-1s*: 5/20 pts
+  → 1-2-1s: reach 0.5 1-2-1s per week → *+5 pts*
+
+*Step 5*
+📊 *Referrals*: 10/25 pts
+  → Referrals given: reach 0.75 per week → *+5 pts*
+
+✅ Combined new total: *54/100* 🟡 Amber
+
+📈 Other ways to increase points:
+• *Visitors* (10/25 pts): Visitors: bring 1 more visitor(s) → *+5 pts*
+• *Sponsors* (0/5 pts): Sponsors: sponsor at least 1 member → *+5 pts*
+
+📋 Current scoring snapshot:
+- *Attendance*
+  Current: rate: 75%
+  Points: 0/10 pts
+  Target: next: 96%+ for 10 pts
+- *CEU*
+  Current: per week: 0.25
+  Points: 5/10 pts
+  Target: next: 0.5 for 10 pts
+- *1-2-1s*
+  Current: per week: 0.42
+  Points: 5/20 pts
+  Target: next: 1.0 for 20 pts
+- *Referrals*
+  Current: given per week: 0.58
+  Points: 10/25 pts
+  Target: next: 0.75 for 15 pts; max: 1.25 for 25 pts
+- *Visitors*
+  Current: brought: 2
+  Points: 10/25 pts
+  Target: next: 4 for 20 pts; max: 5 for 25 pts
+- *TYFCB*
+  Current: closed business: Rs 3,00,000
+  Points: 3/5 pts
+  Target: next: Rs 6,25,000 for 4 pts; max: Rs 12,50,000 for 5 pts
+- *Sponsors*
+  Current: sponsored: 0
+  Points: 0/5 pts
+  Target: next: 1 for 5 pts
+
+Made with 🧡 by Handysolver"
+`;

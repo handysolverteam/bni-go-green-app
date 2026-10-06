@@ -6,11 +6,15 @@ import { Settings, Save, RotateCcw, ShieldCheck, Check, MessageSquare, Heart, Lo
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { supabaseService } from '../services/supabaseService';
-import { ScoringConfig } from '../types';
+import { ScoringConfig, Member } from '../types';
 import { PageHeader } from './PageHeader';
+import { MessageTemplateEditor } from './MessageTemplateEditor';
+import { MESSAGE_TIERS, normalizeTemplates, validateTemplate, type MessageTemplates } from '../lib/outreachUtils';
 
 interface SettingsPageProps {
   orgId?: string;
+  /** Chapter members, used only to render the WhatsApp message preview with real data. */
+  members?: Member[];
   onSettingsSaved?: () => void;
 }
 
@@ -76,7 +80,7 @@ export const CustomNumberStepper: React.FC<CustomNumberStepperProps> = ({
   );
 };
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSaved }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, members = [], onSettingsSaved }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [config, setConfigState] = useState<ScoringConfig>(getScoringConfig());
@@ -84,6 +88,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
   const [enableSignature, setEnableSignature] = useState(true);
   const [scoreTerm, setScoreTerm] = useState('Go Green');
   const [defaultCountryCode, setDefaultCountryCode] = useState('+91');
+  const [messageTemplates, setMessageTemplates] = useState<MessageTemplates>({});
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
@@ -111,6 +116,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
         if ((res as any).defaultCountryCode) {
           setDefaultCountryCode((res as any).defaultCountryCode);
         }
+        setMessageTemplates(res.messageTemplates);
       }
       setIsLoadingSettings(false);
     };
@@ -118,9 +124,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
   }, [orgId, user]);
 
   const handleSave = async () => {
+    // A misspelled placeholder would otherwise go out to members verbatim, so refuse to save.
+    // The editor already lists the exact problems under the box; this is the backstop.
+    const brokenTier = MESSAGE_TIERS.find(t => {
+      const text = messageTemplates[t];
+      return text ? validateTemplate(text).length > 0 : false;
+    });
+    if (brokenTier) {
+      showToast(`Fix the ${brokenTier} message template before saving — it has placeholder problems.`, 'error');
+      return;
+    }
+
     setScoringConfig(config);
     if (orgId && user?.uid) {
-      await supabaseService.saveOrgSettings(
+      const saved = await supabaseService.saveOrgSettings(
         orgId,
         user.uid,
         {
@@ -131,9 +148,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
           enableSignature: enableSignature,
           scoreTerm: scoreTerm,
           defaultCountryCode: defaultCountryCode,
+          messageTemplates,
         },
         config
       );
+      if (!saved) {
+        showToast('Could not save settings. Check your connection and permissions, then try again.', 'error');
+        return;
+      }
+      // Blank templates are dropped on save (they mean "use auto"); mirror that here so the
+      // tier badges show what will actually be used.
+      setMessageTemplates(normalizeTemplates(messageTemplates));
     }
     setSavedSuccess(true);
     showToast('Scoring thresholds & custom settings saved!', 'success');
@@ -146,6 +171,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
     setConfigState(DEFAULTS);
     setSignatureText('Keep the momentum going! 💪');
     setEnableSignature(true);
+    // saveOrgSettings falls back to these when they aren't supplied, so the DB is reset to them
+    // either way -- keep the form showing what was actually stored. Message templates are NOT
+    // reset: this action is about scoring and the signature, and wiping wording someone
+    // carefully wrote would be a nasty surprise.
+    setScoreTerm('Go Green');
+    setDefaultCountryCode('+91');
     setShowResetConfirm(false);
     if (orgId && user?.uid) {
       await supabaseService.saveOrgSettings(
@@ -270,6 +301,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, onSettingsSav
             />
           </div>
         )}
+
+        {/* Message wording: auto-built by default, or the chapter's own template per tier */}
+        <div className="pt-3 border-t border-white/10 space-y-3">
+          <div className="space-y-1">
+            <h4 className="text-xs font-black text-slate-300 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+              <span>Message Wording</span>
+            </h4>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              By default every message is built automatically from the member's live score. Switch a tier to
+              custom to write your own wording — fields like the member's name, score and action plan are
+              filled in for each person.
+            </p>
+          </div>
+          <MessageTemplateEditor
+            templates={messageTemplates}
+            onChange={setMessageTemplates}
+            members={members}
+            signature={enableSignature ? signatureText.trim() : ''}
+            scoreTerm={scoreTerm || 'Go Green'}
+          />
+        </div>
 
         {/* How Messages Are Auto-Generated */}
         {/* <div className="pt-3 border-t border-white/10 space-y-2.5">
