@@ -88,7 +88,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     icon: typeof BarChart3;
     badge?: number | null;
     subPath?: string;
-    group: 'Overview' | 'Engage' | 'Manage';
+    group: 'Overview' | 'Engage' | 'Chapter';
     adminOnly?: boolean;
     needsRoster?: boolean;
     needsRenewals?: boolean;
@@ -100,8 +100,8 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     // 'renewals' back to validTabs in App.tsx, to re-enable.
     // { id: 'renewals' as NavigationTab, label: 'Renewals', icon: RefreshCw },
     // { id: 'renewals' as NavigationTab, label: 'Import Data', icon: UploadCloud, subPath: 'import', needsRenewals: true },
-    { id: 'org' as NavigationTab, group: 'Manage', label: 'Chapter', icon: Building2 },
-    { id: 'settings' as NavigationTab, group: 'Manage', label: 'Settings', icon: Settings, adminOnly: true },
+    { id: 'org' as NavigationTab, group: 'Chapter', label: 'Members', icon: Building2 },
+    { id: 'settings' as NavigationTab, group: 'Chapter', label: 'Scoring & Messages', icon: Settings, adminOnly: true },
     { id: 'chat' as NavigationTab, group: 'Engage', label: 'Chapter AI', icon: Bot, needsRoster: true },
   ];
 

@@ -11,7 +11,7 @@ import { UniversalModal } from './UniversalModal';
 import { AddMemberModal } from './AddMemberModal';
 import { scoreMember } from '../lib/scoringEngine';
 import { OrgShareWidget } from './OrgShareWidget';
-import { isAdminOrOwner, isSuperadmin } from '../lib/permissions';
+import { isAdminOrOwner, isSuperadmin, hasFullRosterAccess } from '../lib/permissions';
 import { ROLE_LABELS_SHORT } from '../lib/roles';
 import * as XLSX from 'xlsx';
 
@@ -94,6 +94,10 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
 
     return false;
   };
+
+  // Other members' phone numbers are hidden from plain members (their own stays visible).
+  const canSeeContacts = hasFullRosterAccess(orgMember?.role, orgMember?.committees);
+  const showPhone = (m: Member): boolean => canSeeContacts || isUserSelf(m);
 
   // Helper to get member avatar ONLY if phone matches logged-in user OR manually mapped to org user
   const getMemberAvatar = (mem: Member): string | null => {
@@ -515,8 +519,8 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
       const phoneDigits = (m.Phone || '').replace(/\D/g, '');
       return (
         m.Name.toLowerCase().includes(q) ||
-        (m.Phone || '').toLowerCase().includes(q) ||
-        (cleanDigits.length >= 3 && phoneDigits.includes(cleanDigits)) ||
+        (showPhone(m) && (m.Phone || '').toLowerCase().includes(q)) ||
+        (showPhone(m) && cleanDigits.length >= 3 && phoneDigits.includes(cleanDigits)) ||
         (m.JoinDate || '').toLowerCase().includes(q)
       );
     })
@@ -575,7 +579,8 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
         </div> */}
       </GlassCard>
 
-      {/* Card 2: Organization Team & Role Permissions (100% USER & MOBILE FRIENDLY) */}
+      {/* Card 2: Organization Team & Role Permissions -- admins only; members have nothing to manage here */}
+      {isAdminOrOwnerRole && (
       <GlassCard glow className="p-4 sm:p-6 space-y-4 border-slate-200/70 dark:border-white/10 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70 dark:border-white/10">
           <div className="flex items-center space-x-2.5">
@@ -761,6 +766,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
           </table>
         </div>
       </GlassCard>
+      )}
 
       {/* Card 3: Chapter Master Roster & Mobile-Friendly Views */}
       <GlassCard glow className="p-4 sm:p-6 space-y-4 border-slate-200/70 dark:border-white/10 shadow-2xl">
@@ -892,7 +898,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                   <div className="mt-2.5 pt-2 border-t border-slate-200/50 dark:border-white/5 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
                     <div className="flex items-center space-x-1.5">
                       <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="font-mono text-xs text-slate-700 dark:text-slate-200">{mem.Phone ? formatPhoneWithCountryCode(mem.Phone) : <span className="text-slate-400 italic">No phone set</span>}</span>
+                      <span className="font-mono text-xs text-slate-700 dark:text-slate-200">{!showPhone(mem) ? '••••••••' : mem.Phone ? formatPhoneWithCountryCode(mem.Phone) : <span className="text-slate-400 italic">No phone set</span>}</span>
                     </div>
                     {mem.JoinDate && (
                       <div className="flex items-center space-x-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
@@ -957,7 +963,7 @@ export const OrganizationTab: React.FC<OrganizationTabProps> = ({
                       <td className="px-4 py-3">
                         <div className="flex items-center space-x-1.5">
                           <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="font-mono text-slate-800 dark:text-slate-200">{mem.Phone ? formatPhoneWithCountryCode(mem.Phone) : <span className="text-slate-400 italic">No phone set</span>}</span>
+                          <span className="font-mono text-slate-800 dark:text-slate-200">{!showPhone(mem) ? '••••••••' : mem.Phone ? formatPhoneWithCountryCode(mem.Phone) : <span className="text-slate-400 italic">No phone set</span>}</span>
                         </div>
                       </td>
 

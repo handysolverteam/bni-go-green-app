@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { formatDecimal, formatCurrency } from '../lib/numberUtils';
 import { supabaseService } from '../services/supabaseService';
+import { ChatMessageBody } from './ChatMessageBody';
 import { geminiService } from '../services/geminiService';
 import { analyzeLocalChapterQuery } from '../services/localAiEngine';
 import { isAdminOrOwner } from '../lib/permissions';
@@ -14,28 +15,6 @@ import {
   TrendingUp, AlertTriangle, Award, MessageSquare, Layers, FileSpreadsheet, ArrowRight,
   Send, Plus, History, Clock, RefreshCw
 } from 'lucide-react';
-
-// Lightweight markdown renderer: converts *bold* to <strong>, preserves line breaks
-const renderFormattedText = (text: string): React.ReactNode => {
-  const lines = text.split('\n');
-  return lines.map((line, lineIdx) => {
-    // Split on *bold* patterns and render <strong> tags
-    const parts = line.split(/\*(.*?)\*/g);
-    const rendered = parts.map((part, partIdx) => {
-      // Odd indices are the captured groups (bold text)
-      if (partIdx % 2 === 1) {
-        return <strong key={partIdx} className="font-extrabold">{part}</strong>;
-      }
-      return part;
-    });
-    return (
-      <span key={lineIdx}>
-        {rendered}
-        {lineIdx < lines.length - 1 && <br />}
-      </span>
-    );
-  });
-};
 
 export interface ChatOption {
   id: string;
@@ -973,7 +952,7 @@ REGENERATION INSTRUCTIONS:
                   }`}
                 >
                   {/* Markdown Message Content */}
-                  <div className="whitespace-pre-wrap font-sans leading-relaxed">{renderFormattedText(msg.text)}</div>
+                  <ChatMessageBody text={msg.text} />
 
                   {/* Message Timestamp */}
                   <div className="text-[9px] opacity-50 text-right mt-1 font-mono">

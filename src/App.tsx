@@ -1042,6 +1042,7 @@ export const AppContent: React.FC = () => {
             onOpenImport={() => navigateTo('import')}
             onOpenNudges={canSeeFullRoster ? (reportName) => navigateTo('nudges', reportName) : undefined}
             canEdit={isAdminOrOwner(orgMember?.role)}
+            canSeeContactDetails={canSeeFullRoster}
             onSaveMember={handleSaveMember}
             onDeleteMember={handleDeleteMember}
             onDeleteBatch={handleDeleteBatch}
