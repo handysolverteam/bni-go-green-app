@@ -161,6 +161,47 @@ export function analyzeLocalChapterQuery(
     return res;
   };
 
+  // 0. Ranked contact list: "give me top three users' email address and phone numbers",
+  // "lowest 5 members phone", "red zone members email". Contact permission was already enforced
+  // by the early guard above, so reaching here means the caller may see contact details.
+  const wantsEmail = /e-?mail|mail id/.test(lower);
+  const wantsPhone = /phone|mobile|whatsapp number|contact (number|no|detail)|number/.test(lower);
+  const rankWord = /\b(top|best|highest|leading|bottom|lowest|worst|weakest)\b/.test(lower);
+  const zoneWord = lower.includes('green') ? 'Green' : lower.includes('red') ? 'Red' : lower.includes('amber') ? 'Amber' : null;
+  if ((wantsEmail || wantsPhone) && (rankWord || zoneWord) && members.length > 0) {
+    const WORD_NUMS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+    const numMatch = lower.match(/\b(\d{1,2})\b/) || lower.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    const count = Math.min(Math.max(numMatch ? (WORD_NUMS[numMatch[1]] ?? parseInt(numMatch[1], 10)) : 5, 1), 25);
+    const ascending = /\b(bottom|lowest|worst|weakest)\b/.test(lower);
+
+    // The same person can appear in several imported reports -- list each person once.
+    const seen = new Set<string>();
+    const pool = members.filter(m => {
+      if (zoneWord && getMemberZone(m) !== zoneWord) return false;
+      const key = getMemberName(m).trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const ranked = [...pool]
+      .sort((x, y) => (ascending ? getMemberScore(x) - getMemberScore(y) : getMemberScore(y) - getMemberScore(x)))
+      .slice(0, count);
+
+    if (ranked.length === 0) {
+      return `📭 *No ${zoneWord ?? ''} members found in ${orgName}.*\n\n❓ *Would you like to see the full member list instead?*`;
+    }
+
+    const label = zoneWord ? `${zoneWord} Zone` : ascending ? 'Lowest-Scoring' : 'Top-Scoring';
+    let res = `📇 *${label} ${ranked.length} Member${ranked.length === 1 ? '' : 's'} — Contact Details (${orgName})*\n\n`;
+    ranked.forEach((m, idx) => {
+      const emailLine = wantsEmail ? `   ✉️ ${m.Email || (m as any).email || 'N/A'}\n` : '';
+      const phoneLine = wantsPhone || !wantsEmail ? `   📱 ${getMemberPhone(m)}\n` : '';
+      res += `${idx + 1}. *${getMemberName(m)}* — ${getZoneEmoji(getMemberZone(m))} ${getMemberScore(m)}/100 pts\n${emailLine}${phoneLine}\n`;
+    });
+    res += `❓ *Would you like me to draft a WhatsApp message for any of them?*`;
+    return res;
+  }
+
   // 1. Affirmative Response to previous AI counter-question ("yes", "sure", "ok", "do it", "yeah", "generate")
   const isAffirmative = ['yes', 'sure', 'ok', 'yeah', 'yep', 'do it', 'generate', 'send', 'please', 'go ahead'].some(w => lower === w || lower.startsWith(w + ' ') || lower.startsWith(w + ','));
 
@@ -698,7 +739,8 @@ export function analyzeLocalChapterQuery(
   }
 
   // 16. Intelligent Disambiguation & Counter-Question on Unmatched / Vague Queries
-  const sampleMembers = members.slice(0, 3).map(m => `*${getMemberName(m)}*`).join(', ');
+  const sampleNames = Array.from(new Set(members.map(m => getMemberName(m)))).slice(0, 3);
+  const sampleMembers = sampleNames.map(n => `*${n}*`).join(', ');
 
   return `📊 *Chapter AI Intelligence Overview for ${firstName}*\n` +
     `*Chapter:* ${orgName} | *Active Members:* ${total}\n\n` +

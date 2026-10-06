@@ -208,7 +208,7 @@ export const AccountDangerZone: React.FC<AccountDangerZoneProps> = ({
                   onClick={() => { setShowLeaveModal(false); onGoToChapterTab(); }}
                   className="mt-3 w-full px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] border border-white/10 transition-colors flex items-center justify-center gap-1.5"
                 >
-                  <span>Go to Chapter tab to promote an Owner</span>
+                  <span>Go to Members to promote an Owner</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}

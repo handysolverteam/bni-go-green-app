@@ -213,7 +213,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ orgId, members = [],
       {/* Header Controls */}
       <PageHeader
         icon={<Settings className="w-5 h-5" />}
-        title="Settings"
+        title="Scoring & Messages"
         right={
           <>
             {isLoadingSettings && <Loader2 className="w-4 h-4 text-emerald-400 animate-spin mr-2 self-center sm:self-auto" />}

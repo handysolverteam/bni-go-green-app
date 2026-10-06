@@ -65,6 +65,8 @@ interface DashboardProps {
   isDataLoaded?: boolean;
   userProfile?: UserProfileExtended | null;
   currentUserEmail?: string | null;
+  /** Plain members see only their own phone number; roster-access roles see everyone's. */
+  canSeeContactDetails?: boolean;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -76,6 +78,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenImport,
   onOpenNudges,
   canEdit = true,
+  canSeeContactDetails = true,
   onSaveMember,
   onDeleteMember,
   onDeleteBatch,
@@ -251,12 +254,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return { total, green, amber, red, grey, avgScore };
   }, [members, reportMembers, activeReportName]);
 
+  // Other members' phone numbers are hidden from plain members (their own stays visible).
+  const showPhone = (m: Member): boolean => canSeeContactDetails || isUserSelf(m);
+
   // Filtered & Sorted Members for Active Report Table View
   const filteredMembers = useMemo(() => {
     const cleanSearchDigits = searchTerm.replace(/\D/g, '');
     return reportMembers
       .filter(m => {
-        const matchesPhone = (m.Phone && m.Phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        const matchesPhone = showPhone(m) && (m.Phone && m.Phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
                              (cleanSearchDigits.length >= 3 && (m.Phone || '').replace(/\D/g, '').includes(cleanSearchDigits));
         const matchesSearch = m.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                               matchesPhone ||
@@ -895,7 +901,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         <div className="min-w-0">
                           <h4 className="text-xs sm:text-sm font-bold text-white truncate">{member.Name}</h4>
                           <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
-                            <span>{member.Phone || 'No phone'}</span>
+                            <span>{showPhone(member) ? (member.Phone || 'No phone') : '••••••••'}</span>
                             {(member.JoinDate || (member as any).join_date) && (
                               <span className="text-emerald-400/90 font-sans text-[10px]">&bull; Joined: {formatDisplayDate(member.JoinDate || (member as any).join_date)}</span>
                             )}
@@ -1031,7 +1037,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           </td>
 
                           <td className="py-3.5 px-4 text-slate-300 font-mono text-[11px]">
-                            {member.Phone || '—'}
+                            {showPhone(member) ? (member.Phone || '—') : '••••••••'}
                           </td>
 
                           <td className="py-3.5 px-4">
