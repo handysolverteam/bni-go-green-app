@@ -20,6 +20,8 @@ interface SidebarProps {
   org: Organization | null;
   orgMember: OrgMember | null;
   userProfile: UserProfileExtended | null;
+  /** Full-roster roles, plus plain Members whose account is linked to a roster entry. */
+  canUseChapterAI?: boolean;
   children: React.ReactNode;
 }
 
@@ -32,6 +34,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   org,
   orgMember,
   userProfile,
+  canUseChapterAI = false,
   children,
 }) => {
   const { user, logout } = useAuth();
@@ -71,10 +74,11 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   const isAdminOrOwnerRole = isAdminOrOwner(orgMember?.role);
   const canSeeFullRoster = hasFullRosterAccess(orgMember?.role, orgMember?.committees);
   const canManageRenewals = hasFullRenewalsAccess(orgMember?.role, orgMember?.committees);
-  const isNavItemAllowed = (item: { adminOnly?: boolean; needsRoster?: boolean; needsRenewals?: boolean }) =>
+  const isNavItemAllowed = (item: { adminOnly?: boolean; needsRoster?: boolean; needsRenewals?: boolean; needsChapterAI?: boolean }) =>
     !(item.adminOnly && !isAdminOrOwnerRole) &&
     !(item.needsRoster && !canSeeFullRoster) &&
-    !(item.needsRenewals && !canManageRenewals);
+    !(item.needsRenewals && !canManageRenewals) &&
+    !(item.needsChapterAI && !canUseChapterAI);
 
   const updateSidebarMode = (mode: SidebarMode) => {
     setSidebarMode(mode);
@@ -92,6 +96,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     adminOnly?: boolean;
     needsRoster?: boolean;
     needsRenewals?: boolean;
+    needsChapterAI?: boolean;
   }> = [
     { id: 'dashboard' as NavigationTab, group: 'Overview', label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
     { id: 'trends' as NavigationTab, group: 'Overview', label: 'Trends', icon: TrendingUp },
@@ -102,7 +107,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
     // { id: 'renewals' as NavigationTab, label: 'Import Data', icon: UploadCloud, subPath: 'import', needsRenewals: true },
     { id: 'org' as NavigationTab, group: 'Chapter', label: 'Members', icon: Building2 },
     { id: 'settings' as NavigationTab, group: 'Chapter', label: 'Scoring & Messages', icon: Settings, adminOnly: true },
-    { id: 'chat' as NavigationTab, group: 'Engage', label: 'Chapter AI', icon: Bot, needsRoster: true },
+    { id: 'chat' as NavigationTab, group: 'Engage', label: 'Chapter AI', icon: Bot, needsChapterAI: true },
   ];
 
   // External apps on this same Firebase project, reached via cross-app SSO (see src/lib/sso.ts)

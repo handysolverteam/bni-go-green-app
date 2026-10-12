@@ -290,6 +290,12 @@ export const AppContent: React.FC = () => {
     });
   };
 
+  // Chapter AI for a plain Member is self-scoped: RLS only ever hands them their own roster
+  // rows, so `members` being non-empty for a non-full-roster user means an Admin has linked
+  // their account. Until that link exists they'd have nothing to ask about, so the tab stays
+  // hidden rather than opening onto an empty assistant (decision 2026-10-10).
+  const canUseChapterAI = canSeeFullRoster || members.length > 0;
+
   const setImportLogs = (logs: ImportLog[] | ((prev: ImportLog[]) => ImportLog[])) => {
     setImportLogsState((prev) => {
       const next = typeof logs === 'function' ? logs(prev) : logs;
@@ -1029,6 +1035,7 @@ export const AppContent: React.FC = () => {
         org={org}
         orgMember={orgMember}
         userProfile={userProfile}
+        canUseChapterAI={canUseChapterAI}
       >
       {/* Animated Tab Page Wrapper — key forces remount on tab change, triggering smooth enter animation */}
       <div key={activeTab} className={activeTab === 'chat' ? 'tab-page-instant h-full flex flex-col' : 'tab-page'}>
@@ -1091,18 +1098,19 @@ export const AppContent: React.FC = () => {
         )}
 
         {activeTab === 'chat' && (
-          canSeeFullRoster ? (
+          canUseChapterAI ? (
             <ChatTab
               members={members}
               org={org}
               importLogs={importLogs}
               userProfile={userProfile}
               orgMember={orgMember}
+              selfScopedOnly={!canSeeFullRoster}
             />
           ) : (
             <AccessRequired
-              title="Go Green Access Required"
-              message="Chapter AI works over the whole chapter's data, so it's available to chapter Admins and the Go Green committee."
+              title="Not Linked Yet"
+              message="Chapter AI can show you your own PALMS performance once your chapter's President or Vice President links your account to your roster entry. Ask them to link you from the Chapter tab."
             />
           )
         )}
