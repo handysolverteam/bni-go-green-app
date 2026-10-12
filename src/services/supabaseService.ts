@@ -198,6 +198,25 @@ export const supabaseService = {
     }
   },
 
+  /**
+   * Removes a message and everything after it in one session. Used when a user edits an earlier
+   * question: the answers below it no longer follow from anything, so they are discarded rather
+   * than left to reappear on the next reload.
+   */
+  async deleteAIChatMessagesFrom(orgId: string, sessionId: string, fromIso: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('ai_chat_history')
+        .delete()
+        .eq('org_id', orgId)
+        .eq('session_id', sessionId)
+        .gte('created_at', fromIso);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
   async clearAIChatHistory(orgId: string, sessionId?: string): Promise<boolean> {
     try {
       let query = supabase
@@ -662,6 +681,33 @@ export const supabaseService = {
     });
     if (error) throw new Error(error.message || 'Failed to add member.');
     return data as OrgMember;
+  },
+
+  /**
+   * Chapter AI via the server-side chapter-ai Edge Function. The caller's tier and the data
+   * that reaches the model are both resolved server-side -- the browser no longer holds the
+   * Gemini key, and no longer decides what the model is allowed to see.
+   *
+   * Returns null when the model is unavailable (no key configured, or every model errored),
+   * which is the caller's signal to fall back to the built-in local engine.
+   */
+  async askChapterAI(
+    orgId: string,
+    question: string,
+    history: Array<{ sender: string; text: string }> = [],
+  ): Promise<string | null> {
+    try {
+      const { data, error } = await supabase.functions.invoke('chapter-ai', {
+        body: { orgId, question, history: history.slice(-8).map(m => ({ sender: m.sender, text: m.text })) },
+      });
+      if (error || !data) return null;
+      if (data.unavailable) return null;
+      if (data.error) throw new Error(data.error);
+      return typeof data.reply === 'string' && data.reply.trim() ? data.reply.trim() : null;
+    } catch (e) {
+      console.warn('chapter-ai unavailable, using local engine:', e);
+      return null;
+    }
   },
 
   /** Candidate accounts to grant Platform Admin to. Searches org_members (every real user has a row there). */

@@ -5,7 +5,6 @@ import { getWhatsAppUrl } from '../lib/whatsappUtils';
 import { formatDecimal, formatCurrency } from '../lib/numberUtils';
 import { supabaseService } from '../services/supabaseService';
 import { ChatMessageBody } from './ChatMessageBody';
-import { geminiService } from '../services/geminiService';
 import { analyzeLocalChapterQuery } from '../services/localAiEngine';
 import { isAdminOrOwner } from '../lib/permissions';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -13,7 +12,7 @@ import { UniversalModal } from './UniversalModal';
 import {
   Sparkles, Bot, User, Copy, Check, Share2, RotateCcw, Trash2,
   TrendingUp, AlertTriangle, Award, MessageSquare, Layers, FileSpreadsheet, ArrowRight,
-  Send, Plus, History, Clock, RefreshCw
+  Send, Plus, History, Clock, RefreshCw, Pencil
 } from 'lucide-react';
 
 export interface ChatOption {
@@ -29,8 +28,12 @@ export interface ChatMessage {
   text: string;
   options?: ChatOption[];
   timestamp: string;
+  /** ISO creation time. `timestamp` is only a display string, so editing a question needs this
+   *  to tell the database which rows come after the edited one. */
+  createdAt?: string;
   isCustomAnswer?: boolean;
   isRegenerated?: boolean;
+  isEdited?: boolean;
 }
 
 interface ChatTabProps {
@@ -39,9 +42,15 @@ interface ChatTabProps {
   importLogs?: ImportLog[];
   userProfile?: UserProfileExtended | null;
   orgMember?: OrgMember | null;
+  /**
+   * True for a plain Member: RLS has already limited `members` to their own roster rows, so the
+   * assistant must talk about "your" performance rather than offering chapter-wide analysis it
+   * has no data for.
+   */
+  selfScopedOnly?: boolean;
 }
 
-export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [], userProfile, orgMember }) => {
+export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [], userProfile, orgMember, selfScopedOnly = false }) => {
   const { showToast } = useToast();
 
   // Derive permission tier: Admins (owner/admin) can see contact details. Go Green committee
@@ -89,12 +98,20 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
     return Array.from(names);
   }, [members, importLogs]);
 
-  // Main Menu Options
-  const getMainMenuOptions = (): ChatOption[] => [
-    { id: 'opt_reports', label: '📊 View Reports & Breakdown', action: 'LIST_REPORTS' },
-    { id: 'opt_compare', label: '📈 Compare Two Reports', action: 'COMPARE_STEP_1' },
-    { id: 'opt_exec', label: '📋 Chapter Executive Overview', action: 'QUERY_EXEC' },
-  ];
+  // Main Menu Options. A self-scoped Member has no chapter-wide data, so offering chapter
+  // comparisons would just produce "no data" answers.
+  const getMainMenuOptions = (): ChatOption[] =>
+    selfScopedOnly
+      ? [
+          { id: 'opt_my_score', label: '📊 How am I performing?', action: 'QUERY_CUSTOM', payload: { text: 'How am I performing this period?' } },
+          { id: 'opt_my_improve', label: '💡 How can I improve my score?', action: 'QUERY_CUSTOM', payload: { text: 'How can I improve my PALMS score?' } },
+          { id: 'opt_my_trend', label: '📈 How have I changed across reports?', action: 'QUERY_CUSTOM', payload: { text: 'How has my performance changed across reports?' } },
+        ]
+      : [
+          { id: 'opt_reports', label: '📊 View Reports & Breakdown', action: 'LIST_REPORTS' },
+          { id: 'opt_compare', label: '📈 Compare Two Reports', action: 'COMPARE_STEP_1' },
+          { id: 'opt_exec', label: '📋 Chapter Executive Overview', action: 'QUERY_EXEC' },
+        ];
 
   // Options for a specific report
   const getReportMenuOptions = (reportName: string): ChatOption[] => [
@@ -131,6 +148,10 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
+  // Editing a previously-sent question (the answers below it get discarded and re-asked).
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+
   // History & Confirmation Modal States
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [pastSessions, setPastSessions] = useState<Array<{ session_id: string; last_text: string; created_at: string; msg_count: number }>>([]);
@@ -154,6 +175,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
             text: item.text || '',
             options: item.options ? (typeof item.options === 'string' ? JSON.parse(item.options) : item.options) : [],
             timestamp: new Date(item.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            createdAt: item.created_at || undefined,
           }));
           setMessages(parsed);
 
@@ -333,12 +355,28 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
   const handleSendCustomMessage = async () => {
     const text = customInput.trim();
     if (!text || isTyping) return;
+    setCustomInput('');
+    await runQuery(text);
+  };
+
+  /** Shared answering pipeline: server-side Chapter AI first, built-in engine as fallback. */
+  const runQuery = async (
+    text: string,
+    opts: { wasEdited?: boolean; history?: ChatMessage[] } = {},
+  ) => {
+    if (!text || isTyping) return;
+
+    // On an edit, `messages` in this closure is still the pre-truncation array (the setMessages
+    // above has not flushed yet), so the caller hands us the history the AI should actually see.
+    const priorMessages = opts.history ?? messages;
 
     const userMsg: ChatMessage = {
       id: `usr_${Date.now()}`,
       sender: 'user',
       text: text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: new Date().toISOString(),
+      isEdited: opts.wasEdited,
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -357,15 +395,12 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
       if (!snapshot.organization && org) snapshot.organization = org;
       if ((!snapshot.members || snapshot.members.length === 0) && members) snapshot.members = members;
 
-      // Ask Gemini AI LLM with complete read-only database snapshot context and full conversation history
-      const geminiReply = await geminiService.askGemini(
-        text,
-        snapshot,
-        userProfile,
-        messages,
-        0.2,
-        { canSeeContactDetails, roleLabel }
-      );
+      // Server-side Chapter AI: the key stays on the server and the model only ever receives
+      // rows this caller is allowed to see. Returns null when no model is configured/reachable,
+      // which falls through to the built-in engine below.
+      const geminiReply = org?.id
+        ? await supabaseService.askChapterAI(org.id, text, priorMessages)
+        : null;
 
       let replyText = '';
       let replyOptions: ChatOption[] = [
@@ -376,7 +411,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
         replyText = geminiReply.trim();
       } else {
         // Smart Local AI Data Engine fallback with full read-time snapshot context, conversation history & counter-questions
-        replyText = analyzeLocalChapterQuery(text, snapshot, userProfile, messages, { canSeeContactDetails, roleLabel });
+        replyText = analyzeLocalChapterQuery(text, snapshot, userProfile, priorMessages, { canSeeContactDetails, roleLabel });
       }
 
       const aiMsg: ChatMessage = {
@@ -385,6 +420,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ members, org, importLogs = [],
         text: replyText,
         options: replyOptions,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        createdAt: new Date().toISOString(),
         isCustomAnswer: true,
       };
 
@@ -452,15 +488,10 @@ REGENERATION INSTRUCTIONS:
 3. Ensure all member names, scores, phone contacts, 1-to-1s, and TYFCB revenue are fully detailed without truncating.
 4. Conclude with a direct, specific follow-up action.`;
 
-      // Re-query Gemini AI with self-correction context and higher temperature
-      const geminiReply = await geminiService.askGemini(
-        selfCorrectionPrompt,
-        snapshot,
-        userProfile,
-        messages.slice(0, msgIndex),
-        0.8,
-        { canSeeContactDetails, roleLabel }
-      );
+      // Re-ask server-side Chapter AI with the self-correction framing.
+      const geminiReply = org?.id
+        ? await supabaseService.askChapterAI(org.id, selfCorrectionPrompt, messages.slice(0, msgIndex))
+        : null;
 
       let newReplyText = '';
       if (geminiReply && geminiReply.trim()) {
@@ -494,8 +525,54 @@ REGENERATION INSTRUCTIONS:
     }
   };
 
+  const handleStartEdit = (msg: ChatMessage) => {
+    if (isTyping) return;
+    setEditingMsgId(msg.id);
+    setEditingText(msg.text);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMsgId(null);
+    setEditingText('');
+  };
+
+  /**
+   * Saves an edited question: everything from that question onward is dropped (the old answers
+   * no longer follow from anything), then the new wording is re-asked.
+   */
+  const handleSubmitEdit = async (original: ChatMessage) => {
+    const newText = editingText.trim();
+    if (!newText || isTyping) return;
+
+    if (newText === original.text) {
+      handleCancelEdit();
+      return;
+    }
+
+    const idx = messages.findIndex(m => m.id === original.id);
+    if (idx === -1) return;
+
+    handleCancelEdit();
+
+    // Drop the edited question and everything after it, on screen and in the database.
+    const keptHistory = messages.slice(0, idx);
+    setMessages(keptHistory);
+    if (org?.id && original.createdAt) {
+      await supabaseService.deleteAIChatMessagesFrom(org.id, sessionId, original.createdAt);
+    }
+
+    await runQuery(newText, { wasEdited: true, history: keptHistory });
+  };
+
   // Option Action Handler
   const handleOptionSelect = async (option: ChatOption) => {
+    // Quick-ask buttons (the self-scoped Member menu) are just pre-written questions -- run
+    // them through the normal answering pipeline instead of the canned switch below.
+    if (option.action === 'QUERY_CUSTOM' && option.payload?.text) {
+      await runQuery(option.payload.text);
+      return;
+    }
+
     const userMsg: ChatMessage = {
       id: `usr_${Date.now()}`,
       sender: 'user',
@@ -951,13 +1028,62 @@ REGENERATION INSTRUCTIONS:
                       : 'ai-chat-ai-bubble rounded-tl-none'
                   }`}
                 >
-                  {/* Markdown Message Content */}
-                  <ChatMessageBody text={msg.text} />
+                  {/* Markdown Message Content — or the inline editor for a question being revised */}
+                  {editingMsgId === msg.id ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSubmitEdit(msg);
+                          }
+                          if (e.key === 'Escape') handleCancelEdit();
+                        }}
+                        autoFocus
+                        rows={Math.min(Math.max(editingText.split('\n').length, 2), 6)}
+                        className="w-full px-3 py-2 rounded-xl bg-white/95 dark:bg-slate-950/80 text-slate-900 dark:text-white text-xs sm:text-sm border border-emerald-400/60 focus:outline-none focus:border-emerald-400 resize-none"
+                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={handleCancelEdit}
+                          className="px-2.5 py-1 rounded-lg bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-bold"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleSubmitEdit(msg)}
+                          disabled={!editingText.trim()}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-black disabled:opacity-50"
+                        >
+                          Save &amp; Resend
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <ChatMessageBody text={msg.text} />
+                  )}
 
                   {/* Message Timestamp */}
-                  <div className="text-[9px] opacity-50 text-right mt-1 font-mono">
-                    {msg.timestamp}
-                  </div>
+                  {editingMsgId !== msg.id && (
+                    <div className="flex items-center justify-end gap-2 mt-1">
+                      {msg.sender === 'user' && msg.isEdited && (
+                        <span className="text-[9px] opacity-50 italic">edited</span>
+                      )}
+                      {msg.sender === 'user' && !isTyping && (
+                        <button
+                          onClick={() => handleStartEdit(msg)}
+                          title="Edit this question and ask again"
+                          className="text-[9px] opacity-60 hover:opacity-100 flex items-center gap-0.5 transition-opacity cursor-pointer"
+                        >
+                          <Pencil className="w-2.5 h-2.5" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      <span className="text-[9px] opacity-50 font-mono">{msg.timestamp}</span>
+                    </div>
+                  )}
 
                   {/* Interactive Step Options Inside AI Message Bubble */}
                   {msg.sender === 'ai' && msg.options && msg.options.length > 0 && (

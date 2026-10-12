@@ -202,6 +202,78 @@ export function analyzeLocalChapterQuery(
     return res;
   }
 
+  // 0b. Ranked leaderboard — "top 3 users", "bottom 5 members", "top 3 by referrals",
+  // "who are the weakest performers". Section 0 above only fires when the question ALSO asks
+  // for contact details, and the single-member branches further down only match exact phrases
+  // like "top scorer"/"top member" — so a plain "give me top three users" matched nothing and
+  // fell all the way through to the generic chapter overview (reported 2026-10-10).
+  const RANK_METRICS: Array<{ test: RegExp; key: string; label: string; get: (m: any) => number }> = [
+    { test: /1[\s-]?to[\s-]?1|one[\s-]?to[\s-]?one|\b121\b|\b1-2-1\b/, key: '121', label: '1-to-1s', get: (m) => m.OneToOnes || m.one_to_ones || 0 },
+    { test: /\bceu\b|education/, key: 'ceu', label: 'CEU credits', get: (m) => m.CEU || m.ceu || 0 },
+    { test: /referral/, key: 'ref', label: 'referrals given', get: (m) => m.ReferralsGivenRate ?? m.RGT ?? m.referrals_given ?? 0 },
+    { test: /\btyfcb\b|revenue|closed business|business closed/, key: 'tyfcb', label: 'TYFCB', get: (m) => m.TYFCB || m.tyfcb || 0 },
+    { test: /visitor/, key: 'vis', label: 'visitors', get: (m) => m.V || m.visitors || 0 },
+    { test: /absent|absence/, key: 'abs', label: 'absences', get: (m) => m.A || m.absent || 0 },
+    { test: /present|attendance/, key: 'pres', label: 'times present', get: (m) => m.P || m.present || 0 },
+    { test: /sponsor/, key: 'spo', label: 'sponsors', get: (m) => m.Sponsors || m.sponsors || 0 },
+  ];
+
+  const isRankQuery = /\b(top|best|highest|leading|bottom|lowest|worst|weakest|rank|ranking|leaderboard)\b/.test(lower);
+  const isMessageRequest = /\btemplate\b|\bdraft\b|whatsapp message|\bnudge\b/.test(lower);
+
+  if (isRankQuery && !isMessageRequest && !lower.includes('compare') && members.length > 0) {
+    const rankMetric = RANK_METRICS.find(mt => mt.test.test(lower));
+
+    // Per-member TYFCB is Admin-only. The early guard above misses this phrasing ("top 5 by
+    // tyfcb" has no who/how much/earned), so it has to be re-checked here.
+    if (rankMetric?.key === 'tyfcb' && !canSeeContacts) {
+      return CONTACT_RESTRICTED_MSG;
+    }
+
+    const RANK_WORD_NUMS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+    const rankNumMatch = lower.match(/\b(\d{1,2})\b/) || lower.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    const rankCount = Math.min(Math.max(rankNumMatch ? (RANK_WORD_NUMS[rankNumMatch[1]] ?? parseInt(rankNumMatch[1], 10)) : 5, 1), 25);
+    const rankAscending = /\b(bottom|lowest|worst|weakest)\b/.test(lower);
+    const valueOf = rankMetric ? rankMetric.get : getMemberScore;
+
+    // One row per person — the same member has a row in every imported report.
+    const rankSeen = new Set<string>();
+    const rankPool = members.filter(m => {
+      if (zoneWord && getMemberZone(m) !== zoneWord) return false;
+      const key = getMemberName(m).trim().toLowerCase();
+      if (rankSeen.has(key)) return false;
+      rankSeen.add(key);
+      return true;
+    });
+
+    const rankedList = [...rankPool]
+      .sort((x, y) => (rankAscending ? valueOf(x) - valueOf(y) : valueOf(y) - valueOf(x)))
+      .slice(0, rankCount);
+
+    if (rankedList.length === 0) {
+      return `📭 *No ${zoneWord ? zoneWord + ' Zone ' : ''}members found in ${orgName}.*\n\n❓ *Would you like to see the full member list instead?*`;
+    }
+
+    const metricLabel = rankMetric ? rankMetric.label : 'PALMS score';
+    const formatValue = (m: any): string => {
+      const v = valueOf(m);
+      if (!rankMetric) return `${v}/100 pts`;
+      if (rankMetric.key === 'tyfcb') return formatCurrency(v);
+      return `${formatDecimal(v)} ${metricLabel}`;
+    };
+
+    let res = `🏆 *${rankAscending ? 'Bottom' : 'Top'} ${rankedList.length}${zoneWord ? ` — ${zoneWord} Zone` : ''} by ${metricLabel}*\n`;
+    res += `_${orgName} · ${rankPool.length} members ranked_\n\n`;
+    rankedList.forEach((m, idx) => {
+      const rankMark = !rankAscending && idx < 3 ? ['🥇', '🥈', '🥉'][idx] : `${idx + 1}.`;
+      const scoreSuffix = rankMetric ? ` · ${getMemberScore(m)}/100 pts` : '';
+      res += `${rankMark} *${getMemberName(m)}* — ${formatValue(m)}${scoreSuffix} ${getZoneEmoji(getMemberZone(m))}\n`;
+    });
+
+    res += `\n❓ *Want a deeper look at any of them, or the same list by a different metric (1-to-1s, referrals, CEU)?*`;
+    return res;
+  }
+
   // 1. Affirmative Response to previous AI counter-question ("yes", "sure", "ok", "do it", "yeah", "generate")
   const isAffirmative = ['yes', 'sure', 'ok', 'yeah', 'yep', 'do it', 'generate', 'send', 'please', 'go ahead'].some(w => lower === w || lower.startsWith(w + ' ') || lower.startsWith(w + ','));
 

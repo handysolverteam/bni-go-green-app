@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.sync-committee-tag]
 verify_jwt = false
+
+[functions.chapter-ai]
+verify_jwt = false
