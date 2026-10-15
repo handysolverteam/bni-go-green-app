@@ -13,6 +13,7 @@ import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
 import { MemberDetailModal } from './components/MemberDetailModal';
 import { TrendsTab } from './components/TrendsTab';
+import { TrafficLightsTab } from './components/TrafficLightsTab';
 import { ChatTab } from './components/ChatTab';
 // import { RenewalsTab } from './components/renewals/RenewalsTab'; // Renewals hidden -- see validTabs
 import { ExistingAccountNotice, type ExistingAccountMatch } from './components/ExistingAccountNotice';
@@ -41,7 +42,7 @@ const parseHash = () => {
   }
 
   // Renewals is hidden for now (not yet role-enforced server-side); add 'renewals' back to re-enable.
-  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'import', 'nudges', 'chat', 'org', 'profile', 'settings'];
+  const validTabs: NavigationTab[] = ['dashboard', 'trends', 'traffic', 'import', 'nudges', 'chat', 'org', 'profile', 'settings'];
   if (validTabs.includes(mainTab)) {
     return { tab: mainTab, report: ['dashboard', 'nudges', 'renewals'].includes(mainTab) ? (reportName || null) : null };
   }
@@ -1076,6 +1077,16 @@ export const AppContent: React.FC = () => {
             members={members}
             importLogs={importLogs}
             onNavigateToDashboard={(reportName) => navigateTo('dashboard', reportName)}
+          />
+        )}
+
+        {activeTab === 'traffic' && (
+          <TrafficLightsTab
+            orgId={org.id}
+            userId={user?.uid ?? null}
+            userName={userProfile?.full_name ?? user?.displayName ?? null}
+            orgNames={[org.chapter_name, org.name]}
+            canImport={isAdminOrOwner(orgMember?.role)}
           />
         )}
 
