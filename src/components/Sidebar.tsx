@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, Sparkles, Bot, RefreshCw, UploadCloud, FileSpreadsheet, ExternalLink } from 'lucide-react';
+import { BarChart3, Upload, MessageSquare, Settings, LogOut, ShieldCheck, Building2, User, Menu, X, SlidersHorizontal, Sun, Moon, TrendingUp, TrafficCone, Sparkles, Bot, RefreshCw, UploadCloud, FileSpreadsheet, ExternalLink } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { UniversalModal } from './UniversalModal';
 import { ScrollToTopButton } from './ScrollToTopButton';
@@ -9,7 +9,7 @@ import { Organization, OrgMember, UserProfileExtended, SidebarMode } from '../ty
 import { isAdminOrOwner, hasFullRosterAccess, hasFullRenewalsAccess } from '../lib/permissions';
 import { ROLE_LABELS_SHORT } from '../lib/roles';
 
-export type NavigationTab = 'dashboard' | 'trends' | 'nudges' | 'chat' | 'org' | 'profile' | 'settings' | 'import' | 'renewals';
+export type NavigationTab = 'dashboard' | 'trends' | 'traffic' | 'nudges' | 'chat' | 'org' | 'profile' | 'settings' | 'import' | 'renewals';
 
 interface SidebarProps {
   activeTab: NavigationTab;
@@ -100,6 +100,7 @@ export const SidebarLayout: React.FC<SidebarProps> = ({
   }> = [
     { id: 'dashboard' as NavigationTab, group: 'Overview', label: 'Dashboard', icon: BarChart3, badge: reportCount > 0 ? reportCount : null },
     { id: 'trends' as NavigationTab, group: 'Overview', label: 'Trends', icon: TrendingUp },
+    { id: 'traffic' as NavigationTab, group: 'Overview', label: 'Traffic Lights', icon: TrafficCone },
     { id: 'nudges' as NavigationTab, group: 'Engage', label: 'Messages', icon: MessageSquare, needsRoster: true },
     // Renewals hidden for now (not yet role-enforced server-side). Uncomment both, and add
     // 'renewals' back to validTabs in App.tsx, to re-enable.
