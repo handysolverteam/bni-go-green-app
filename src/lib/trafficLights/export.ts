@@ -93,7 +93,7 @@ const LIGHT_RGB: Record<TrafficRow['color'], [number, number, number]> = {
 };
 
 /** PDF (landscape): title, window, member count, then the table. The PDF libraries load only when this is used. */
-export async function downloadPdf(rows: TrafficRow[], title: string, windowLabel: string, filename: string): Promise<void> {
+async function buildPdf(rows: TrafficRow[], title: string, windowLabel: string): Promise<Blob> {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   doc.setFontSize(12);
@@ -122,5 +122,31 @@ export async function downloadPdf(rows: TrafficRow[], title: string, windowLabel
       }
     },
   });
-  doc.save(`${filename}.pdf`);
+  return doc.output('blob');
+}
+
+export async function downloadPdf(rows: TrafficRow[], title: string, windowLabel: string, filename: string): Promise<void> {
+  download(await buildPdf(rows, title, windowLabel), `${filename}.pdf`);
+}
+
+/** The browser can hand a PDF file to the system share sheet (WhatsApp, email, …): phones, and recent Chrome / Edge / Safari. */
+export function canSharePdf(): boolean {
+  try {
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') return false;
+    return navigator.canShare({ files: [new File([''], 'traffic-lights.pdf', { type: 'application/pdf' })] });
+  } catch {
+    return false;
+  }
+}
+
+/** Open the share sheet with the PDF attached. "cancelled" when the person closed the sheet without sharing. */
+export async function sharePdf(rows: TrafficRow[], title: string, windowLabel: string, filename: string): Promise<'shared' | 'cancelled'> {
+  const file = new File([await buildPdf(rows, title, windowLabel)], `${filename}.pdf`, { type: 'application/pdf' });
+  try {
+    await navigator.share({ files: [file], title, text: `${title} · ${windowLabel}` });
+    return 'shared';
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled';
+    throw e;
+  }
 }

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ChevronDown, FileSpreadsheet, FileText, Download, Filter, Loader2, Search, TrafficCone, Upload, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, FileSpreadsheet, FileText, Download, Filter, Loader2, Search, Share2, TrafficCone, Upload, X } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 import { PageHeader } from './PageHeader';
 import { GlassCard } from './GlassCard';
 import { TrafficLightsImport } from './TrafficLightsImport';
@@ -8,7 +9,7 @@ import { TrafficLightsSetupError, trafficLightsService } from '../services/traff
 import type { ImportLogEntry, PalmsWeekRecord, SponsorWeekRecord } from '../lib/trafficLights/types';
 import { LIGHT_LABEL, type LightColor } from '../lib/trafficLights/score';
 import { CUSTOM_RANGE, buildTrafficView, LAST_6_MONTHS } from '../lib/trafficLights/window';
-import { downloadCsv, downloadPdf, downloadXlsx, safeFilePart } from '../lib/trafficLights/export';
+import { canSharePdf, downloadCsv, downloadPdf, downloadXlsx, safeFilePart, sharePdf } from '../lib/trafficLights/export';
 
 interface Props {
   orgId: string;
@@ -135,6 +136,9 @@ export const TrafficLightsTab: React.FC<Props> = ({ orgId, userId, userName, org
   const [names, setNames] = useState<string[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const { showToast } = useToast();
+  // The share sheet (WhatsApp, email, …) needs browser support for sharing files.
+  const [canShare] = useState(() => canSharePdf());
 
   const load = useCallback(async () => {
     setError(null);
@@ -224,14 +228,14 @@ export const TrafficLightsTab: React.FC<Props> = ({ orgId, userId, userName, org
         <button
           type="button"
           onClick={() => downloadXlsx(rows, exportTitle, view.label, exportName)}
-          className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-xs font-bold text-slate-200 hover:text-emerald-400 hover:border-emerald-500/40 transition-colors"
+          className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 shadow-sm hover:bg-emerald-400 transition-colors"
         >
           <FileSpreadsheet className="w-3.5 h-3.5" /> XLSX
         </button>
         <button
           type="button"
           onClick={() => downloadCsv(rows, exportTitle, view.label, exportName)}
-          className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-xs font-bold text-slate-200 hover:text-emerald-400 hover:border-emerald-500/40 transition-colors"
+          className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 shadow-sm hover:bg-emerald-400 transition-colors"
         >
           <Download className="w-3.5 h-3.5" /> CSV
         </button>
@@ -241,13 +245,29 @@ export const TrafficLightsTab: React.FC<Props> = ({ orgId, userId, userName, org
           onClick={() => {
             setPdfBusy(true);
             downloadPdf(rows, exportTitle, view.label, exportName)
-              .catch(() => undefined)
+              .catch((e) => showToast(e instanceof Error ? e.message : 'Could not create the PDF.', 'error'))
               .finally(() => setPdfBusy(false));
           }}
-          className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-xs font-bold text-slate-200 hover:text-emerald-400 hover:border-emerald-500/40 disabled:opacity-60 transition-colors"
+          className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 shadow-sm hover:bg-emerald-400 disabled:opacity-60 transition-colors"
         >
           <FileText className="w-3.5 h-3.5" /> {pdfBusy ? "Preparing…" : "PDF"}
         </button>
+        {canShare && (
+          <button
+            type="button"
+            disabled={pdfBusy}
+            title="Share the PDF (WhatsApp, email, …)"
+            onClick={() => {
+              setPdfBusy(true);
+              sharePdf(rows, exportTitle, view.label, exportName)
+                .catch((e) => showToast(e instanceof Error ? e.message : 'Could not share the PDF.', 'error'))
+                .finally(() => setPdfBusy(false));
+            }}
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 shadow-sm ring-2 ring-emerald-300/70 hover:bg-emerald-400 disabled:opacity-60 transition-colors"
+          >
+            <Share2 className="w-3.5 h-3.5" /> Share
+          </button>
+        )}
       </div>
     ) : null;
 
