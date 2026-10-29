@@ -47,7 +47,7 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
   const live = log ? liveImportIds(log, weeks) : new Set<string>();
   /** The file the week's data in use came from (null when the history does not know it). */
   const fileOf = (kind: 'palms' | 'sponsor', w: ImportedWeek): string | null =>
-    log?.find((e) => live.has(e.id) && e.kind === kind && e.weekFrom === w.weekFrom && e.weekTo === w.weekTo)?.filename ?? null;
+    log?.find((e) => live.has(e.id) && e.kind === kind && e.meetingDate === w.meetingDate)?.filename ?? null;
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -65,8 +65,8 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
   // checks re-run whenever a file is deselected (a file refused only because of an overlap may then be fine).
   const orgKey = orgNames.join('|');
   const items = useMemo<Item[]>(() => {
-    const existingPalms: WeekRange[] = weeks.filter((w) => w.hasPalms).map((w) => ({ from: w.weekFrom, to: w.weekTo }));
-    const existingSponsors: WeekRange[] = weeks.filter((w) => w.hasSponsorReport).map((w) => ({ from: w.weekFrom, to: w.weekTo }));
+    const existingPalms: WeekRange[] = weeks.filter((w) => w.hasPalms).map((w) => ({ from: w.palmsFrom, to: w.palmsTo }));
+    const existingSponsors: WeekRange[] = weeks.filter((w) => w.hasSponsorReport).map((w) => ({ from: w.sponsorFrom, to: w.sponsorTo }));
     const seen = new Map<string, string>();
     return picked.map((f): Item => {
       if (f.text === null) return { id: f.id, filename: f.name, error: `${f.name}: only the .xls files exported from BNI are supported.` };
@@ -115,7 +115,7 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
     if (!removing) return;
     setRemoveBusy(true);
     try {
-      await trafficLightsService.deleteWeek(orgId, removing.weekFrom, removing.weekTo, { userId, userName }, removing.meetingDate);
+      await trafficLightsService.deleteWeek(orgId, removing, { userId, userName });
       showToast('Week removed.', 'success');
       setRemoving(null);
       onChanged();
@@ -229,7 +229,6 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
           <table className="w-full text-xs">
             <thead>
               <tr className="text-left text-slate-400 border-b border-white/10">
-                <th className="py-2 pr-3 font-bold">Week</th>
                 <th className="py-2 pr-3 font-bold">Meeting</th>
                 <th className="py-2 pr-3 font-bold">PALMS report</th>
                 <th className="py-2 pr-3 font-bold">Sponsor report</th>
@@ -238,21 +237,28 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
             </thead>
             <tbody>
               {[...weeks].reverse().map((w) => (
-                <tr key={`${w.weekFrom}|${w.weekTo}`} className="border-b border-white/5 text-slate-200">
-                  <td className="py-2 pr-3">{rangeLabel(w.weekFrom, w.weekTo)}</td>
-                  <td className="py-2 pr-3">{rangeLabel(w.meetingDate, w.meetingDate)}</td>
+                <tr key={w.meetingDate} className="border-b border-white/5 text-slate-200">
+                  <td className="py-2 pr-3 whitespace-nowrap">{rangeLabel(w.meetingDate, w.meetingDate)}</td>
                   <td className="py-2 pr-3">
                     {w.hasPalms ? `${w.members} members` : <span className="text-amber-400">not imported</span>}
-                    {w.hasPalms && <span className="block max-w-[260px] truncate text-[10px] text-slate-500" title={fileOf('palms', w) ?? undefined}>{fileOf('palms', w) ?? 'file name not recorded'}</span>}
+                    {w.hasPalms && (
+                      <span className="block max-w-[300px] truncate text-[10px] text-slate-500" title={`${fileOf('palms', w) ?? 'file name not recorded'} · period ${rangeLabel(w.palmsFrom, w.palmsTo)}`}>
+                        {fileOf('palms', w) ?? 'file name not recorded'} · {rangeLabel(w.palmsFrom, w.palmsTo)}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 pr-3">
                     {w.hasSponsorReport ? `${w.sponsored} sponsored` : <span className="text-amber-400">not imported (sponsors count 0)</span>}
-                    {w.hasSponsorReport && <span className="block max-w-[260px] truncate text-[10px] text-slate-500" title={fileOf('sponsor', w) ?? undefined}>{fileOf('sponsor', w) ?? 'file name not recorded'}</span>}
+                    {w.hasSponsorReport && (
+                      <span className="block max-w-[300px] truncate text-[10px] text-slate-500" title={`${fileOf('sponsor', w) ?? 'file name not recorded'} · period ${rangeLabel(w.sponsorFrom, w.sponsorTo)}`}>
+                        {fileOf('sponsor', w) ?? 'file name not recorded'} · {rangeLabel(w.sponsorFrom, w.sponsorTo)}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 text-right">
                     <button
                       type="button"
-                      title="Remove this week"
+                      title="Remove this meeting (both reports)"
                       onClick={() => setRemoving(w)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                     >
@@ -280,7 +286,7 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
                   <th className="py-2 pr-3 font-bold">When</th>
                   <th className="py-2 pr-3 font-bold">Action</th>
                   <th className="py-2 pr-3 font-bold">Report</th>
-                  <th className="py-2 pr-3 font-bold">Week</th>
+                  <th className="py-2 pr-3 font-bold">Meeting</th>
                   <th className="py-2 pr-3 font-bold">File</th>
                   <th className="py-2 pr-3 font-bold">Rows</th>
                   <th className="py-2 pr-3 font-bold">By</th>
@@ -296,7 +302,7 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
                       {e.action === 'remove' ? <span className="text-rose-400">Deleted</span> : e.replaced ? <span className="text-amber-400">Re-imported</span> : 'Imported'}
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">{e.kind === 'palms' ? 'PALMS' : e.kind === 'sponsor' ? 'Sponsor' : 'PALMS + Sponsor'}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{rangeLabel(e.weekFrom, e.weekTo)}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap" title={`Report period ${rangeLabel(e.weekFrom, e.weekTo)}`}>{rangeLabel(e.meetingDate, e.meetingDate)}</td>
                     <td className="py-2 pr-3 max-w-[260px] truncate" title={e.filename ?? undefined}>
                       {e.filename ?? <span className="text-slate-500">{e.action === 'remove' ? '—' : 'before history was kept'}</span>}
                     </td>
@@ -333,7 +339,7 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
         title="Delete this file's data?"
         message={
           deleting
-            ? `Delete the ${deleting.kind === 'palms' ? 'PALMS' : 'Sponsor'} report ${deleting.filename ? '"' + deleting.filename + '" ' : ''}of ${rangeLabel(deleting.weekFrom, deleting.weekTo)}? Its rows are removed from Traffic Lights. You can import the file again afterwards.`
+            ? `Delete the ${deleting.kind === 'palms' ? 'PALMS' : 'Sponsor'} report ${deleting.filename ? '"' + deleting.filename + '" ' : ''}of the ${rangeLabel(deleting.meetingDate, deleting.meetingDate)} meeting? Its rows are removed from Traffic Lights. You can import the file again afterwards.`
             : ''
         }
         confirmText="Delete"
@@ -346,7 +352,7 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
         isOpen={removing !== null}
         type="delete"
         title="Remove this week?"
-        message={removing ? `Remove the PALMS and Sponsor reports of ${rangeLabel(removing.weekFrom, removing.weekTo)}? The Traffic Lights screen will no longer include this week.` : ''}
+        message={removing ? `Remove the PALMS and Sponsor reports of the ${rangeLabel(removing.meetingDate, removing.meetingDate)} meeting? The Traffic Lights screen will no longer include it.` : ''}
         confirmText="Remove"
         isLoading={removeBusy}
         onConfirm={() => void confirmRemove()}

@@ -207,6 +207,28 @@ describe('buildTrafficView', () => {
     expect(weeks[0]).toMatchObject({ meetingDate: '2026-04-01', hasPalms: true, members: 1, hasSponsorReport: true, sponsored: 1 });
   });
 
+  it('one row per MEETING DATE: PALMS for 28 – 28 Oct and Sponsor for 22 – 28 Oct are the same meeting', () => {
+    const p = [palmsLine({ meetingDate: '2026-10-28', weekFrom: '2026-10-28', weekTo: '2026-10-28', p: 1 })];
+    const s = [sponsorLine({ meetingDate: '2026-10-28', weekFrom: '2026-10-22', weekTo: '2026-10-28', sponsor: '', sponsored: '', sponsoredChapter: null, applicationDate: null })];
+    const weeks = listWeeks(p, s);
+    expect(weeks).toHaveLength(1);
+    expect(weeks[0]).toMatchObject({
+      meetingDate: '2026-10-28',
+      hasPalms: true,
+      palmsFrom: '2026-10-28',
+      palmsTo: '2026-10-28',
+      hasSponsorReport: true,
+      sponsorFrom: '2026-10-22',
+      sponsorTo: '2026-10-28',
+      weekFrom: '2026-10-22',
+      weekTo: '2026-10-28',
+    });
+    // The Sponsor report covers that meeting, so the screen does not warn that it is missing.
+    expect(buildTrafficView({ palms: p, sponsors: s }).sponsorWeeksMissing).toBe(0);
+    // Only the PALMS report imported -> the warning stays.
+    expect(buildTrafficView({ palms: p, sponsors: [] }).sponsorWeeksMissing).toBe(1);
+  });
+
   it('default = last 6 months anchored on the newest week (15 Apr – 14 Oct = 27 weeks), with BNI-style rates', () => {
     const v = buildTrafficView({ palms, sponsors });
     expect(v.choice).toBe(LAST_6_MONTHS);

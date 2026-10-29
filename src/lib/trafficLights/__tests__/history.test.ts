@@ -6,8 +6,12 @@ const week = (o: Partial<ImportedWeek> & { weekFrom: string; weekTo: string }): 
   meetingDate: o.weekTo,
   hasPalms: true,
   members: 76,
+  palmsFrom: o.weekFrom,
+  palmsTo: o.weekTo,
   hasSponsorReport: true,
   sponsored: 1,
+  sponsorFrom: o.weekFrom,
+  sponsorTo: o.weekTo,
   ...o,
 });
 let n = 0;
@@ -54,6 +58,14 @@ describe('liveImportIds', () => {
     const sponsor = entry({ ...W, kind: 'sponsor', at: '2026-10-14T09:01:00Z' });
     const removed = entry({ ...W, kind: 'both', action: 'remove', at: '2026-10-14T10:00:00Z' });
     expect(liveImportIds([removed, sponsor, palms], []).size).toBe(0);
+  });
+
+  it('the two reports of one meeting count as in use even when their From/To ranges differ', () => {
+    // PALMS exported for 28 – 28 Oct, the Sponsor report for 22 – 28 Oct: the same Wednesday.
+    const palms = entry({ weekFrom: '2026-10-28', weekTo: '2026-10-28', kind: 'palms' });
+    const sponsor = entry({ weekFrom: '2026-10-22', weekTo: '2026-10-28', meetingDate: '2026-10-28', kind: 'sponsor' });
+    const stored = week({ weekFrom: '2026-10-22', weekTo: '2026-10-28', meetingDate: '2026-10-28', palmsFrom: '2026-10-28', palmsTo: '2026-10-28', sponsorFrom: '2026-10-22', sponsorTo: '2026-10-28' });
+    expect(liveImportIds([sponsor, palms], [stored])).toEqual(new Set([palms.id, sponsor.id]));
   });
 
   it('an import whose rows are no longer stored is not in use', () => {

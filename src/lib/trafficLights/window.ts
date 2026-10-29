@@ -26,31 +26,53 @@ export type TrafficView = {
   empty: boolean;
 };
 
-const weekKey = (from: string, to: string): string => `${from}|${to}`;
-
-/** Every imported week (PALMS and/or Sponsor Report), oldest first. */
+/**
+ * Every imported meeting (PALMS and/or Sponsor Report), oldest first — ONE entry per meeting date, so the two reports of a
+ * Wednesday are one row even when they were exported for different From/To ranges.
+ */
 export function listWeeks(palms: PalmsWeekRecord[], sponsors: SponsorWeekRecord[]): ImportedWeek[] {
   const map = new Map<string, ImportedWeek>();
-  const entry = (from: string, to: string, meeting: string): ImportedWeek => {
-    const k = weekKey(from, to);
-    let w = map.get(k);
+  const entry = (meeting: string): ImportedWeek => {
+    let w = map.get(meeting);
     if (!w) {
-      w = { weekFrom: from, weekTo: to, meetingDate: meeting, hasPalms: false, members: 0, hasSponsorReport: false, sponsored: 0 };
-      map.set(k, w);
+      w = {
+        weekFrom: '',
+        weekTo: '',
+        meetingDate: meeting,
+        hasPalms: false,
+        members: 0,
+        palmsFrom: '',
+        palmsTo: '',
+        hasSponsorReport: false,
+        sponsored: 0,
+        sponsorFrom: '',
+        sponsorTo: '',
+      };
+      map.set(meeting, w);
     }
     return w;
   };
   for (const r of palms) {
-    const w = entry(r.weekFrom, r.weekTo, r.meetingDate);
+    const w = entry(r.meetingDate);
     w.hasPalms = true;
     w.members += 1;
+    w.palmsFrom = r.weekFrom;
+    w.palmsTo = r.weekTo;
   }
   for (const r of sponsors) {
-    const w = entry(r.weekFrom, r.weekTo, r.meetingDate);
+    const w = entry(r.meetingDate);
     w.hasSponsorReport = true;
     if (r.sponsor && r.sponsored) w.sponsored += 1;
+    w.sponsorFrom = r.weekFrom;
+    w.sponsorTo = r.weekTo;
   }
-  return [...map.values()].sort((a, b) => (a.meetingDate < b.meetingDate ? -1 : a.meetingDate > b.meetingDate ? 1 : a.weekFrom < b.weekFrom ? -1 : 1));
+  for (const w of map.values()) {
+    const froms = [w.palmsFrom, w.sponsorFrom].filter(Boolean);
+    const tos = [w.palmsTo, w.sponsorTo].filter(Boolean);
+    w.weekFrom = froms.reduce((m, d) => (d < m ? d : m), froms[0] ?? w.meetingDate);
+    w.weekTo = tos.reduce((m, d) => (d > m ? d : m), tos[0] ?? w.meetingDate);
+  }
+  return [...map.values()].sort((a, b) => (a.meetingDate < b.meetingDate ? -1 : a.meetingDate > b.meetingDate ? 1 : 0));
 }
 
 function windowOf(choice: string, weeks: ImportedWeek[], custom?: PeriodWindow): { choice: string; window: PeriodWindow | null; pick: (w: ImportedWeek) => boolean } {
@@ -98,8 +120,8 @@ export function buildTrafficView(input: {
       meetings: selected.length,
     }),
   );
-  const sponsorWeeks = new Set(weeks.filter((w) => w.hasSponsorReport).map((w) => weekKey(w.weekFrom, w.weekTo)));
-  const sponsorWeeksMissing = selected.filter((w) => !sponsorWeeks.has(weekKey(w.weekFrom, w.weekTo))).length;
+  // A meeting counts as covered when ANY Sponsor report was imported for its Wednesday (the ranges may differ from the PALMS one).
+  const sponsorWeeksMissing = selected.filter((w) => !w.hasSponsorReport).length;
 
   const last6 = rollingWindow(latestDate(palmsWeeks.map((w) => w.meetingDate)));
   const last6Count = last6 ? palmsWeeks.filter((w) => inRange(w.meetingDate, last6)).length : 0;

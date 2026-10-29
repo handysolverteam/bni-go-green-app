@@ -234,10 +234,11 @@ export const trafficLightsService = {
     });
   },
 
-  /** Remove one imported week (both its PALMS and its Sponsor Report rows). */
-  async deleteWeek(orgId: string, weekFrom: string, weekTo: string, actor?: Actor, meetingDate?: string): Promise<void> {
+  /** Remove one imported meeting (both its PALMS and its Sponsor Report rows, found by the meeting date). */
+  async deleteWeek(orgId: string, week: { meetingDate: string; weekFrom: string; weekTo: string }, actor?: Actor): Promise<void> {
+    const { meetingDate, weekFrom, weekTo } = week;
     for (const table of ['traffic_palms_weeks', 'traffic_sponsor_weeks']) {
-      const { error } = await supabase.from(table).delete().eq('org_id', orgId).eq('week_from', weekFrom).eq('week_to', weekTo);
+      const { error } = await supabase.from(table).delete().eq('org_id', orgId).eq('meeting_date', meetingDate);
       if (error) fail(error);
     }
     await logEvent({
@@ -246,7 +247,7 @@ export const trafficLightsService = {
       kind: 'both',
       week_from: weekFrom,
       week_to: weekTo,
-      meeting_date: meetingDate ?? weekTo,
+      meeting_date: meetingDate,
       filename: null,
       rows_imported: 0,
       replaced: false,
