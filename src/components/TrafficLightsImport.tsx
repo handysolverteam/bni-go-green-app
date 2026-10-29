@@ -151,9 +151,9 @@ export const TrafficLightsImport: React.FC<Props> = ({ orgId, userId, userName, 
         </p>
       </div>
 
-      <label className="flex items-center gap-3 rounded-xl border border-dashed border-white/20 bg-slate-900/40 px-4 py-3 cursor-pointer hover:border-emerald-500/50 transition-colors">
+      <label className="flex items-center gap-3 rounded-xl border border-dashed border-emerald-400/60 bg-emerald-500/15 px-4 py-3 cursor-pointer hover:bg-emerald-500/25 hover:border-emerald-400 transition-colors">
         <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
-        <span className="text-xs text-slate-300">Choose the PALMS and Sponsor report files…</span>
+        <span className="text-xs font-medium text-emerald-100">Choose the PALMS and Sponsor report files…</span>
         <input ref={inputRef} type="file" accept=".xls" multiple className="hidden" onChange={(e) => void handleFiles(e.target.files)} />
       </label>
       {reading && (
