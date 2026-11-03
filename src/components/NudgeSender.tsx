@@ -662,7 +662,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                     Select all
                   </button>
                   <button type="button" onClick={clearEmailSelection} disabled={selectedEmailMembers.length === 0} className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold border border-white/10 disabled:opacity-40">
-                    Clear
+                    Deselect all
                   </button>
                   <button
                     type="button"

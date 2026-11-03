@@ -220,14 +220,14 @@ Please find the file attached: ${file.name}`;
                   className="w-full rounded-lg border border-white/10 bg-slate-950/60 pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500"
                 />
               </span>
-              <div className="flex items-center justify-between text-xs font-bold">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs font-bold">
                 <span className="text-slate-400">{picked.length} selected · {options.length} with email</span>
                 <span className="flex gap-3">
                   <button type="button" onClick={() => setPicked(Array.from(new Set([...picked, ...shown.map((c) => c.email)])))} className="text-emerald-400 hover:text-emerald-300">
                     Select all
                   </button>
                   <button type="button" disabled={picked.length === 0} onClick={() => setPicked([])} className="text-slate-400 hover:text-white disabled:opacity-40">
-                    Clear
+                    Deselect all
                   </button>
                 </span>
               </div>
