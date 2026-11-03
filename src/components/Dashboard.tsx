@@ -266,6 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                              (cleanSearchDigits.length >= 3 && (m.Phone || '').replace(/\D/g, '').includes(cleanSearchDigits));
         const matchesSearch = m.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                               matchesPhone ||
+                              (showPhone(m) && !!m.Email && m.Email.toLowerCase().includes(searchTerm.toLowerCase())) ||
                               (m.Chapter && m.Chapter.toLowerCase().includes(searchTerm.toLowerCase()));
         const matchesStatus = statusFilter === 'All' || m.trafficLight?.label === statusFilter;
         return matchesSearch && matchesStatus;
@@ -906,6 +907,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               <span className="text-emerald-400/90 font-sans text-[10px]">&bull; Joined: {formatDisplayDate(member.JoinDate || (member as any).join_date)}</span>
                             )}
                           </p>
+                          {showPhone(member) && member.Email && (
+                            <p className="text-[10px] text-slate-400 truncate">{member.Email}</p>
+                          )}
                         </div>
                       </div>
 
@@ -976,6 +980,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </th>
                     <th className="py-3.5 px-4">Chapter</th>
                     <th className="py-3.5 px-4">WhatsApp Phone</th>
+                    <th className="py-3.5 px-4">Email</th>
                     <th className="py-3.5 px-4 cursor-pointer hover:text-white" onClick={() => toggleSort('score')}>
                       <div className="flex items-center space-x-1">
                         <span>Traffic Score</span>
@@ -1038,6 +1043,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                           <td className="py-3.5 px-4 text-slate-300 font-mono text-[11px]">
                             {showPhone(member) ? (member.Phone || '—') : '••••••••'}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-300 text-[11px]">
+                            {showPhone(member) ? (member.Email || '—') : '••••••••'}
                           </td>
 
                           <td className="py-3.5 px-4">

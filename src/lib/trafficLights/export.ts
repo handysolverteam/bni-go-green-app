@@ -129,21 +129,68 @@ export async function downloadPdf(rows: TrafficRow[], title: string, windowLabel
   download(await buildPdf(rows, title, windowLabel), `${filename}.pdf`);
 }
 
-/** The browser can hand a PDF file to the system share sheet (WhatsApp, email, …): phones, and recent Chrome / Edge / Safari. */
+/** What can be sent: the data as plain text, or one of the export files. */
+export type SendFormat = 'text' | 'pdf' | 'xlsx' | 'csv';
+
+export const SEND_FORMATS: Array<{ value: SendFormat; label: string }> = [
+  { value: 'text', label: 'Text (data in the message)' },
+  { value: 'pdf', label: 'PDF file' },
+  { value: 'xlsx', label: 'Excel file (XLSX)' },
+  { value: 'csv', label: 'CSV file' },
+];
+
+/** Plain-text version of the table, for a message body. */
+export function exportText(rows: TrafficRow[], title: string, windowLabel: string): string {
+  return [title, windowLabel, '', ...rows.map((r, i) => `${i + 1}. ${r.name} - ${LIGHT_LABEL[r.color]} (${r.total}/100)`)].join('\n');
+}
+
+function buildXlsx(rows: TrafficRow[], title: string, windowLabel: string): Blob {
+  const ws = XLSX.utils.aoa_to_sheet([[title], [windowLabel], EXPORT_HEADERS, ...exportLines(rows)]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Traffic Lights');
+  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+  return new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+/** The export file for a file format, ready to download or hand to the share sheet. */
+export async function buildFile(format: Exclude<SendFormat, 'text'>, rows: TrafficRow[], title: string, windowLabel: string, filename: string): Promise<File> {
+  if (format === 'pdf') return new File([await buildPdf(rows, title, windowLabel)], `${filename}.pdf`, { type: 'application/pdf' });
+  if (format === 'xlsx') {
+    const blob = buildXlsx(rows, title, windowLabel);
+    return new File([blob], `${filename}.xlsx`, { type: blob.type });
+  }
+  return new File([exportCsv(rows, title, windowLabel)], `${filename}.csv`, { type: 'text/csv' });
+}
+
+/** Saves a file built by buildFile to the device. */
+export function saveFile(file: File): void {
+  download(file, file.name);
+}
+
+/** The browser has the system share sheet (text always; files on phones and recent Chrome / Edge / Safari). */
+export function canShareText(): boolean {
+  return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+}
+
+/** The browser can hand a file to the system share sheet (WhatsApp, email, …). */
 export function canSharePdf(): boolean {
   try {
-    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') return false;
+    if (!canShareText() || typeof navigator.canShare !== 'function') return false;
     return navigator.canShare({ files: [new File([''], 'traffic-lights.pdf', { type: 'application/pdf' })] });
   } catch {
     return false;
   }
 }
 
-/** Open the share sheet with the PDF attached. "cancelled" when the person closed the sheet without sharing. */
-export async function sharePdf(rows: TrafficRow[], title: string, windowLabel: string, filename: string): Promise<'shared' | 'cancelled'> {
-  const file = new File([await buildPdf(rows, title, windowLabel)], `${filename}.pdf`, { type: 'application/pdf' });
+/** Open the share sheet with the data as text or as a file. "cancelled" when the person closed the sheet without sharing. */
+export async function shareData(format: SendFormat, rows: TrafficRow[], title: string, windowLabel: string, filename: string): Promise<'shared' | 'cancelled'> {
+  const data: ShareData =
+    format === 'text'
+      ? { title, text: exportText(rows, title, windowLabel) }
+      : { files: [await buildFile(format, rows, title, windowLabel, filename)], title, text: `${title} · ${windowLabel}` };
+  if (data.files && !navigator.canShare?.(data)) throw new Error('This browser cannot share that file type. Download it instead.');
   try {
-    await navigator.share({ files: [file], title, text: `${title} · ${windowLabel}` });
+    await navigator.share(data);
     return 'shared';
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled';

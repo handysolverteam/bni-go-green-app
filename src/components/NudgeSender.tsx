@@ -3,10 +3,11 @@ import { Member, ImportLog } from '../types';
 import { GlassCard } from './GlassCard';
 import { buildOutreachMessage, formatDisplayDateTime, type MessageTemplates } from '../lib/outreachUtils';
 import { getWhatsAppUrl, formatPhoneWithCountryCode } from '../lib/whatsappUtils';
+import { getMailtoUrl, isValidEmail, openMailto } from '../lib/emailUtils';
 import { useToast } from '../context/ToastContext';
 import {
   MessageSquare, Copy, Check, Send, Play, Pause,
-  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, EyeOff, FileText, Edit, X, Tag, Phone, Search, RefreshCw, Loader2
+  RotateCcw, AlertCircle, CheckCircle2, Clock, Trash2, ArrowLeft, Calendar, Users, Eye, EyeOff, FileText, Edit, X, Tag, Phone, Search, RefreshCw, Loader2, Mail
 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../context/AuthContext';
@@ -193,6 +194,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
       const matchesSearch = !term ||
         (m.Name || '').toLowerCase().includes(term) ||
         (m.Phone || '').includes(term) ||
+        (m.Email || '').toLowerCase().includes(term) ||
         (m.Chapter || '').toLowerCase().includes(term);
       return matchesFilter && matchesSearch;
     });
@@ -245,6 +247,50 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
 
   const getWhatsAppLink = (member: Member, message: string): string => {
     return getWhatsAppUrl(member.Phone || '', message, dbCountryCode);
+  };
+
+  // Email channel: pick one or many members, then open each one's mail draft.
+  const [channel, setChannel] = useState<'whatsapp' | 'email'>('whatsapp');
+  const [selectedEmailKeys, setSelectedEmailKeys] = useState<Set<string>>(new Set());
+  const [emailQueueIndex, setEmailQueueIndex] = useState(0);
+
+  const emailableMembers = useMemo(() => targetMembers.filter(m => isValidEmail(m.Email)), [targetMembers]);
+  const selectedEmailMembers = useMemo(
+    () => emailableMembers.filter(m => selectedEmailKeys.has(getMemberKey(m))),
+    [emailableMembers, selectedEmailKeys]
+  );
+
+  const emailSubject = `${dbScoreTerm} update`;
+
+  const toggleEmailSelected = (key: string) => {
+    setSelectedEmailKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+    setEmailQueueIndex(0);
+  };
+
+  const selectAllEmailable = () => {
+    setSelectedEmailKeys(new Set(emailableMembers.map(getMemberKey)));
+    setEmailQueueIndex(0);
+  };
+
+  const clearEmailSelection = () => {
+    setSelectedEmailKeys(new Set());
+    setEmailQueueIndex(0);
+  };
+
+  const sendEmailTo = (member: Member) => {
+    openMailto(getMailtoUrl(member.Email || '', emailSubject, generateNudgeMessage(member)));
+  };
+
+  // A mail app can only take one draft per click, so a multi-selection is worked through in order.
+  const handleEmailNext = () => {
+    const member = selectedEmailMembers[emailQueueIndex];
+    if (!member) return;
+    sendEmailTo(member);
+    setEmailQueueIndex(i => i + 1);
   };
 
   const [expandedPreviews, setExpandedPreviews] = useState<Record<string, boolean>>({});
@@ -556,7 +602,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search member name or phone..."
+                  placeholder="Search member name, phone or email..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-9 pr-8 py-2 rounded-xl glass-input text-xs font-semibold text-white placeholder-slate-400 border-emerald-500/30"
@@ -585,6 +631,61 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Channel toggle + email selection bar */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3 border-t border-white/10">
+              <div className="flex items-center gap-1.5">
+                {([['whatsapp', 'WhatsApp', MessageSquare], ['email', 'Email', Mail]] as const).map(([id, label, Icon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setChannel(id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 border transition-all ${
+                      channel === id
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-white/10'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {channel === 'email' && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-slate-400 font-bold">
+                    {selectedEmailMembers.length} selected · {emailableMembers.length} with email
+                  </span>
+                  <button type="button" onClick={selectAllEmailable} className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold border border-emerald-500/30">
+                    Select all
+                  </button>
+                  <button type="button" onClick={clearEmailSelection} disabled={selectedEmailMembers.length === 0} className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold border border-white/10 disabled:opacity-40">
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEmailNext}
+                    disabled={emailQueueIndex >= selectedEmailMembers.length}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black flex items-center gap-1.5 shadow-md shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>
+                      {selectedEmailMembers.length === 0
+                        ? 'Select members to email'
+                        : emailQueueIndex >= selectedEmailMembers.length
+                          ? 'All drafts opened'
+                          : `Email ${emailQueueIndex + 1} of ${selectedEmailMembers.length}: ${selectedEmailMembers[emailQueueIndex].Name}`}
+                    </span>
+                  </button>
+                  {emailQueueIndex > 0 && (
+                    <button type="button" onClick={() => setEmailQueueIndex(0)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10" title="Start over">
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </GlassCard>
 
@@ -631,8 +732,23 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                           </span>
                         </div>
 
+                        {/* Email section (email channel) */}
+                        {channel === 'email' && (
+                          <label className={`flex items-center gap-2 text-xs pt-0.5 ${isValidEmail(member.Email) ? 'cursor-pointer' : 'opacity-60'}`}>
+                            <input
+                              type="checkbox"
+                              checked={selectedEmailKeys.has(key)}
+                              disabled={!isValidEmail(member.Email)}
+                              onChange={() => toggleEmailSelected(key)}
+                              className="w-4 h-4 accent-emerald-500"
+                            />
+                            <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="text-slate-300 break-all">{member.Email || 'No email on file'}</span>
+                          </label>
+                        )}
+
                         {/* Phone section */}
-                        <div>
+                        {channel === 'whatsapp' && <div>
                           {(!member.Phone || editingPhoneMap[key] !== undefined) ? (
                             <div className="flex flex-row items-center gap-1.5 w-full sm:w-auto pt-1">
                               <input
@@ -710,7 +826,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                               </button>
                             </div>
                           )}
-                        </div>
+                        </div>}
                       </div>
 
                       {/* Action Buttons Section */}
@@ -749,6 +865,18 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                         </div>
 
                         {/* Bottom Row on Mobile: Full Width Send Button */}
+                        {channel === 'email' ? (
+                          <button
+                            type="button"
+                            disabled={!isValidEmail(member.Email)}
+                            onClick={() => sendEmailTo(member)}
+                            className="w-full sm:w-auto px-4 py-2 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 shadow-lg transition-all whitespace-nowrap bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={isValidEmail(member.Email) ? 'Open an email draft' : 'No email on file for this member'}
+                          >
+                            <Mail className="w-3.5 h-3.5 shrink-0" />
+                            <span>Email</span>
+                          </button>
+                        ) : (
                         <a
                           href={waLink}
                           target="_blank"
@@ -763,6 +891,7 @@ export const NudgeSender: React.FC<NudgeSenderProps> = ({
                           {status === 'sent' ? <RotateCcw className="w-3.5 h-3.5 shrink-0" /> : <Send className="w-3.5 h-3.5 shrink-0" />}
                           <span>{status === 'sent' ? 'Resend' : 'Send'}</span>
                         </a>
+                        )}
                       </div>
                     </div>
 

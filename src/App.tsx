@@ -1087,6 +1087,7 @@ export const AppContent: React.FC = () => {
             userName={userProfile?.full_name ?? user?.displayName ?? null}
             orgNames={[org.chapter_name, org.name]}
             canImport={isAdminOrOwner(orgMember?.role)}
+            contacts={canSeeFullRoster ? members.map(m => ({ name: m.Name, email: m.Email || '' })) : []}
           />
         )}
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ChevronDown, FileSpreadsheet, FileText, Download, Filter, Loader2, Search, Share2, TrafficCone, Upload, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, FileSpreadsheet, FileText, Download, Filter, Loader2, Mail, Search, Share2, TrafficCone, Upload, X } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { PageHeader } from './PageHeader';
 import { GlassCard } from './GlassCard';
@@ -9,7 +9,9 @@ import { TrafficLightsSetupError, trafficLightsService } from '../services/traff
 import type { ImportLogEntry, PalmsWeekRecord, SponsorWeekRecord } from '../lib/trafficLights/types';
 import { LIGHT_LABEL, type LightColor } from '../lib/trafficLights/score';
 import { CUSTOM_RANGE, buildTrafficView, LAST_6_MONTHS } from '../lib/trafficLights/window';
-import { canSharePdf, downloadCsv, downloadPdf, downloadXlsx, safeFilePart, sharePdf } from '../lib/trafficLights/export';
+import { isValidEmail, openMailto } from '../lib/emailUtils';
+import { SEND_FORMATS, buildFile, canShareText, canSharePdf, downloadCsv, downloadPdf, downloadXlsx, exportText, safeFilePart, saveFile, shareData, type SendFormat } from '../lib/trafficLights/export';
+import type { TrafficRow } from '../lib/trafficLights/calc';
 
 interface Props {
   orgId: string;
@@ -19,6 +21,8 @@ interface Props {
   orgNames: Array<string | null | undefined>;
   /** Owner / Admin: may import and remove weeks. Everyone else only views. */
   canImport: boolean;
+  /** Roster emails to offer in the Email picker; empty (hidden) for people who may not see contact details. */
+  contacts?: Array<{ name: string; email: string }>;
 }
 
 const LIGHTS: LightColor[] = ['green', 'amber', 'red', 'grey'];
@@ -123,7 +127,212 @@ const NameFilter: React.FC<{ options: string[]; selected: string[]; onChange: (n
   );
 };
 
-export const TrafficLightsTab: React.FC<Props> = ({ orgId, userId, userName, orgNames, canImport }) => {
+/**
+ * Email button: a checklist of the members that have an email address. "Open email" starts a draft in the user's mail app
+ * to the checked members (Bcc when several, so addresses are not shared) with the traffic lights as text. A mailto: link
+ * cannot attach a file, so the PDF is downloaded/attached separately.
+ */
+type SendProps = { rows: TrafficRow[]; title: string; windowLabel: string; filename: string };
+
+const EmailPicker: React.FC<SendProps & { contacts: Array<{ name: string; email: string }> }> = ({ contacts, rows, title, windowLabel, filename }) => {
+  const { showToast } = useToast();
+  const [format, setFormat] = useState<SendFormat>('text');
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [picked, setPicked] = useState<string[]>([]);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const button = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  // The roster holds a row per member per imported report, so the same person repeats: one entry per email address
+  // (also keeps the checkbox keys unique, which the filtering relies on).
+  const options = useMemo(() => {
+    const byEmail = new Map<string, { name: string; email: string }>();
+    for (const c of contacts) {
+      const email = c.email.trim();
+      if (isValidEmail(email) && !byEmail.has(email.toLowerCase())) byEmail.set(email.toLowerCase(), { name: c.name, email });
+    }
+    return Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [contacts]);
+  const needle = q.trim().toLowerCase();
+  const shown = options.filter((c) => c.name.toLowerCase().includes(needle) || c.email.toLowerCase().includes(needle));
+  const toggle = (email: string) => setPicked((p) => (p.includes(email) ? p.filter((e) => e !== email) : [...p, email]));
+
+  const compose = async () => {
+    const to = picked.map((e) => e.trim());
+    let body = exportText(rows, title, windowLabel);
+    if (format !== 'text') {
+      // A mailto: link cannot attach a file: save it to the device and tell the draft (and the sender) to attach it.
+      try {
+        const file = await buildFile(format, rows, title, windowLabel, filename);
+        saveFile(file);
+        body = `${title}
+${windowLabel}
+
+Please find the file attached: ${file.name}`;
+        showToast(`${file.name} was saved to your device. Attach it to the email draft.`, 'info');
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : 'Could not create the file.', 'error');
+        return;
+      }
+    }
+    const params = `subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+    openMailto(to.length === 1 ? `mailto:${encodeURIComponent(to[0])}?${params}` : `mailto:?bcc=${to.map(encodeURIComponent).join(',')}&${params}`);
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        title="Email the traffic lights to selected members"
+        onClick={() => {
+          const r = button.current?.getBoundingClientRect();
+          if (r) setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - 336)) });
+          setOpen((v) => !v);
+        }}
+        className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 shadow-sm hover:bg-emerald-400 transition-colors"
+      >
+        <Mail className="w-3.5 h-3.5" /> Email
+        {picked.length > 0 && <span className="rounded-full bg-slate-950/25 px-1.5 text-[10px]">{picked.length}</span>}
+      </button>
+      {open &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+            <div className="fixed z-[61] w-80 space-y-2 rounded-xl border border-white/10 bg-slate-900 p-3 shadow-2xl" style={{ top: pos.top, left: pos.left }}>
+              <span className="relative block">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <input
+                  autoFocus
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search name or email…"
+                  className="w-full rounded-lg border border-white/10 bg-slate-950/60 pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500"
+                />
+              </span>
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-slate-400">{picked.length} selected · {options.length} with email</span>
+                <span className="flex gap-3">
+                  <button type="button" onClick={() => setPicked(Array.from(new Set([...picked, ...shown.map((c) => c.email)])))} className="text-emerald-400 hover:text-emerald-300">
+                    Select all
+                  </button>
+                  <button type="button" disabled={picked.length === 0} onClick={() => setPicked([])} className="text-slate-400 hover:text-white disabled:opacity-40">
+                    Clear
+                  </button>
+                </span>
+              </div>
+              <div className="max-h-60 space-y-0.5 overflow-y-auto">
+                {shown.length === 0 ? (
+                  <p className="px-2 py-2 text-xs text-slate-400">{options.length === 0 ? 'No member has an email yet.' : 'No member matches.'}</p>
+                ) : (
+                  shown.map((c) => (
+                    <label key={c.email} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-xs text-slate-200 hover:bg-white/5">
+                      <input type="checkbox" checked={picked.includes(c.email)} onChange={() => toggle(c.email)} className="accent-emerald-500 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{c.name}</span>
+                        <span className="block truncate text-[10px] text-slate-400">{c.email}</span>
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <label className="block text-xs font-bold text-slate-400">
+                Send as
+                <select value={format} onChange={(e) => setFormat(e.target.value as SendFormat)} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1.5 text-xs text-white">
+                  {SEND_FORMATS.map((f) => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={picked.length === 0}
+                onClick={() => void compose()}
+                className="w-full rounded-lg bg-emerald-500 py-2 text-xs font-black text-slate-950 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Open email{picked.length > 1 ? ` to ${picked.length} members` : ''}
+              </button>
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
+  );
+};
+
+/** Share button: pick what to send (the data as text, or a PDF / Excel / CSV file), then the system share sheet opens. */
+const ShareMenu: React.FC<SendProps> = ({ rows, title, windowLabel, filename }) => {
+  const { showToast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const button = useRef<HTMLButtonElement>(null);
+  const files = useMemo(() => canSharePdf(), []);
+  const formats = SEND_FORMATS.filter((f) => f.value === 'text' || files);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  const send = (format: SendFormat) => {
+    setOpen(false);
+    setBusy(true);
+    shareData(format, rows, title, windowLabel, filename)
+      .catch((e) => showToast(e instanceof Error ? e.message : 'Could not share.', 'error'))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        disabled={busy}
+        title="Share the data or a file (WhatsApp, email, …)"
+        onClick={() => {
+          const r = button.current?.getBoundingClientRect();
+          if (r) setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - 232)) });
+          setOpen((v) => !v);
+        }}
+        className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 shadow-sm ring-2 ring-emerald-300/70 hover:bg-emerald-400 disabled:opacity-60 transition-colors"
+      >
+        <Share2 className="w-3.5 h-3.5" /> {busy ? 'Preparing…' : 'Share'}
+      </button>
+      {open &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+            <div className="fixed z-[61] w-56 rounded-xl border border-white/10 bg-slate-900 p-2 shadow-2xl" style={{ top: pos.top, left: pos.left }}>
+              <p className="px-2 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">Share as</p>
+              {formats.map((f) => (
+                <button key={f.value} type="button" onClick={() => send(f.value)} className="block w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-200 hover:bg-white/5">
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
+  );
+};
+
+export const TrafficLightsTab: React.FC<Props> = ({ orgId, userId, userName, orgNames, canImport, contacts = [] }) => {
   const [palms, setPalms] = useState<PalmsWeekRecord[]>([]);
   const [sponsors, setSponsors] = useState<SponsorWeekRecord[]>([]);
   const [log, setLog] = useState<ImportLogEntry[] | null>([]);
@@ -137,8 +346,8 @@ export const TrafficLightsTab: React.FC<Props> = ({ orgId, userId, userName, org
   const [importOpen, setImportOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const { showToast } = useToast();
-  // The share sheet (WhatsApp, email, …) needs browser support for sharing files.
-  const [canShare] = useState(() => canSharePdf());
+  // The share sheet (WhatsApp, email, …) needs browser support for sharing.
+  const [canShare] = useState(() => canShareText());
 
   const load = useCallback(async () => {
     setError(null);
@@ -252,22 +461,8 @@ export const TrafficLightsTab: React.FC<Props> = ({ orgId, userId, userName, org
         >
           <FileText className="w-3.5 h-3.5" /> {pdfBusy ? "Preparing…" : "PDF"}
         </button>
-        {canShare && (
-          <button
-            type="button"
-            disabled={pdfBusy}
-            title="Share the PDF (WhatsApp, email, …)"
-            onClick={() => {
-              setPdfBusy(true);
-              sharePdf(rows, exportTitle, view.label, exportName)
-                .catch((e) => showToast(e instanceof Error ? e.message : 'Could not share the PDF.', 'error'))
-                .finally(() => setPdfBusy(false));
-            }}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 shadow-sm ring-2 ring-emerald-300/70 hover:bg-emerald-400 disabled:opacity-60 transition-colors"
-          >
-            <Share2 className="w-3.5 h-3.5" /> Share
-          </button>
-        )}
+        {contacts.length > 0 && <EmailPicker contacts={contacts} rows={rows} title={exportTitle} windowLabel={view.label} filename={exportName} />}
+        {canShare && <ShareMenu rows={rows} title={exportTitle} windowLabel={view.label} filename={exportName} />}
       </div>
     ) : null;
 
